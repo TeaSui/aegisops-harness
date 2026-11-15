@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.5.0 — 2026-11-15
+
+### Removed
+- `/new-project`, `/tdd-feature` and `/map-codebase`, with the `codebase-mapper` agent and everything only they used: `references/planning/` and the whole `templates/planning/` tree. The TDD flow lives in the `test-driven-development` skill and the fast path in `rules/workflow-routing.md`; project initialization and `.planning/codebase/` maps are no longer part of the plugin.
+
+### Changed
+- Living docs absorb what the codebase maps covered: `architecture.md` gains **Code conventions** and **Test strategy**, `troubleshooting.md` gains **Known concerns / tech debt** (layout §2). `/generate-service-docs` builds them from source, `/upgrade-service-docs` refreshes them after a change, and `/prompt-builder` has implementers read them before writing tests.
+- `references/documentation-layout.md`, `rules/`, `references/model-guide.md` and the README no longer mention the removed commands. `.planning/` is no longer referenced anywhere: the `Traces:` field in `requirements.md`, layout resolution rule 6 (`.planning/` workflow state; former rule 7 *Fast path* is now §6.6), the Spec Kit/GSD note and the `commit_docs` preference are removed.
+
 ## 2.4.0 — 2026-11-14
 
 ### Added

@@ -36,7 +36,6 @@ Frontmatter sets the normal job; a dispatcher overrides `model` only when a task
 | ui-ux-designer-subagent | sonnet | medium | Spec documents with explicit states and rules | — |
 | backend / frontend / mobile / platform / data engineers | sonnet | high | Spec-driven coding against accepted contracts with tests to self-verify; `high` because these run in gated tiers where rework costs more than effort | `opus` for ambiguous bugs, cross-cutting refactors or when `high` still fails |
 | qa-subagent | sonnet | medium | Runs tests and checks evidence; outputs are checkable | `high` for large release scopes |
-| codebase-mapper | haiku | medium | File search, reading and summarizing | `sonnet` for very large or unconventional codebases |
 | orchestrating-multi-domain-work (skill) | main session | — | Runs in the main session (`opus` default, `fable` for long multi-agent runs) | — |
 
 ## Use in Claude Code

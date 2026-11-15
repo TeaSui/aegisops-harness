@@ -8,7 +8,7 @@
 - `business-analyst-subagent` (Phase 4: DELEGATE — standalone mode only; orchestrator-dispatched BA MUST NOT re-dispatch)
 - **main session** (coordinated fast path: direct leaf dispatches; full workflow: implementer dispatches after TechLead contract-mode, per `rules/workflow-routing.md`)
 
-**Leaf subagents (backend, frontend, mobile, platform, data, UI/UX, security, QA, code-reviewer, codebase-mapper) are consumers:** they read this shape on input and return per `rules/subagent-return-format.md` on output. They do not dispatch.
+**Leaf subagents (backend, frontend, mobile, platform, data, UI/UX, security, QA, code-reviewer) are consumers:** they read this shape on input and return per `rules/subagent-return-format.md` on output. They do not dispatch.
 
 **Detection signal:** a subagent knows it received a contract dispatch because its prompt contains a `<return_format>` tag referencing `rules/subagent-return-format.md`. If that tag is absent, the subagent responds in whatever shape fits the prompt.
 

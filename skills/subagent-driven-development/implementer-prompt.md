@@ -48,7 +48,7 @@ Task tool (domain leaf agent per rules/agents.md):
     1. Implement exactly what the task specifies
     2. Follow TDD for behavior changes, with safe owned-patch recovery; use applicable structural/isolated checks for prose/config
     3. Verify the actual changed state/scope and report skipped/unavailable checks explicitly
-    4. Commit only when committing is in scope and applicable commit_docs/task preferences permit it; otherwise leave reviewable pending work
+    4. Commit only when committing is in scope and applicable task preferences permit it; otherwise leave reviewable pending work
     5. Self-review (see below)
     6. Report back
 

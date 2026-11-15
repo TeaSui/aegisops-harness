@@ -27,6 +27,8 @@ Source code is the single source of truth for living docs. Never invent anything
 2. Confirm the change is verified: QA `GO`, or a merge commit on the target branch. If neither is present, stop and report `NEEDS_CONTEXT` — do not promote unverified intent.
 3. Inspect the actual code changes (new/modified classes, endpoints, events, tables, configs). Compare them with the spec's requirements and contract delta to build the traceability table: each requirement → implemented | pending → evidence (file/test path).
 4. Update **service-level living docs** first, in place, in this priority: `api-contracts.md`, `events.md`, `business-logic.md`, `architecture.md`, `data-model.md`, `security.md`, `configuration.md`, `troubleshooting.md`, `README.md`.
+   - `architecture.md`: refresh **Code conventions** and **Test strategy** only when the change introduced or altered a pattern, framework, runner command or test layout.
+   - `troubleshooting.md`: refresh **Known concerns / tech debt** — add concerns the change introduced or left pending (from `DONE_WITH_CONCERNS`), remove ones it resolved.
    - `api-contracts.md` links the authoritative contract source (layout §6.4); do not re-type schemas.
    - `security.md`: add the spec's implemented security rules to the active rule register as `<feature>/<RULE-ID>` with a link to the spec; retire rules of any spec this one supersedes.
    - `README.md`: refresh the specs index with the new status and the ADR index (`adr/`).

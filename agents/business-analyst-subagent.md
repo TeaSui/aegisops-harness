@@ -50,7 +50,7 @@ Execute these phases in order. Do not skip phases unless explicitly dispatched f
 
 ### Phase 5: REPORT
 - Persist deliverables to `docs/specs/<feature>/requirements.md` per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` (reuse an existing equivalent location if the project has one); when measurement is in scope, also `docs/specs/<feature>/measurement.md`
-- Keep stable IDs (`US-n`, `AC-n`, `BR-n`); trace each story to `.planning/REQUIREMENTS.md` REQ-IDs when they exist. List proposed glossary terms in a `New terms` section — TechLead ratifies them into `glossary.md`
+- Keep stable IDs (`US-n`, `AC-n`, `BR-n`). List proposed glossary terms in a `New terms` section — TechLead ratifies them into `glossary.md`
 - If UI/UX was delegated, include their deliverables verbatim or by reference
 - Return a concise summary to the caller with file paths
 

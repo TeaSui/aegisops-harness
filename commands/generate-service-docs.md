@@ -17,7 +17,7 @@ The canonical service tree, system tree, file owners and lifecycle are defined i
 
 - The current working directory is the **system root** (the parent folder holding the services, often `Sources/`; detection rule in layout §6.1).
 - I will specify one or more child services.
-- Treat **source code as the single source of truth**. Confluence/Notion documents and `.planning/codebase/` maps are secondary evidence only.
+- Treat **source code as the single source of truth**. Confluence/Notion documents are secondary evidence only.
 - If a `docs/` folder already exists (in a service or at the system root), **update and enrich** it instead of overwriting blindly.
 
 ---
@@ -49,7 +49,7 @@ This command must be **safe to re-run multiple times**.
 
 ### Phase 1: Service-level living docs (inside each specified service)
 
-Create or update `<service>/docs/` per layout §2: `README.md`, `architecture.md` (including deployment view and quality requirements), `business-logic.md`, `api-contracts.md`, `data-model.md`, `events.md`, `security.md`, `configuration.md`, `troubleshooting.md`, `diagrams/`, and the **`adr/`** decision-record folder.
+Create or update `<service>/docs/` per layout §2: `README.md`, `architecture.md` (including deployment view, quality requirements, **code conventions** and **test strategy**), `business-logic.md`, `api-contracts.md`, `data-model.md`, `events.md`, `security.md`, `configuration.md`, `troubleshooting.md` (including **known concerns / tech debt**), `diagrams/`, and the **`adr/`** decision-record folder.
 
 **`adr/` (required for every service):** if `<service>/docs/adr/` is missing, create it empty (add a `.gitkeep`; remove the `.gitkeep` only when real ADRs exist). Never write, rename or edit ADR content — `tech-lead-subagent` owns `NNNN-<decision>.md`. If the service keeps decisions in a legacy folder (`docs/decisions/`, ADRs under `docs/contracts/`), leave them in place and have `README.md` link to them (layout §6.2, §8); do not migrate. Do not invent ADRs from code; undocumented decisions you notice go into the final report as "candidate ADRs".
 
@@ -60,6 +60,8 @@ Requirements:
 - `api-contracts.md` links the authoritative contract source (contract-first schema folder, or the spec generated from code — layout §6.4); never re-type full schemas.
 - `security.md` describes current posture and keeps the active security-rule register (layout §5 step 5). Do not invent rules; threat models live in specs.
 - `README.md` indexes existing `specs/` (with their `status`) and `adr/` (number, title, status per ADR; "none yet" when empty).
+- `architecture.md` **Code conventions**: naming, layering, error handling, logging, dependency-injection and module-boundary patterns actually used, each with one real file as an example. **Test strategy**: test frameworks and runner commands, directory layout, naming, mocking approach, what is covered at unit/integration/e2e level, and coverage gaps. Derive both from reading source and test files, not from lint-config intent alone.
+- `troubleshooting.md` **Known concerns / tech debt**: fragile areas, TODO/FIXME clusters, missing tests, risky dependencies, each with file path and evidence. Facts only; do not propose redesigns here (those belong in specs).
 - Do not invent APIs, events, or flows that do not exist in the code.
 
 ### Phase 2: System-level living docs (at the system root)

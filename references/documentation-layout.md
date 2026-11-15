@@ -11,7 +11,7 @@ Paths to tea-sdlc files (`rules/…`, `references/…`) in this file are relativ
 | **Living reference** | What does the system do *now*? | Rewritten to match verified code | `docs/*.md` (fixed set, §2/§3) | arc42 + C4, Diátaxis reference/explanation |
 | **Change spec** | What are we changing, and why? | Edited while `proposed`/`accepted`; frozen once `implemented` | `docs/specs/<feature>/` | GitHub Spec Kit `specs/<feature>/`, Kiro `.kiro/specs/<feature>/` |
 | **Decision record** | Why X over Y? | Immutable once accepted; superseded, never rewritten | `docs/adr/NNNN-<decision>.md` | Nygard ADR, MADR |
-| **Workflow state** | How do we execute, where are we? | Disposable | `docs/specs/<feature>/plan.md`, `docs/plans/`, `.planning/` | Spec Kit `plan.md`/`tasks.md`, GSD `.planning/` |
+| **Workflow state** | How do we execute, where are we? | Disposable | `docs/specs/<feature>/plan.md`, `docs/plans/` | Spec Kit `plan.md`/`tasks.md` |
 
 Role-based trees (`docs/requirements/`, `docs/security/`, `docs/contracts/`, `docs/design/`, `docs/domain/`) are **not used for new work**: they scatter one change across five folders and never say whether content is intent or fact. Projects that already use them keep them (§6.2, §8).
 
@@ -23,14 +23,14 @@ Owner of every living file: `/generate-service-docs` (build/normalize) and `/upg
 <service>/docs/
 ├── README.md            # Purpose, ownership, reading order; index of specs/ and adr/
 ├── architecture.md      # C4 container/component view, layers, key modules, entry points,
-│                        #   deployment view, quality requirements (NFR/SLO)
+│                        #   deployment view, quality requirements (NFR/SLO), code conventions, test strategy
 ├── business-logic.md    # Domain flows step by step, real class/method names
 ├── api-contracts.md     # Human-readable API summary + error codes; links the authoritative contract source (§6.4)
 ├── data-model.md        # Entities, tables, fields, relationships, invariants
 ├── events.md            # Domain events/topics: name, payload, producer, consumer
 ├── security.md          # Current posture: authN/Z, data classification, active security-rule register (§5 step 5)
 ├── configuration.md     # Config keys, feature flags, environment variables
-├── troubleshooting.md   # Failure modes, dashboards, debugging playbook
+├── troubleshooting.md   # Failure modes, dashboards, debugging playbook, known concerns / tech debt
 ├── diagrams/            # Mermaid sources used above
 ├── adr/                 # NNNN-<decision>.md — owner: tech-lead-subagent
 ├── specs/<feature>/      # Change specs (§4) — never touched by normalization
@@ -81,7 +81,7 @@ Same owners as §2.
 | File | Single writer | Content | When |
 |---|---|---|---|
 | `README.md` | integrating session (main session/orchestrator) and `/upgrade-service-docs` | Frontmatter (below), one-paragraph summary, file index, traceability table (requirement → status → evidence) | Always |
-| `requirements.md` | business-analyst-subagent | Stories, acceptance criteria (Gherkin or EARS), business rules (`US-n`, `AC-n`, `BR-n`), `Traces:` to `.planning/REQUIREMENTS.md` REQ-IDs when present, `New terms` | User-visible behavior |
+| `requirements.md` | business-analyst-subagent | Stories, acceptance criteria (Gherkin or EARS), business rules (`US-n`, `AC-n`, `BR-n`), `New terms` | User-visible behavior |
 | `ui-design.md` | ui-ux-designer-subagent | Flows, wireframes, all component states, responsive + accessibility rules | UI needing design |
 | `security.md` | security-engineer-subagent | Threat model (assets, trust boundaries, STRIDE, OWASP) + numbered rules (`AUTH-01`…) with severity and provenance | Trust-boundary work |
 | `design.md` | tech-lead-subagent | Design, contract delta, data-model delta, rollout, links to ADRs; RFC-style while open | New/changed contract or architecture |
@@ -122,8 +122,7 @@ updated: YYYY-MM-DD
 3. **One writer per file**, as named in §2–§4. Everyone else reads and cites.
 4. **Authoritative contract source.** Discover it before writing: contract-first projects keep it in a schema folder the build consumes (`api/`, `openapi/`, `proto/` with buf, …); code-first stacks (springdoc, NestJS, FastAPI) generate it from code, so the code is the source and `api-contracts.md` links the generated spec. Create a new schema folder only in a contract-first project that lacks one. Prose files link to the source and never re-type schemas.
 5. **Glossary.** Top-scope `glossary.md` (system root, or repo root for single-repo projects). BA proposes terms in `requirements.md`; tech-lead-subagent ratifies them into `glossary.md`. Per-service entities live in `data-model.md`; cross-service ones in `03-cross-cutting/shared-concepts.md`.
-6. **`.planning/` is workflow state.** `/new-project` writes `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, `research/`; `/map-codebase` writes `codebase/`. Specs trace to REQ-IDs through `requirements.md` `Traces:`; codebase maps are evidence for `/generate-service-docs`. Neither is linked as the description of the system, and their content is not copied into `docs/`.
-7. **Fast path** creates no spec folder. If it changes documented behavior, update the affected living file in the same change.
+6. **Fast path** creates no spec folder. If it changes documented behavior, update the affected living file in the same change.
 
 ## 7. Staleness
 

@@ -78,7 +78,6 @@ Agents use **family aliases**, so they always run on the latest release of that 
 | `platform-engineer-subagent` | AWS CDK/serverless, non-AWS IaC, CI/CD, containers, Kubernetes, observability | sonnet | high |
 | `data-engineer-subagent` | Data models, migrations, ETL/ELT, warehouses, data quality | sonnet | high |
 | `qa-subagent` | Final release gate (GO / NO-GO) plus live API smoke, performance, security-smoke and stress checks | sonnet | medium |
-| `codebase-mapper` | Writes `.planning/codebase/` maps for `/map-codebase` | haiku | medium |
 
 The **orchestrator is a skill, not a subagent**: the main session runs `orchestrating-multi-domain-work`, so every specialist is a first-level dispatch. Every dispatch follows the nine-field contract in `rules/dispatch-prompt-contract.md`, and every return carries a status, evidence paths and an exit-criteria check (`rules/subagent-return-format.md`).
 
@@ -93,7 +92,7 @@ One structure for every agent, command and skill, owned by [`references/document
 | Living reference — what the system does now | `docs/*.md` per service; `docs/00-overview … 04-ai-friendly/` at system level | Rewritten to match verified code by `/generate-service-docs` and `/upgrade-service-docs` |
 | Change spec — what we are changing and why | `docs/specs/<feature>/` | `proposed → accepted → implemented / superseded` |
 | Decision record | `docs/adr/NNNN-<decision>.md` | Immutable once accepted |
-| Workflow state | `docs/specs/<feature>/plan.md`, `docs/plans/`, `.planning/` | Disposable |
+| Workflow state | `docs/specs/<feature>/plan.md`, `docs/plans/` | Disposable |
 
 ```
 <service>/docs/
@@ -118,11 +117,8 @@ Existing projects keep their established locations; the layout file maps legacy 
 
 | Command | Purpose |
 |---|---|
-| `/new-project` | Questioning → optional research → requirements → roadmap, written to `.planning/` |
-| `/map-codebase` | Four parallel mappers write `.planning/codebase/` (stack, integrations, architecture, structure, conventions, testing, concerns) |
 | `/generate-service-docs` | Build or normalize the living service and system docs from source code |
 | `/upgrade-service-docs` | Promote an implemented change into the living docs and close its spec |
-| `/tdd-feature` | Failing tests first, implement to green, full-suite regression check |
 | `/debug-parallel` | Parallel config, diagnostics, code-path and history investigation for multi-service errors |
 | `/prove-it` | List every claim just made and run a check that would fail if it were false; narrow or withdraw what the evidence does not support |
 | `/prompt-builder` | Design a Claude prompt from a description; software changes follow spec → adr → tdd → implement → test → PR |
@@ -158,8 +154,7 @@ Claude API work uses Claude Code's built-in **`/claude-api`** skill plus live do
 ## 📐 Rules & references
 
 - **`rules/`** — routing (`workflow-routing.md`), agent registry (`agents.md`), dispatch contract and return format, review-loop limits, pre-PR review, strategic-output persistence and staleness, single source of truth, security, hallucination reduction, code patterns (API envelope).
-- **`references/`** — documentation layout, model guide, agent discipline, AI integration, AWS, observability, data privacy, bootstrap checklist, security-review checklist and OWASP mapping, planning question guide.
-- **`templates/planning/`** — section templates for `/new-project` and `/map-codebase` outputs.
+- **`references/`** — documentation layout, model guide, agent discipline, AI integration, AWS, observability, data privacy, bootstrap checklist, security-review checklist and OWASP mapping.
 
 **Path convention:** agents, commands and `SKILL.md` files reference bundled files as `${CLAUDE_PLUGIN_ROOT}/…` (substituted by Claude Code). Inside `rules/`, `references/` and other files opened with Read, paths such as `rules/…` are relative to the plugin root. Project paths such as `docs/…` are relative to the target project. Nothing depends on `~/.claude/`.
 
@@ -184,14 +179,13 @@ tea-sdlc/
 ├── .claude-plugin/
 │   ├── plugin.json          # Manifest (name, version, hooks)
 │   └── marketplace.json     # Marketplace entry
-├── agents/                  # 12 subagent definitions
-├── commands/                # 9 slash commands
+├── agents/                  # 11 subagent definitions
+├── commands/                # 6 slash commands
 ├── hooks/                   # hooks.json, security-gate.py, pr-review-gate.py, session-start
-├── references/              # Shared guidance (documentation layout, model guide, …) + planning/
+├── references/              # Shared guidance (documentation layout, model guide, …)
 ├── rules/                   # Routing, contracts, review and persistence rules
 ├── scripts/                 # check-setup.py, validate.sh, mark-pr-review.py
 ├── skills/                  # Workflow, quality and domain skills
-├── templates/planning/      # .planning document templates
 ├── CHANGELOG.md
 └── README.md
 ```

@@ -92,7 +92,7 @@ Execute in order. Finish a stage and meet its gate before starting the next. Rep
 1. SPEC — define what changes and why.
    - Full workflow / orchestrator: create `[service]/docs/specs/[slug]/` (layout §4). Each file has one writer: `requirements.md` (US/AC/BR ids) and `measurement.md` → business-analyst-subagent; `security.md` (threat model + numbered rules) → security-engineer-subagent; `design.md` + `contracts/` → tech-lead-subagent in contract-mode; `ui-design.md` → ui-ux-designer-subagent. Create only the files the change needs. The main session writes `README.md` with the layout §4 frontmatter (`status: proposed`, `scope`, `affects`, `updated`) and the file index.
    - Coordinated fast path and above: `plan.md` in the same folder (tasks, ownership, order, parallelism).
-   - Fast path: state the approach and acceptance criteria in 2–3 lines; no spec folder. If the change alters documented behavior, update the affected living file in the same change (layout §6.7).
+   - Fast path: state the approach and acceptance criteria in 2–3 lines; no spec folder. If the change alters documented behavior, update the affected living file in the same change (layout §6.6).
    - Gate: the user approves the spec; only then set `status: accepted` and `accepted_by`. Do not continue on a `proposed` spec unless told to.
 
 2. ADR — record decisions that outlive the change.
@@ -101,7 +101,7 @@ Execute in order. Finish a stage and meet its gate before starting the next. Rep
    - Gate: every decision the spec depends on has an ADR or an explicit "no ADR needed".
 
 3. TDD — write failing tests first.
-   - Read 2–3 existing tests for conventions. Write tests for happy path, edge cases and error conditions from the acceptance criteria, not from the implementation.
+   - Read the service's `docs/architecture.md` (Code conventions, Test strategy) when present, then 2–3 existing tests to confirm them. Write tests for happy path, edge cases and error conditions from the acceptance criteria, not from the implementation.
    - Run them with the project's own test runner; they MUST fail for the expected reason. Show the failing output.
    - Gate: failing tests exist and fail correctly.
 

@@ -15,7 +15,6 @@ See `rules/workflow-routing.md` for four-tier routing: fast path / coordinated f
 - **ui-ux-designer-subagent**: Wireframes, component specs, user flow design — activate before frontend when visual design needed
 - **qa-subagent**: Final validation gate. AFTER implementation. Includes live API validation (endpoint smoke, performance, security smoke, stress) when an authorized running service is in scope. Optional for single-file fixes and trivial changes.
 - **code-reviewer**: Reviews completed work against plan and standards. Read-only tools (no Write/Edit). In orchestrator paths (where TechLead is contract-mode and does not run reviews), the orchestrator MUST dispatch code-reviewer after implementation when a structured review is needed — no other agent owns this gate.
-- **codebase-mapper**: Read-only exploration agent spawned by `/map-codebase` to write `.planning/codebase/` documents. Returns confirmation only (~10 lines), never document contents. Not part of trust-boundary or orchestrator flows.
 
 Per-dispatch model selection (override the agent's default `model:` frontmatter): see `skills/dispatching-parallel-agents/references/model-routing.md`.
 
