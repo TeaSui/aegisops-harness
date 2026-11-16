@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Structural checks for the tea-sdlc plugin: manifests, frontmatter, bundled path
-references and the SessionStart hook. No model, network or plugin-runtime calls."""
+references and the SessionStart hook. No model, network or plugin-runtime calls.
+When --project (default: the current directory) is a git repository other than the
+plugin, also warns about repository setup that hides instructions or docs from
+worktrees and agents. Those warnings never change the status."""
 import argparse
 import json
 from pathlib import Path
@@ -21,6 +24,40 @@ BUNDLED_REF = re.compile(r'(?<![\w./~-])(\$\{CLAUDE_PLUGIN_ROOT\}/)?((?:%s)/[A-Z
                          % '|'.join(BUNDLED_DIRS))
 USER_REF = re.compile(r'~/\.claude/([A-Za-z0-9_./-]+)')
 FRONTMATTER = re.compile(r'\A---\r?\n(.*?)\r?\n---', re.S)
+INSTRUCTION_FILES = ('CLAUDE.md', '.claude/CLAUDE.md')
+DOC_PROBES = ('docs/README.md', 'docs/specs/x/README.md', 'docs/plans/x.md')
+
+
+def git(args, cwd):
+    try:
+        return subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return subprocess.CompletedProcess(args, 1, '', '')
+
+
+def project_warnings(project):
+    """Return (repo top-level or None, warnings) for the git repository containing `project`."""
+    top = git(['rev-parse', '--show-toplevel'], project)
+    if top.returncode:
+        return None, []
+    top = Path(top.stdout.strip()).resolve()
+    warnings = []
+    for name in INSTRUCTION_FILES:
+        blob = git(['show', 'HEAD:' + name], top)
+        if blob.returncode == 0 and not blob.stdout.strip():
+            warnings.append('%s is tracked but empty at HEAD; worktrees and fresh checkouts get no project '
+                            'instructions. Commit its content.' % name)
+    rules = [p for p in (top / '.claude' / 'rules').rglob('*') if p.is_file()]
+    if rules and not git(['ls-files', '--', '.claude/rules'], top).stdout.strip():
+        probe = rules[0].relative_to(top).as_posix()
+        state = 'ignored' if git(['check-ignore', '-q', '--', probe], top).returncode == 0 else 'untracked'
+        warnings.append('.claude/rules/ is %s; its rules exist only in this checkout, not in worktrees or '
+                        'clones. Track them, or cite their absolute paths in dispatch prompts.' % state)
+    ignored = git(['check-ignore', '--', *DOC_PROBES], top).stdout.split()
+    if ignored:
+        warnings.append('docs/ paths are ignored by git (%s), e.g. by core.excludesFile; specs and living docs '
+                        'will not be tracked. Add !/docs/ and !/docs/** to the repo .gitignore.' % ', '.join(ignored))
+    return top, warnings
 
 
 def scanned_files(root):
@@ -71,8 +108,18 @@ puts JSON.generate(errors)
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent)
-    root = parser.parse_args().root.resolve()
+    parser.add_argument('--project', type=Path, default=Path.cwd(),
+                        help='target project whose git setup is checked (warnings only)')
+    args = parser.parse_args()
+    root = args.root.resolve()
     errors, warnings = [], []
+
+    # Target project git setup (warnings only; skipped for the plugin's own repository)
+    project, project_warn = project_warnings(args.project)
+    if project == root:
+        project = None
+    elif project:
+        warnings.extend(project_warn)
 
     # Manifests
     manifests = {}
@@ -161,7 +208,7 @@ def main():
 
     print(json.dumps({'status': 'PASS' if not errors else 'FAIL', 'version': plugin.get('version'),
                       'agents': len(agents), 'skills': len(skills), 'commands': len(commands),
-                      'bundled_references_checked': checked,
+                      'bundled_references_checked': checked, 'project': str(project) if project else None,
                       'rules_bytes': sum(p.stat().st_size for p in (root / 'rules').glob('*.md')),
                       'errors': errors, 'warnings': warnings,
                       'limits': 'Structure only; no model/API run or behavioral review.'}, indent=2))

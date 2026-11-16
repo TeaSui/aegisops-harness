@@ -16,6 +16,8 @@ No completion claims without running tests and build. Show actual command output
 
 Write test output to a file (e.g., `test-results.txt`) and confirm with Read tool. A file on disk requires actually running the command.
 
+Read totals only from the result set produced by the command you ran: clear its result directory before the run, or use the tool's own summary. Never aggregate across result directories (e.g. Gradle's `build/test-results/{test,unitTest,cucumberTest}`); stale files from earlier runs inflate counts and resurrect fixed failures.
+
 ## Escalation Triggers
 
 - 2 failed fixes on the same issue

@@ -1,0 +1,146 @@
+"""Tests for the target-repository warnings in scripts/check-setup.py.
+
+Every git call runs with GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1, so the
+user's real global config and excludes file are never read or changed.
+Run: python3 -m unittest discover -s tests -v
+"""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPT = ROOT / 'scripts' / 'check-setup.py'
+SPEC = importlib.util.spec_from_file_location('check_setup', SCRIPT)
+check_setup = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(check_setup)
+
+ISOLATED_ENV = {
+    'GIT_CONFIG_GLOBAL': os.devnull,
+    'GIT_CONFIG_NOSYSTEM': '1',
+    'GIT_AUTHOR_NAME': 'test', 'GIT_AUTHOR_EMAIL': 'test@example.com',
+    'GIT_COMMITTER_NAME': 'test', 'GIT_COMMITTER_EMAIL': 'test@example.com',
+}
+
+
+class ProjectWarningsTest(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, ISOLATED_ENV)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.base = Path(tmp.name).resolve()
+        self.repo = self.base / 'repo'
+        self.repo.mkdir()
+        self.git('init', '-q')
+
+    def git(self, *args):
+        return subprocess.run(['git', *args], cwd=self.repo, check=True, capture_output=True, text=True)
+
+    def write(self, rel, text):
+        path = self.repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def commit(self, *paths):
+        self.git('add', *paths)
+        self.git('commit', '-q', '-m', 'test')
+
+    def warnings(self):
+        top, found = check_setup.project_warnings(self.repo)
+        self.assertEqual(self.repo, top)
+        return found
+
+    def assert_warns(self, fragment):
+        found = self.warnings()
+        self.assertTrue(any(fragment in w for w in found), '%r not in %r' % (fragment, found))
+
+    def assert_silent(self, fragment):
+        found = self.warnings()
+        self.assertFalse(any(fragment in w for w in found), '%r unexpectedly in %r' % (fragment, found))
+
+    def use_excludes_file(self, patterns):
+        excludes = self.base / 'excludes'
+        excludes.write_text(patterns)
+        self.git('config', 'core.excludesFile', str(excludes))
+
+    # CLAUDE.md tracked but empty at HEAD
+    def test_empty_tracked_claude_md_warns(self):
+        self.write('CLAUDE.md', '')
+        self.commit('CLAUDE.md')
+        self.write('CLAUDE.md', '# Rules\n')  # uncommitted content does not reach worktrees
+        self.assert_warns('CLAUDE.md')
+
+    def test_non_empty_claude_md_is_silent(self):
+        self.write('CLAUDE.md', '# Rules\n')
+        self.commit('CLAUDE.md')
+        self.assert_silent('CLAUDE.md')
+
+    def test_untracked_claude_md_is_silent(self):
+        self.write('README.md', 'x\n')
+        self.commit('README.md')
+        self.assert_silent('CLAUDE.md')
+
+    # .claude/rules untracked or ignored
+    def test_ignored_rules_dir_warns(self):
+        self.write('.gitignore', '.claude\n')
+        self.write('.claude/rules/backward-compatible.md', '# rule\n')
+        self.commit('.gitignore')
+        self.assert_warns('.claude/rules/ is ignored')
+
+    def test_untracked_rules_dir_warns(self):
+        self.write('.claude/rules/backward-compatible.md', '# rule\n')
+        self.write('README.md', 'x\n')
+        self.commit('README.md')
+        self.assert_warns('.claude/rules/ is untracked')
+
+    def test_tracked_rules_dir_is_silent(self):
+        self.write('.claude/rules/backward-compatible.md', '# rule\n')
+        self.commit('.claude/rules/backward-compatible.md')
+        self.assert_silent('.claude/rules')
+
+    # docs/ ignored, e.g. by a personal core.excludesFile
+    def test_docs_ignored_by_excludes_file_warns(self):
+        self.use_excludes_file('docs/*\n')
+        self.assert_warns('docs/')
+
+    def test_docs_not_ignored_is_silent(self):
+        self.use_excludes_file('*.log\n')
+        self.assert_silent('docs/')
+
+    def test_repo_negation_overrides_excludes_file(self):
+        self.use_excludes_file('docs/*\n')
+        self.write('.gitignore', '!/docs/\n!/docs/**\n')
+        self.assert_silent('docs/')
+
+    def test_not_a_git_repo_returns_nothing(self):
+        outside = self.base / 'plain'
+        outside.mkdir()
+        self.assertEqual((None, []), check_setup.project_warnings(outside))
+
+
+class CheckSetupCliTest(unittest.TestCase):
+    def test_project_warnings_do_not_fail_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve()
+            env = dict(os.environ, **ISOLATED_ENV)
+            subprocess.run(['git', 'init', '-q'], cwd=repo, check=True, env=env)
+            (repo / 'CLAUDE.md').write_text('')
+            subprocess.run(['git', 'add', 'CLAUDE.md'], cwd=repo, check=True, env=env)
+            subprocess.run(['git', 'commit', '-q', '-m', 'empty'], cwd=repo, check=True, env=env)
+            result = subprocess.run([sys.executable, str(SCRIPT), '--project', str(repo)],
+                                    capture_output=True, text=True, env=env, timeout=120)
+        report = json.loads(result.stdout)
+        self.assertEqual('PASS', report['status'], report['errors'])
+        self.assertEqual(0, result.returncode)
+        self.assertTrue(any('CLAUDE.md' in w for w in report['warnings']), report['warnings'])
+
+
+if __name__ == '__main__':
+    unittest.main()

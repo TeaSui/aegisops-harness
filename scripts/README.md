@@ -39,3 +39,5 @@ Structural checks for the plugin itself: manifests and version, agent/skill/comm
 ```bash
 python3 scripts/check-setup.py
 ```
+
+Run from a target project (or pass `--project <path>`), it also warns when that repository hides instructions or docs from worktrees and agents: `CLAUDE.md` tracked but empty at HEAD, `.claude/rules/` untracked or ignored, `docs/` ignored. Warnings never change the status. Tests: `python3 -m unittest discover -s tests -v`.

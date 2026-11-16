@@ -24,7 +24,7 @@ Source code is the single source of truth for living docs. Never invent anything
 
 <instructions>
 1. Read the layout file. Resolve the service root, the system root (layout §6.1) and the change spec folder (`<service>/docs/specs/<feature>/` or `<system-root>/docs/specs/<feature>/`). If no spec exists (fast path), skip steps 2 and 7.
-2. Confirm the change is verified: QA `GO`, or a merge commit on the target branch. If neither is present, stop and report `NEEDS_CONTEXT` — do not promote unverified intent.
+2. Confirm the change is verified: QA `GO`, or a merge commit on the target branch. If neither is present, stop and report `NEEDS_CONTEXT` — do not promote unverified intent. Promotion runs after `GO` on the branch where the change is merged (or the integration branch), not in an implementation worktree.
 3. Inspect the actual code changes (new/modified classes, endpoints, events, tables, configs). Compare them with the spec's requirements and contract delta to build the traceability table: each requirement → implemented | pending → evidence (file/test path).
 4. Update **service-level living docs** first, in place, in this priority: `api-contracts.md`, `events.md`, `business-logic.md`, `architecture.md`, `data-model.md`, `security.md`, `configuration.md`, `troubleshooting.md`, `README.md`.
    - `architecture.md`: refresh **Code conventions** and **Test strategy** only when the change introduced or altered a pattern, framework, runner command or test layout.
@@ -34,14 +34,14 @@ Source code is the single source of truth for living docs. Never invent anything
    - `README.md`: refresh the specs index with the new status and the ADR index (`adr/`).
 5. Update **system-level living docs** so catalogs and flows stay consistent, in this priority: `03-cross-cutting/all-apis-catalog.md`, `all-events-catalog.md`, `all-topics-and-queues.md`, `02-collaboration/end-to-end-flows.md`, `sequence-diagrams.md`, `integration-points.md`, `01-services/<service-name>.md`, and `00-overview/service-map.md` only if service boundaries or relationships changed.
 6. Use Mermaid for new diagrams. Keep terminology consistent with `glossary.md`. Living docs describe only current behavior; link to open specs instead of narrating intent.
-7. Update the spec `README.md` frontmatter: `status: implemented` or `partially-implemented` (pending items stay visible in the traceability table), `source_revision` as `<repo>@<sha>` for every affected repo, `updated`. If this change supersedes another, set the old spec's `superseded_by`. Never rewrite the spec's intent to match what shipped.
+7. Update the spec `README.md` frontmatter: `status: implemented` or `partially-implemented` (pending items stay visible in the traceability table), `source_revision` as `<repo>@<sha>` for every affected repo (a commit that contains the change; layout §5 step 5), `updated`. If this change supersedes another, set the old spec's `superseded_by`. Never rewrite the spec's intent to match what shipped.
 8. **ADRs.** Ensure `<service>/docs/adr/` exists (create empty with `.gitkeep` if missing; same at the system root when a cross-service ADR is involved). List the ADRs the spec's `design.md` links, confirm each exists in `adr/` (a missing one → report as a gap, do not write it), and refresh the `README.md` ADR index (number, title, status). Mark an ADR's implementation status only in the index, never by editing the ADR; supersession is recorded by `tech-lead-subagent` in the ADR itself. Mention decisions evident in the code that have no ADR as "candidate ADRs" in the output.
 9. Do not create duplicate files or parallel folder structures; never move or delete `specs/`, `adr/`, `plans/` or legacy role folders.
 </instructions>
 
 <constraints>
 - Source code is the single source of truth for living docs; specs are inputs, not facts.
-- Prefer in-place updates; create a living file only if it is truly missing.
+- Prefer in-place updates; create a living file only if it is truly missing. Before creating one, check whether it is ignored (`git check-ignore -q <path>`, layout §6.7) or present in another checkout (`git worktree list`); if so, stop and report instead of creating a divergent copy.
 - Highly scannable (tables, headings, bullets). State assumptions when information is ambiguous. No generic filler.
 - The living file set must remain clean and canonical afterwards.
 </constraints>

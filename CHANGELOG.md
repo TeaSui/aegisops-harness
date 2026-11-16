@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.6.0 — 2026-11-16
+
+### Fixed
+- Project instructions reach dispatched agents: before dispatching into a worktree or another checkout, the dispatcher checks that each cited instruction file exists there and is non-empty, else cites the main checkout's absolute paths (`rules/dispatch-prompt-contract.md`). `scripts/check-setup.py` warns when `CLAUDE.md` is tracked but empty at HEAD or `.claude/rules/` is untracked or ignored.
+- Ignored docs: layout §6.7 requires docs to be tracked (`!/docs/` and `!/docs/**` in the repository `.gitignore` override a personal `core.excludesFile`); `/upgrade-service-docs` stops instead of creating a living file that is ignored or present in another checkout, and runs after `GO` on the merged or integration branch; `check-setup.py` warns when `docs/` paths are ignored.
+- Spec status inflation: `source_revision` must name a commit that contains the change; an uncommitted or unmerged change stays `accepted` (layout §5 step 5).
+- Test totals are read only from the result set of the command that ran, never aggregated across result directories such as Gradle's `build/test-results/*` (`references/agent-discipline.md` § Verification).
+- CI YAML command items containing `: ` or starting with a YAML indicator are quoted and verified by parsing (`agents/platform-engineer-subagent.md`).
+- Every count in a subagent return names what was counted and the command that produced it (`rules/subagent-return-format.md`).
+
+### Changed
+- Coordinated fast path: lanes run in parallel unless one needs another's output (e.g. a RED test before the fix); the plan states the order.
+- Pre-PR review with a non-GitHub remote: the `gh` hook does not apply, so the pass is still run and recorded with `scripts/mark-pr-review.py`, and the PR description is handed to the user.
+- `check-setup.py` takes `--project` (default: current directory) for the warnings above, skips them for the plugin's own repository, and reports `project` in its JSON. Covered by `tests/test_check_setup.py` (stdlib `unittest`, isolated from the user's git config).
+
 ## 2.5.0 — 2026-11-15
 
 ### Removed

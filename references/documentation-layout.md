@@ -112,7 +112,7 @@ updated: YYYY-MM-DD
 2. **Accept.** Only the integrating session sets `status: accepted`, and only after explicit user/team approval, recording `accepted_by`. Implementers consume `accepted` specs; they consume a `proposed` spec only when the dispatch says so explicitly.
 3. **Decide.** A decision that outlives the change becomes an ADR; the spec links it instead of re-arguing it.
 4. **Implement.** Implementers apply the accepted `contracts/` delta to the project's authoritative contract source (§6.4) and build against the spec. They never rewrite strategic files; contradictions found in code are returned as `DONE_WITH_CONCERNS`.
-5. **Promote.** After QA `GO` or merge, `/upgrade-service-docs <service> <feature>` folds verified behavior into the living files, appends the change's active security rules to the living `security.md` register as `<feature>/AUTH-01` with a link, sets `status: implemented` (or `partially-implemented` with the traceability table showing pending items) and `source_revision`. Intent is never rewritten to match what shipped.
+5. **Promote.** After QA `GO` or merge, `/upgrade-service-docs <service> <feature>` folds verified behavior into the living files, appends the change's active security rules to the living `security.md` register as `<feature>/AUTH-01` with a link, sets `status: implemented` (or `partially-implemented` with the traceability table showing pending items) and `source_revision`. Intent is never rewritten to match what shipped. `source_revision` must name a commit that contains the change (`git merge-base --is-ancestor <change-commit> <sha>` succeeds). If the change is not yet committed and merged, keep `status: accepted`, leave `source_revision` unset and report it.
 6. **Supersede.** A later change creates a new slug, marks the old `README.md` `superseded_by`, and retires its rules in the register.
 
 ## 6. Resolution rules (read before writing)
@@ -123,6 +123,7 @@ updated: YYYY-MM-DD
 4. **Authoritative contract source.** Discover it before writing: contract-first projects keep it in a schema folder the build consumes (`api/`, `openapi/`, `proto/` with buf, …); code-first stacks (springdoc, NestJS, FastAPI) generate it from code, so the code is the source and `api-contracts.md` links the generated spec. Create a new schema folder only in a contract-first project that lacks one. Prose files link to the source and never re-type schemas.
 5. **Glossary.** Top-scope `glossary.md` (system root, or repo root for single-repo projects). BA proposes terms in `requirements.md`; tech-lead-subagent ratifies them into `glossary.md`. Per-service entities live in `data-model.md`; cross-service ones in `03-cross-cutting/shared-concepts.md`.
 6. **Fast path** creates no spec folder. If it changes documented behavior, update the affected living file in the same change.
+7. **Docs are tracked.** An ignored doc never reaches `git status`, worktrees or the PR. If `git check-ignore -q docs/specs/x.md` succeeds (often a personal `core.excludesFile`), add `!/docs/` and `!/docs/**` to the repository `.gitignore`; repository patterns override `core.excludesFile`. `scripts/check-setup.py` warns about this.
 
 ## 7. Staleness
 

@@ -9,6 +9,6 @@ Before opening a PR, and before handing a change to review:
 3. Fix each finding, or clear it with a stated reason backed by evidence. A note alone does not clear a finding.
 4. Re-review only the diff added by those fixes.
 
-Enforcement: the `gh pr create` PreToolUse gate (`hooks/pr-review-gate.py`) blocks unless a record exists for the current HEAD with zero open findings. Record it with `scripts/mark-pr-review.py --reviewer <name> --open-findings <n>`. The gate checks that the record exists and is current, not that the review was thorough; the reviewer owns that.
+Enforcement: the `gh pr create` PreToolUse gate (`hooks/pr-review-gate.py`) blocks unless a record exists for the current HEAD with zero open findings. Record it with `scripts/mark-pr-review.py --reviewer <name> --open-findings <n>`. The gate checks that the record exists and is current, not that the review was thorough; the reviewer owns that. The hook only guards `gh`: with a Bitbucket, GitLab or other non-GitHub remote nothing blocks, so still run the pass, record it with `scripts/mark-pr-review.py`, and hand the PR description to the user to open the PR.
 
 Limits: one pre-PR pass plus one diff-only re-review. Findings still open after that go to the human reviewer as explicit open items. Do not loop; see `rules/review-loop-limits.md`.

@@ -84,6 +84,7 @@ Every HTTP-exposing surface (API Gateway + Lambda, Lambda URLs, HTTP-style AppSy
 
 ### Pipelines & IaC
 - IaC is idempotent and passes validation before apply
+- CI YAML command lists (`buildspec.yml` `commands:`, GitLab `script:`, Actions `run:` lists), including items copied from a contract: single-quote any item that contains `: ` or starts with a YAML indicator (`{ [ & * ! | > % @ #`, a quote or a backtick); unquoted, `- echo "guard: X"` parses as a map and breaks the pipeline. Verify by parsing the file (e.g. `ruby -ryaml`) and checking every command entry is a string
 - Every deployment has a documented rollback plan (how, ETA, who executes)
 - Automate anything done twice
 

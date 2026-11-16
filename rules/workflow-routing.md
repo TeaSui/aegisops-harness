@@ -33,6 +33,7 @@ Implement with TDD + verification. Brainstorming only if design genuinely unclea
 Multi-domain, no trust boundary (e.g., cross-service refactor, shared-schema rename, DX-only change touching frontend + backend).
 - Write a lightweight plan (`writing-plans` skill) so parallel changes stay in sync.
 - Dispatch domain leaf agents directly — no Security, no BA, no TechLead.
+- Lanes run in parallel unless one needs another's output (e.g. a RED test that must exist before another lane's fix); the plan states the order.
 - Each leaf follows TDD + verification.
 - No formal review loops. No orchestrator.
 - Integration-check before merge: run the smoke test at the integration point; do not skip because each side passed in isolation.
