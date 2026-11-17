@@ -26,7 +26,7 @@ Derived from Anthropic's prompting best practices (https://platform.claude.com/d
 Existing conventions preserved (do not restate — cite):
 - Review loop limits → `rules/review-loop-limits.md`
 - Strategic output persistence → `rules/strategic-output-persistence.md`
-- Security precedence → `rules/security.md`
+- Security precedence → the Security agent's `security.md` rules; each implementation agent's embedded security checklist applies when Security is skipped
 - Parallel dispatch discipline → `skills/dispatching-parallel-agents/SKILL.md`
 
 ---

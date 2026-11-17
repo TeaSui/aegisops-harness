@@ -28,7 +28,7 @@ Sonar way gates on **new code**, so hold every change to it:
 | S125 commented-out code | Delete it; git keeps history. |
 | S108 / S1186 empty blocks | Never leave an empty block or method; add the intent or remove it. |
 | S1135 TODO tags | Do not leave `TODO`/`FIXME` in committed code; track the work in the plan or issue tracker. |
-| S2068 hardcoded credentials | Secrets come from env/secret store (see `rules/security.md`). |
+| S2068 hardcoded credentials | Secrets come from env/secret store (see the agent's Security Checklist). |
 | S2259 null dereference | Handle null/undefined/`None` explicitly at the point it can occur. |
 | S2095 resources | Close streams, connections and files (try-with-resources, `defer`, `with`, `using`). |
 

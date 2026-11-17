@@ -1,4 +1,8 @@
-# Single Source of Truth (No Harmful Duplication)
+# Contributing to tea-sdlc
+
+Maintainer guide for editing this plugin's instruction artifacts. It is not loaded into agent sessions.
+
+## Single Source of Truth (No Harmful Duplication)
 
 **Scope:** Authoring or editing any instruction / reference artifact — skills, `docs/`, rule files, `CLAUDE.md`, READMEs, ADRs, agent definitions. Governs when you may restate content that already lives in another file.
 
