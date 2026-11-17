@@ -9,6 +9,8 @@ description: Use before implementing behavior changes or bug fixes; preserve exi
 
 Write the test first. Watch it fail. Write minimal code to pass.
 
+**Gate (check before every production edit):** have you run the new test and seen it fail for the expected reason in this session? If not, run it now and show the output before touching production code. Writing the test first is not enough; the failing run is the evidence. In a repository you cannot run tests in, say so and state which check stands in for it.
+
 **Core principle:** A behavior regression test needs evidence that it detects the missing behavior, followed by a passing result after the fix.
 
 **Violating the letter of the rules is violating the spirit of the rules.**
