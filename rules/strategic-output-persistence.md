@@ -2,7 +2,7 @@
 
 Strategic agents persist outputs so they survive across sessions. **Paths, file ownership and lifecycle are owned by `references/documentation-layout.md`** — read it before writing; this rule only adds the obligations below.
 
-- Each strategic agent writes only its own file in the feature's change-spec folder (`docs/specs/<feature>/`): BA → `requirements.md`, UI/UX → `ui-design.md`, Security → `security.md`, TechLead → `design.md` + `contracts/` (+ ADRs in `docs/adr/`, ratified terms in `glossary.md`), BA → `measurement.md` (when measurement is in scope). TechLead contract-mode ("Stop after Phase 2") changes delegation only, never storage.
+- Each strategic agent writes only its own file in the feature's change-spec folder (`docs/specs/<feature>/`): BA → `requirements.md`, UI/UX → `ui-design.md`, Security → `security.md`, TechLead → `design.md` + `contracts/` (+ ADRs in `docs/adr/`, ratified terms in `glossary.md`), BA → `measurement.md` (when measurement is in scope). TechLead contract-mode ("Stop after Phase 2") changes delegation only, never storage. The named writer applies when that agent is dispatched; if the tier or `/prompt-builder` does not dispatch it, the integrating session writes the file instead (`references/documentation-layout.md` §6.3), so a file never has two writers.
 - Glossary terms: BA seeds, TechLead ratifies, in the top-scope `glossary.md`. Specs, contracts and dispatch prompts link to named terms instead of redefining them (link, do not restate).
 - Reuse an existing equivalent location in the target project instead of creating a parallel tree, and return the exact path written.
 
