@@ -1,0 +1,96 @@
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import tempfile
+import unittest
+
+HOOK = pathlib.Path(__file__).resolve().parent.parent / 'hooks' / 'tdd-gate.py'
+
+
+class TddGateTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = pathlib.Path(self.tmp.name) / 'home'
+        self.repo = pathlib.Path(self.tmp.name) / 'repo'
+        self.home.mkdir()
+        self.repo.mkdir()
+        (self.repo / 'build.gradle').write_text('')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_hook(self, mode, payload, env_extra=None):
+        env = {**os.environ, 'HOME': str(self.home)}
+        env.update(env_extra or {})
+        payload = {'session_id': 's1', 'cwd': str(self.repo), **payload}
+        return subprocess.run([sys.executable, str(HOOK), mode], input=json.dumps(payload), env=env,
+                              capture_output=True, text=True)
+
+    def edit(self, path, tool='Edit'):
+        return self.run_hook('check', {'tool_name': tool, 'tool_input': {'file_path': path}})
+
+    def test_blocks_first_production_edit_once(self):
+        first = self.edit('/r/core/src/main/java/app/Fee.java')
+        self.assertEqual(first.returncode, 2)
+        self.assertIn('failing test', first.stderr)
+        self.assertEqual(self.edit('/r/core/src/main/java/app/Fee.java').returncode, 0)
+
+    def test_failing_test_run_clears_the_gate(self):
+        rec = self.run_hook('record', {'tool_name': 'Bash', 'tool_input': {'command': 'gradle test'},
+                                       'tool_response': {'stdout': '5 tests completed, 1 failed\nBUILD FAILED'}})
+        self.assertEqual(rec.returncode, 0)
+        self.assertEqual(self.edit('/r/core/src/main/java/app/Fee.java').returncode, 0)
+
+    def test_red_is_recorded_whatever_the_output_field_is_called(self):
+        self.run_hook('record', {'tool_name': 'Bash', 'tool_input': {'command': 'npm test'},
+                                 'tool_output': '# tests 1\n# fail 1'})
+        self.assertEqual(self.edit('/r/src/main/java/A.java').returncode, 0)
+
+    def test_passing_test_run_does_not_clear_the_gate(self):
+        self.run_hook('record', {'tool_name': 'Bash', 'tool_input': {'command': 'gradle test'},
+                                 'tool_response': {'stdout': 'BUILD SUCCESSFUL'}})
+        self.assertEqual(self.edit('/r/src/main/java/A.java').returncode, 2)
+
+    def test_non_test_command_with_failure_text_is_not_red(self):
+        self.run_hook('record', {'tool_name': 'Bash', 'tool_input': {'command': 'cat log.txt'},
+                                 'tool_response': {'stdout': 'FAILED'}})
+        self.assertEqual(self.edit('/r/src/main/java/A.java').returncode, 2)
+
+    def test_skips_tests_docs_and_config(self):
+        for path in ('/r/core/src/test/java/app/FeeTest.java', '/r/web/branch.test.js', '/r/tests/test_x.py',
+                     '/r/README.md', '/r/build.gradle', '/r/web/node_modules/x/index.js', '/r/build/gen/A.java'):
+            self.assertEqual(self.edit(path).returncode, 0, path)
+
+    def test_bash_heredoc_write_to_production_code_is_gated(self):
+        cmd = "python3 - <<'EOF'\nopen('core/src/main/java/A.java','w').write('x')\nEOF"
+        res = self.run_hook('check', {'tool_name': 'Bash', 'tool_input': {'command': cmd}})
+        self.assertEqual(res.returncode, 2)
+
+    def test_bash_that_only_reads_or_runs_tests_is_not_gated(self):
+        for cmd in ('gradle test', 'git diff', 'cat core/src/main/java/A.java', 'ls src/main'):
+            res = self.run_hook('check', {'tool_name': 'Bash', 'tool_input': {'command': cmd}})
+            self.assertEqual(res.returncode, 0, cmd)
+
+    def test_repo_without_test_setup_is_not_gated(self):
+        (self.repo / 'build.gradle').unlink()
+        self.assertEqual(self.edit('/r/src/main/java/A.java').returncode, 0)
+
+    def test_env_off_and_bad_input_fail_open(self):
+        off = self.run_hook('check', {'tool_name': 'Edit', 'tool_input': {'file_path': '/r/src/main/A.java'}},
+                            {'TEA_SDLC_TDD_GATE': 'off'})
+        self.assertEqual(off.returncode, 0)
+        bad = subprocess.run([sys.executable, str(HOOK), 'check'], input='not json', capture_output=True,
+                             text=True, env={**os.environ, 'HOME': str(self.home)})
+        self.assertEqual(bad.returncode, 0)
+
+    def test_sessions_are_independent(self):
+        self.assertEqual(self.edit('/r/src/main/A.java').returncode, 2)
+        other = self.run_hook('check', {'session_id': 's2', 'tool_name': 'Write',
+                                        'tool_input': {'file_path': '/r/src/main/A.java'}})
+        self.assertEqual(other.returncode, 2)
+
+
+if __name__ == '__main__':
+    unittest.main()

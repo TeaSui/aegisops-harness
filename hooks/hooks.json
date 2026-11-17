@@ -1,5 +1,5 @@
 {
-  "description": "tea-sdlc security, review gates, session bootstrap and eval-upgrade auto-trigger hooks",
+  "description": "tea-sdlc security, review gates, TDD reminder, session bootstrap and eval-upgrade auto-trigger hooks",
   "hooks": {
     "PreToolUse": [
       {
@@ -14,6 +14,21 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pr-review-gate.py\"",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-gate.py\" check",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-gate.py\" check",
+            "timeout": 10
           }
         ]
       }
@@ -38,6 +53,16 @@
             "type": "command",
             "command": "command -v node >/dev/null 2>&1 && node \"${CLAUDE_PLUGIN_ROOT}/tools/eval-upgrade/hooks/auto-trigger.mjs\" || true",
             "async": true,
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-gate.py\" record",
             "timeout": 10
           }
         ]
