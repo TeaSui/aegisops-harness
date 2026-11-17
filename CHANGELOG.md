@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.7.0 — 2026-11-17
+
+### Changed
+- `brainstorming` runs first for any code-changing request, like Superpowers: `session-bootstrap` makes it the first action (before reading files, choosing a tier or asking questions), including when the prompt comes from `/prompt-builder`. The skill scales by tier (2-3 lines for a routine fix, a full design for trust-boundary work), confirms inputs that are already given, and never blocks a non-interactive or delegated run.
+- `session-bootstrap` carries the tier table and the six trust-boundary items inline, so the tier is stated before any edit instead of depending on the model reading `rules/workflow-routing.md`.
+- `/prompt-builder`: a contract is "external" only when it has consumers outside the changed module (HTTP/RPC API, event, shared schema, public library API). TechLead (contract-mode) and its ADRs are used only for an external contract change, and BA only when requirements are unresolved or need measurement; otherwise the main session writes `design.md`, `requirements.md` and the ADR. Generated SDLC prompts start with the `brainstorming` step.
+- Agent definitions: when-to-use guidance for the Playwright tools (frontend, QA), the Slack / Microsoft 365 / web research tools (BA, read-only, cited, optional) and the draw.io tools (tech lead, UI/UX), each with a fallback when the connector is missing. `code-reviewer` frontmatter matches the other agents (`name` quoted, `color`).
+
+- TDD runs passively: `session-bootstrap` requires the `test-driven-development` skill before production edits on behavior changes and bug fixes, and the skill opens with a gate that requires a shown failing run. Measured on one small rule change, 5 runs per configuration, TDD counted only with a failing test run before the production edit: no plugin 0/5; the 2.6.0 plugin as released 4/5; this release (bootstrap rule, skill gate and hook, each tried alone and together) 5/5. At this sample size the differences among the plugin variants are not distinguishable; the hook did intervene in 3 of the 5 hook-only runs, each time turning a combined test-and-code write into test, failing run, then code.
+
+- New advisory hook `hooks/tdd-gate.py` (`tests/test_tdd_gate.py`): a `PostToolUse` Bash hook records a failing test run per session; a `PreToolUse` hook (Edit/Write/MultiEdit/Bash) blocks the first production-code change of a session that has no recorded failing run, once, with a reminder to write the test and see it fail. Later attempts pass, so refactors and doc/config changes cost one turn. Skipped for test files, non-code files, repositories without a test setup and with `TEA_SDLC_TDD_GATE=off`; it never blocks on its own errors.
+
+### Removed
+- `rules/user-facing-output.md`, `rules/session-scope.md`: nothing referenced them and the behavior already held without them; their essentials are now two short paragraphs in `session-bootstrap`.
+- `rules/security.md`: duplicated each implementation agent's embedded security checklist and the Security agent's rules; secrets are enforced by the `security-gate` hook. References now point to the checklists.
+
+### Moved
+- `rules/single-source-of-truth.md` → `CONTRIBUTING.md`: it is an authoring rule for maintainers, not an agent runtime rule, so it is no longer a bundled rule.
+
 ## 2.6.0 — 2026-11-16
 
 ### Fixed

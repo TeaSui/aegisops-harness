@@ -147,13 +147,14 @@ Claude API work uses Claude Code's built-in **`/claude-api`** skill plus live do
 |---|---|---|
 | `security-gate.py` | PreToolUse (Bash) | Runs `gitleaks` before `git commit` (staged content) / `git push`; blocks on findings or when gitleaks is unavailable. `git commit -a` is not covered — keep CI scanning as the backstop |
 | `pr-review-gate.py` | PreToolUse (Bash) | Blocks `gh pr create` until a pre-PR review with zero open findings is recorded for `HEAD` via `scripts/mark-pr-review.py` |
+| `tdd-gate.py` | PreToolUse (Edit/Write/Bash) + PostToolUse (Bash) | Advisory: records a failing test run per session and blocks the first production-code change that has none, once, with a reminder to write the test and see it fail. Off with `TEA_SDLC_TDD_GATE=off` |
 | `session-start` | SessionStart | Injects the `session-bootstrap` skill (≤ 48 KiB) with the plugin root resolved |
 
 ---
 
 ## 📐 Rules & references
 
-- **`rules/`** — routing (`workflow-routing.md`), agent registry (`agents.md`), dispatch contract and return format, review-loop limits, pre-PR review, strategic-output persistence and staleness, single source of truth, security, hallucination reduction, code patterns (API envelope).
+- **`rules/`** — routing (`workflow-routing.md`), agent registry (`agents.md`), dispatch contract and return format, review-loop limits, pre-PR review, strategic-output persistence and staleness, hallucination reduction, code patterns (API envelope). Authoring rules for maintainers are in `CONTRIBUTING.md`.
 - **`references/`** — documentation layout, model guide, agent discipline, AI integration, AWS, observability, data privacy, bootstrap checklist, security-review checklist and OWASP mapping.
 
 **Path convention:** agents, commands and `SKILL.md` files reference bundled files as `${CLAUDE_PLUGIN_ROOT}/…` (substituted by Claude Code). Inside `rules/`, `references/` and other files opened with Read, paths such as `rules/…` are relative to the plugin root. Project paths such as `docs/…` are relative to the target project. Nothing depends on `~/.claude/`.
@@ -181,7 +182,7 @@ tea-sdlc/
 │   └── marketplace.json     # Marketplace entry
 ├── agents/                  # 11 subagent definitions
 ├── commands/                # 6 slash commands
-├── hooks/                   # hooks.json, security-gate.py, pr-review-gate.py, session-start
+├── hooks/                   # hooks.json, security-gate.py, pr-review-gate.py, tdd-gate.py, session-start
 ├── references/              # Shared guidance (documentation layout, model guide, …)
 ├── rules/                   # Routing, contracts, review and persistence rules
 ├── scripts/                 # check-setup.py, validate.sh, mark-pr-review.py
