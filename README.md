@@ -4,7 +4,7 @@
 
 **Version 2.4.0** · [Changelog](CHANGELOG.md) · MIT
 
-`tea-sdlc` turns Claude Code into a coordinated engineering team: 12 specialist subagents, a 4-tier workflow router that escalates on trust boundaries, one documentation structure shared by every agent and command, and hooks that block secret leaks and unreviewed PRs.
+`tea-sdlc` turns Claude Code into a coordinated engineering team: 9 specialist subagents, a 2-tier workflow router that escalates on trust boundaries, one documentation structure shared by every agent and command, and hooks that block secret leaks and unreviewed PRs.
 
 ---
 
@@ -39,7 +39,7 @@ Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commit
 | `python3` | All hooks and `scripts/` |
 | [`gitleaks`](https://github.com/gitleaks/gitleaks) | Secret gate on `git commit` / `git push` (fails closed when missing) |
 | `gh` | PR review gate (`gh pr create`) |
-| `ruby` (optional) | Full YAML parsing in `scripts/check-setup.py` |
+| `ruby` (optional) | Full YAML parsing in `scripts/check-setup.py` and `scripts/check-contract.py` (when PyYAML is absent) |
 
 ---
 
@@ -49,12 +49,8 @@ Every substantive task is classified by `rules/workflow-routing.md` on two axes:
 
 ```
 Trust boundary?
- ├─ NO
- │   ├─ 1 domain   ──► Fast path              TDD, no subagents, single pre-PR review
- │   └─ 2+ domains ──► Coordinated fast path   lightweight plan + leaf agents
- └─ YES
-     ├─ 1 domain   ──► Full workflow           Security → TechLead (contract) → plan → implement → QA
-     └─ 2+ domains ──► Orchestrator            main session runs the orchestrating-multi-domain-work skill
+ ├─ NO  ──► Fast path       TDD, no subagents, single pre-PR review (several domains: edit in order, integration check)
+ └─ YES ──► Full workflow   Security → contract gate (external contract) → plan → implement → review → QA
 ```
 
 Gated tiers end with `/upgrade-service-docs` after QA `GO` or merge, which promotes the shipped change into the living docs. Promotion to a heavier tier mid-task is mandatory when scope grows (e.g. a fast-path change discovers a trust boundary).
@@ -67,10 +63,8 @@ Agents use **family aliases**, so they always run on the latest release of that 
 
 | Agent | Responsibility | Model | Effort |
 |---|---|---|---|
-| `tech-lead-subagent` | Architecture, API/data contracts, ADRs, glossary ratification | opus | high |
 | `security-engineer-subagent` | Threat model (STRIDE, OWASP), numbered security rules before implementation | opus | high |
 | `code-reviewer` | Read-only, independent review against plan, contract and standards | opus | medium |
-| `business-analyst-subagent` | Requirements, acceptance criteria (Gherkin/EARS), MVP scope, measurement & experiment design | sonnet | medium |
 | `ui-ux-designer-subagent` | Flows, wireframes, component states, accessibility specs | sonnet | medium |
 | `backend-engineer-subagent` | APIs, business logic, databases, integrations, LLM/RAG/agent features with evals | sonnet | high |
 | `frontend-engineer-subagent` | Web UI, accessibility, client performance | sonnet | high |
@@ -79,7 +73,7 @@ Agents use **family aliases**, so they always run on the latest release of that 
 | `data-engineer-subagent` | Data models, migrations, ETL/ELT, warehouses, data quality | sonnet | high |
 | `qa-subagent` | Final release gate (GO / NO-GO) plus live API smoke, performance, security-smoke and stress checks | sonnet | medium |
 
-The **orchestrator is a skill, not a subagent**: the main session runs `orchestrating-multi-domain-work`, so every specialist is a first-level dispatch. Every dispatch follows the nine-field contract in `rules/dispatch-prompt-contract.md`, and every return carries a status, evidence paths and an exit-criteria check (`rules/subagent-return-format.md`).
+The main session dispatches every specialist as a first-level dispatch. Every dispatch follows the nine-field contract in `rules/dispatch-prompt-contract.md`, and every return carries a status, evidence paths and an exit-criteria check (`rules/subagent-return-format.md`).
 
 ---
 
@@ -98,14 +92,14 @@ One structure for every agent, command and skill, owned by [`references/document
 <service>/docs/
 ├── README.md  architecture.md  business-logic.md  api-contracts.md  data-model.md
 ├── events.md  security.md  configuration.md  troubleshooting.md  diagrams/
-├── adr/                      NNNN-<decision>.md (tech-lead)
+├── adr/                      NNNN-<decision>.md (main session)
 └── specs/<feature>/
     ├── README.md             status frontmatter + traceability (integrating session)
-    ├── requirements.md       business-analyst
-    ├── measurement.md        business-analyst (when in scope)
+    ├── requirements.md       main session
+    ├── measurement.md        main session, skill measurement-planning (when in scope)
     ├── ui-design.md          ui-ux-designer
     ├── security.md           security-engineer
-    ├── design.md, contracts/ tech-lead
+    ├── design.md, contracts/ main session (contracts checked by scripts/check-contract.py)
     └── plan.md               writing-plans
 ```
 
@@ -130,7 +124,7 @@ Existing projects keep their established locations; the layout file maps legacy 
 
 | Area | Skills |
 |---|---|
-| Workflow | `session-bootstrap`, `orchestrating-multi-domain-work`, `brainstorming`, `writing-plans`, `subagent-driven-development`, `executing-plans`, `dispatching-parallel-agents`, `goal` |
+| Workflow | `session-bootstrap`, `brainstorming`, `measurement-planning`, `writing-plans`, `subagent-driven-development`, `executing-plans`, `dispatching-parallel-agents`, `goal` |
 | Quality | `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `validate-feature`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `incident-to-eval` |
 | Grounding | `grounding-claims`, `find-docs`, `context7-mcp` |
 | Thinking tools | `clarify` (ask only what changes the work), `expert-lens` (what the best practitioner would notice, do first, refuse), `reframe` (strongest case against the current view) — triggered by the situation or as `/clarify`, `/expert-lens`, `/reframe` |
@@ -147,6 +141,7 @@ Claude API work uses Claude Code's built-in **`/claude-api`** skill plus live do
 |---|---|---|
 | `security-gate.py` | PreToolUse (Bash) | Runs `gitleaks` before `git commit` (staged content) / `git push`; blocks on findings or when gitleaks is unavailable. `git commit -a` is not covered — keep CI scanning as the backstop |
 | `pr-review-gate.py` | PreToolUse (Bash) | Blocks `gh pr create` until a pre-PR review with zero open findings is recorded for `HEAD` via `scripts/mark-pr-review.py` |
+| `contract-gate.py` | PreToolUse (Edit/Write/Bash) | Advisory: when an active spec declares an external contract that fails `scripts/check-contract.py`, blocks the first production-code change of a session once. `pr-review-gate.py` enforces it strictly before a PR. Off with `TEA_SDLC_CONTRACT_GATE=off` |
 | `tdd-gate.py` | PreToolUse (Edit/Write/Bash) + PostToolUse (Bash) | Advisory: records a failing test run per session and blocks the first production-code change that has none, once, with a reminder to write the test and see it fail. Off with `TEA_SDLC_TDD_GATE=off` |
 | `session-start` | SessionStart | Injects the `session-bootstrap` skill (≤ 48 KiB) with the plugin root resolved |
 
@@ -180,12 +175,12 @@ tea-sdlc/
 ├── .claude-plugin/
 │   ├── plugin.json          # Manifest (name, version, hooks)
 │   └── marketplace.json     # Marketplace entry
-├── agents/                  # 11 subagent definitions
+├── agents/                  # 9 subagent definitions
 ├── commands/                # 6 slash commands
-├── hooks/                   # hooks.json, security-gate.py, pr-review-gate.py, tdd-gate.py, session-start
+├── hooks/                   # hooks.json, security-gate.py, pr-review-gate.py, tdd-gate.py, contract-gate.py, session-start
 ├── references/              # Shared guidance (documentation layout, model guide, …)
 ├── rules/                   # Routing, contracts, review and persistence rules
-├── scripts/                 # check-setup.py, validate.sh, mark-pr-review.py
+├── scripts/                 # check-setup.py, check-contract.py, validate.sh, mark-pr-review.py
 ├── skills/                  # Workflow, quality and domain skills
 ├── CHANGELOG.md
 └── README.md

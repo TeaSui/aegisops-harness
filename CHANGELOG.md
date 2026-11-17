@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.8.0 — 2026-11-17
+
+### Removed (breaking)
+- `agents/tech-lead-subagent.md` and `agents/business-analyst-subagent.md`. Their runs added cost without value when acceptance criteria were given and no external contract changed. The main session now writes `requirements.md`, `design.md`, `contracts/`, ADRs and `glossary.md` (skills `brainstorming`, `writing-plans`, `writing-software-docs`); Security and UI/UX keep their agents. `references/documentation-layout.md` and `rules/strategic-output-persistence.md` name the main session as the single writer of those files.
+- The orchestrator tier and the skill `orchestrating-multi-domain-work`: a trust-boundary change is now a full workflow whatever the number of domains (independent domain tasks run in parallel when safe, then code review, then QA).
+- The coordinated-fast-path tier: fast path covers several domains without a trust boundary (task order in 2-3 lines, dependency order, integration check before merge). Routing now has two tiers.
+
+### Added
+- Skill `measurement-planning`: the measurement and growth part of the former BA agent (North Star, funnel, event taxonomy, experiments, GTM) as a specification skill; it writes `measurement.md`.
+- Contract gate: `scripts/check-contract.py` checks a spec's `contracts/` when its README declares `contract: external` (OpenAPI full document or delta: operationId, 2xx response, `{error:{code,message}}` envelope, resolvable `$ref`; breaking-change detection against the authoritative source unless `breaking: approved`). YAML is parsed with PyYAML when installed, else with ruby (preinstalled on macOS); with neither, the gate warns and does not report a clean pass. `hooks/contract-gate.py` blocks the first production change of a session once when an active spec fails it; `hooks/pr-review-gate.py` blocks `gh pr create` while it fails. `qa-subagent` runs it. 23 unit tests.
+
+### Changed
+- `contract: none | external`, `contract_source` and `breaking` join the spec README frontmatter.
+
 ## 2.7.0 — 2026-11-17
 
 ### Changed
