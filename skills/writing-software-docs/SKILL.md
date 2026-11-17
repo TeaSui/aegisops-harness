@@ -23,7 +23,7 @@ Not every "write up" or "document this" wants one of these documents. If the use
 | One unit of agile work with testable acceptance criteria | **User Story + AC** | BA | `references/agile-stories.md` |
 | A technical proposal up for discussion (system/API/architecture design) | **RFC** | Senior Dev, Architect | `references/architecture-records.md` |
 | A single architecture decision and its consequences | **ADR** | Architect | `references/architecture-records.md` |
-| A full, implementation-ready feature spec (API, events, schema, tests) | **Specification** | TechLead, Dev, AI agent | `references/specification.md` |
+| A full, implementation-ready feature spec (API, events, schema, tests) | **Specification** | Dev, AI agent | `references/specification.md` |
 | A contract/compatibility/risk analysis: what exists vs. what's needed | **Concern Report** | Backend team | `references/concern-report.md` |
 
 **Disambiguation rule:** if two types are plausible and the choice changes the *audience* (e.g. PRD vs. FRD, FRD vs. Specification), ask one line. Otherwise pick the best fit, state it ("This is an ADR — writing it now"), and proceed.
@@ -35,23 +35,23 @@ If a request spans several types, produce the one that fits the current need and
 
 ## Step 1.5 — Routing check (this skill formats; it does not bypass routing)
 
-This skill is a **structural layer**, not a substitute for the agent-routing model in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` and `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`. Several of these documents are the canonical artifacts of strategic agents: user stories belong to `business-analyst-subagent`, RFC/ADR/Specification to `tech-lead-subagent`, and any threat-model-adjacent analysis to `security-engineer-subagent`.
+This skill is a **structural layer**, not a substitute for the agent-routing model in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` and `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`. Several of these documents are the canonical artifacts of strategic agents: user stories, RFC/ADR/Specification and contracts are written by the main session, and any threat-model-adjacent analysis belongs to `security-engineer-subagent`.
 
 Before drafting in the main session, check: does the document describe **trust-boundary** work (auth, payments, PII, a new endpoint/webhook, a new external integration — see the `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` checklist) and the owning agent hasn't run? If so, flag it: the artifact should be produced (or reviewed) by that agent, not improvised here. You can still draft a *working sketch*, but say plainly that it isn't a substitute for the agent's output. Formatting a document never converts trust-boundary work into fast-path work.
 
 Use artifact status labels so readers do not mistake a formatted draft for an approved contract:
-- **Working Draft** — written in the main session before required BA/TechLead/Security gates have run.
+- **Working Draft** — written in the main session before required Security and contract gates have run.
 - **Agent-Reviewed** — reviewed or produced by the owning strategic agent, with evidence paths cited.
 - **Approved** — explicitly accepted by the user/team after the required routing gates.
 
-For trust-boundary RFCs, ADRs, Specifications, or Concern Reports, default to **Working Draft** until Security/TechLead ownership is satisfied. Add a short `Routing / Required Review` section near the top naming the missing gate, e.g. `Security review required: new endpoint + PII`.
+For trust-boundary RFCs, ADRs, Specifications, or Concern Reports, default to **Working Draft** until the Security review and contract gate are satisfied. Add a short `Routing / Required Review` section near the top naming the missing gate, e.g. `Security review required: new endpoint + PII`.
 
 ## Step 2 — Gather context before drafting
 
 A structured shell filled with guesses looks authoritative while being wrong. Ground the draft:
 
 - Read the conversation for stated goals, constraints, and decisions already made.
-- Read relevant code, existing `docs/`, and upstream artifacts (a Security threat model, a TechLead contract, BA requirements) so the document is consistent with them.
+- Read relevant code, existing `docs/`, and upstream artifacts (a Security threat model, the accepted contract, the requirements) so the document is consistent with them.
 - For library/API/CLI facts, verify rather than recall (`${CLAUDE_PLUGIN_ROOT}/rules/reduce-hallucinations.md`). If you can't verify, mark it — don't invent.
 
 ## Step 3 — Draft the full document
@@ -84,7 +84,7 @@ Do **not** write `docs/specs/<feature>/security.md` from this skill — that fil
 
 Do not persist a trust-boundary Working Draft as the authoritative contract unless the user explicitly asks for a draft file. When saving such a draft, include `working-draft` in the filename or first heading and keep the routing warning in the document. Do not label it `Approved` or present it as implementation-ready until the required agent gate has produced or reviewed it.
 
-**If you're a strategic subagent (BA, TechLead, Security), defer to your own persistence rule, not this table.** The layout file names each agent's file; contract mode changes delegation, not storage. Use your agent's convention for path and filename to avoid double-persisting one artifact under two names, and return per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md` (status + evidence path + exit-criteria) — cite the saved path, don't paste the document inline.
+**If you're a strategic subagent (Security, UI/UX), defer to your own persistence rule, not this table.** The layout file names each agent's file. Use your agent's convention for path and filename to avoid double-persisting one artifact under two names, and return per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md` (status + evidence path + exit-criteria) — cite the saved path, don't paste the document inline.
 
 Feature folders use a stable kebab-case slug (`docs/specs/kyc-upload/requirements.md`) — no dates or version suffixes, so re-runs update in place; ADRs get a sequence number (`docs/adr/0007-use-kafka-over-sqs.md`). Lifecycle status lives only in the spec folder's `README.md` frontmatter (owned by the integrating session), not in each document. A slug names one change: if the folder is already `implemented`, start a new slug (`auth-login-mfa`) instead of editing history.
 

@@ -59,7 +59,7 @@ Feature: Order Management
   I want to place orders for products
   So that I can purchase items I need
 
-  # Link to acceptance criteria from BA specs
+  # Link to acceptance criteria from the spec
   # See: docs/specs/order-management/requirements.md
 
   Background:
@@ -301,7 +301,7 @@ func (s *OrderSteps) orderCreatedWithTotal(expectedTotal float64) error {
 
 ## Linking to Acceptance Criteria
 
-When BA specs exist in `docs/specs/<feature>/requirements.md`, map scenarios directly:
+When specs exist in `docs/specs/<feature>/requirements.md`, map scenarios directly:
 
 ```gherkin
 # AC-1: Customer can place an order for available products

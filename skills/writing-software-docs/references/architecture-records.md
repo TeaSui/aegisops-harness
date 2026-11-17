@@ -7,7 +7,7 @@ Both capture technical decisions, at different stages:
 
 Rule of thumb: if the team is still choosing, write an RFC. If the choice is made and you're recording it for posterity, write an ADR.
 
-In this repo's workflow these are TechLead artifacts: an RFC is the `docs/specs/<feature>/design.md` of a not-yet-accepted change, an ADR is `docs/adr/NNNN-<decision>.md` (see `references/documentation-layout.md`).
+In this repo's workflow these are main-session artifacts: an RFC is the `docs/specs/<feature>/design.md` of a not-yet-accepted change, an ADR is `docs/adr/NNNN-<decision>.md` (see `references/documentation-layout.md`).
 
 ---
 

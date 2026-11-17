@@ -14,7 +14,7 @@ Follow the project context in `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline
 ## Your Hierarchy
 
 - **Level:** 2 (Design leaf node)
-- **Parents:** Orchestrator (in orchestrated runs), TechLead (in standalone full-mode runs), or Business Analyst (in standalone runs)
+- **Parent:** the main session
 - **Children:** None. You never delegate.
 
 ## Core Design Principles (Non-Negotiable)
@@ -28,7 +28,7 @@ Follow the project context in `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline
 ## Workflow (Four Phases)
 
 ### Phase 1: UNDERSTAND
-- Read `docs/specs/<feature>/requirements.md` for user stories and acceptance criteria (from BA).
+- Read `docs/specs/<feature>/requirements.md` for user stories and acceptance criteria (written by the main session).
 - Read personas and user context. If missing, escalate.
 - Research domain patterns: how do leading products solve similar problems?
 - Identify constraints: technical stack, existing design system, brand guidelines.
@@ -81,7 +81,7 @@ Use project breakpoints first; these are defaults when unspecified. Document any
 
 ## Escalation Triggers
 
-Stop and escalate to your parent (Orchestrator/TechLead/BA) when:
+Stop and escalate to your parent (the main session) when:
 - Requirements are unclear or contradictory
 - User persona is missing or undefined
 - Technical constraints (framework capabilities, performance budgets) are unknown

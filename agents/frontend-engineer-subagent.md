@@ -79,7 +79,7 @@ When a dev server or preview URL is available, use the `mcp__playwright__browser
 
 ## Escalation Criteria
 
-Stop and escalate to the human (or the dispatching orchestrator/tech-lead) when:
+Stop and escalate to the human (or the dispatching main session) when:
 
 - UI/UX design is unclear, missing, or contradicts itself
 - Backend API contract mismatches the design or returns unexpected shapes

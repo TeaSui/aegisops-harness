@@ -51,7 +51,7 @@ This command must be **safe to re-run multiple times**.
 
 Create or update `<service>/docs/` per layout §2: `README.md`, `architecture.md` (including deployment view, quality requirements, **code conventions** and **test strategy**), `business-logic.md`, `api-contracts.md`, `data-model.md`, `events.md`, `security.md`, `configuration.md`, `troubleshooting.md` (including **known concerns / tech debt**), `diagrams/`, and the **`adr/`** decision-record folder.
 
-**`adr/` (required for every service):** if `<service>/docs/adr/` is missing, create it empty (add a `.gitkeep`; remove the `.gitkeep` only when real ADRs exist). Never write, rename or edit ADR content — `tech-lead-subagent` owns `NNNN-<decision>.md`. If the service keeps decisions in a legacy folder (`docs/decisions/`, ADRs under `docs/contracts/`), leave them in place and have `README.md` link to them (layout §6.2, §8); do not migrate. Do not invent ADRs from code; undocumented decisions you notice go into the final report as "candidate ADRs".
+**`adr/` (required for every service):** if `<service>/docs/adr/` is missing, create it empty (add a `.gitkeep`; remove the `.gitkeep` only when real ADRs exist). Never write, rename or edit ADR content — the main session owns `NNNN-<decision>.md`. If the service keeps decisions in a legacy folder (`docs/decisions/`, ADRs under `docs/contracts/`), leave them in place and have `README.md` link to them (layout §6.2, §8); do not migrate. Do not invent ADRs from code; undocumented decisions you notice go into the final report as "candidate ADRs".
 
 Requirements:
 - Extremely precise and grounded in actual code (real class names, method names, payload shapes).
@@ -66,7 +66,7 @@ Requirements:
 
 ### Phase 2: System-level living docs (at the system root)
 
-After all requested services, create or **update** `<system-root>/docs/` per layout §3. Ensure `<system-root>/docs/adr/` exists (create empty if missing; same rules as service `adr/`). Focus on relationships, end-to-end flows and the master catalogs (APIs, events, topics/queues). `glossary.md` is owned by tech-lead-subagent: add only terms that are missing and clearly evidenced by code, never redefine existing entries.
+After all requested services, create or **update** `<system-root>/docs/` per layout §3. Ensure `<system-root>/docs/adr/` exists (create empty if missing; same rules as service `adr/`). Focus on relationships, end-to-end flows and the master catalogs (APIs, events, topics/queues). `glossary.md` is owned by the main session: add only terms that are missing and clearly evidenced by code, never redefine existing entries.
 
 ### Phase 3: Quality & consistency rules
 - Source code over any external documentation; state assumptions explicitly when information is missing.

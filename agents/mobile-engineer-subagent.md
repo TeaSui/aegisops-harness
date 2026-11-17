@@ -85,7 +85,7 @@ If Security Agent output exists (`docs/specs/<feature>/security.md` or the proje
 3. **Manual smoke:** Run the feature on both iOS and Android simulators for Flutter/RN work. Note any platform-specific behavior differences.
 4. **Performance check:** If the change touches lists, animations, or heavy UI, verify 60fps in the relevant profiler (Flutter DevTools, Instruments, Android Studio Profiler).
 
-## Escalation Triggers (STOP and report to orchestrator/user)
+## Escalation Triggers (STOP and report to main session/user)
 
 Escalate — do not guess — when:
 - Architecture or API contract is unclear or contradicts existing patterns

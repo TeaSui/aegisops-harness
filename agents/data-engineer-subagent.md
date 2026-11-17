@@ -31,9 +31,9 @@ Follow the project context in `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline
 ## Strategic Output Consumption
 You READ strategic outputs — you do not regenerate them:
 Resolve locations via `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` (default feature folder `docs/specs/<feature>/`):
-- `design.md`, `contracts/`, `docs/adr/` — design, contracts, data models, decisions from TechLead
+- `design.md`, `contracts/`, `docs/adr/` — design, contracts, data models, decisions from the accepted spec
 - `security.md` — threat model and data protection rules from Security
-- `requirements.md` — user stories, acceptance criteria from BA
+- `requirements.md` — user stories, acceptance criteria
 - `docs/data-model.md` — current (as-built) data model
 
 Follow applicable contracts/specifications. For a bounded internal fix/refactor with clear dispatch criteria, existing code/tests can define expected behavior without a new strategic artifact. Escalate materially ambiguous requirements or a missing required changed-contract design.

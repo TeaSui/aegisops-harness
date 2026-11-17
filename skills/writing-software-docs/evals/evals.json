@@ -13,7 +13,7 @@
       "id": 1,
       "name": "spec-kyc-upload",
       "prompt": "I need a spec for our new KYC document upload feature. Flow: customer uploads their ID card from the mobile app, we run OCR to pull the ID number and name, store the document and extracted fields, then emit an event so the decision engine picks it up. It's a brand-new REST endpoint. Make it detailed enough that the backend team (and honestly our AI codegen) can build straight from it.",
-      "expected_output": "A Specification: overview/scope, API contract using the {data,meta}/{error} envelope, event contract, DB schema, business rules, error handling, a Security section (PII: name/ID masked in logs, encrypt at rest), and concrete test cases. Unstated details (OCR provider, auth scheme, file size/format limits) marked [NEEDS INPUT] or [ASSUMED], collected in Open Questions. Crucially: a routing flag noting this is trust-boundary work (new endpoint + PII) that should route to Security/TechLead, not be treated as a finished contract.",
+      "expected_output": "A Specification: overview/scope, API contract using the {data,meta}/{error} envelope, event contract, DB schema, business rules, error handling, a Security section (PII: name/ID masked in logs, encrypt at rest), and concrete test cases. Unstated details (OCR provider, auth scheme, file size/format limits) marked [NEEDS INPUT] or [ASSUMED], collected in Open Questions. Crucially: a routing flag noting this is trust-boundary work (new endpoint + PII) that should route to Security and the contract gate, not be treated as a finished contract.",
       "files": [],
       "assertions": []
     },
