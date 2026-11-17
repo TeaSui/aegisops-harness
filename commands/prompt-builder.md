@@ -36,7 +36,7 @@ Extract what you can from `$ARGUMENTS`:
 
 Software change → **SDLC-flow track** (§4a). Otherwise → minimal/full track (§3, §4b). If the user explicitly asks for a generic prompt for a dev task, honor it.
 
-For the SDLC-flow track also extract: **service/repo**, **feature slug** (stable kebab-case, one change — `auth-login-mfa`, no numbers/dates/`-v2`), **acceptance criteria**, **trust boundary** (any item in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` → treat as YES when unsure), **domain count**, and whether an **external contract** changes. An external contract is an interface with consumers outside the changed module: an HTTP/RPC API, an event or message, a shared database schema, or a public library API. Interfaces, methods and classes used only inside the module or service are NOT contracts. The tier (fast path / coordinated / full workflow / orchestrator) decides how heavy each stage is; never skip a stage, shrink it.
+For the SDLC-flow track also extract: **service/repo**, **feature slug** (stable kebab-case, one change — `auth-login-mfa`, no numbers/dates/`-v2`), **acceptance criteria**, **trust boundary** (any item in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` → treat as YES when unsure), **domain count**, and whether an **external contract** changes. An external contract is an interface with consumers outside the changed module: an HTTP/RPC API, an event or message, a shared database schema, or a public library API. Interfaces, methods and classes used only inside the module or service are NOT contracts. The tier (fast path / full workflow) decides how heavy each stage is; never skip a stage, shrink it.
 
 ### 2. Decide: enough info?
 
@@ -80,7 +80,7 @@ You are a senior engineer on [service/repo], working through the tea-sdlc flow. 
 - Doc scope: [service → `[service]/docs/` | system (cross-service) → `<system-root>/docs/`]
 - Feature slug: [kebab-case]
 - Acceptance criteria: [list, or "derive from the description and confirm in stage 1"]
-- Tier: [fast path | coordinated fast path | full workflow | orchestrator] — [why, citing the trust-boundary items hit]
+- Tier: [fast path | full workflow] — [why, citing the trust-boundary items hit]
 - External contract change: [yes — what, and who consumes it | no, internal only]
 </context>
 
@@ -92,13 +92,13 @@ Before stage 1, read `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`.
 Execute in order. Finish a stage and meet its gate before starting the next. Report the stage you are in.
 
 1. SPEC — define what changes and why.
-   - Full workflow / orchestrator: create `[service]/docs/specs/[slug]/` (layout §4). Each file has one writer: `requirements.md` (US/AC/BR ids) and `measurement.md` → business-analyst-subagent only when the request has unresolved requirements or needs measurement (when the user already gave acceptance criteria, the main session writes `requirements.md` from them, no BA dispatch); `security.md` (threat model + numbered rules) → security-engineer-subagent; `design.md` + `contracts/` → tech-lead-subagent in contract-mode ONLY when the context says `External contract change: yes`, otherwise the main session writes `design.md` (no `contracts/`, no tech-lead dispatch); `ui-design.md` → ui-ux-designer-subagent. Create only the files the change needs. The main session writes `README.md` with the layout §4 frontmatter (`status: proposed`, `scope`, `affects`, `updated`) and the file index.
-   - Coordinated fast path and above: `plan.md` in the same folder (tasks, ownership, order, parallelism).
+   - Full workflow: create `[service]/docs/specs/[slug]/` (layout §4). Each file has one writer: `security.md` (threat model + numbered rules) → security-engineer-subagent; `ui-design.md` → ui-ux-designer-subagent; every other file (`requirements.md` with US/AC/BR ids, `design.md`, `contracts/`, `measurement.md` via the `measurement-planning` skill) → the main session. When the context says `External contract change: yes`, the main session drafts `contracts/` and runs `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py [service]/docs/specs/[slug]` until it passes before stage 3; otherwise there is no `contracts/`. Create only the files the change needs. The main session writes `README.md` with the layout §4 frontmatter (`status: proposed`, `scope`, `affects`, `contract: none|external`, `updated`) and the file index.
+   - Full workflow: also `plan.md` in the same folder (tasks, ownership, order, parallelism).
    - Fast path: state the approach and acceptance criteria in 2–3 lines; no spec folder. If the change alters documented behavior, update the affected living file in the same change (layout §6.6).
    - Gate: the user approves the spec; only then set `status: accepted` and `accepted_by`. Do not continue on a `proposed` spec unless told to.
 
 2. ADR — record decisions that outlive the change.
-   - For each significant decision (architecture, data model, new dependency, API style, security posture), write `[service]/docs/adr/NNNN-<decision>.md` (`<system-root>/docs/adr/` when it spans services) with the next free number: context, options, decision, consequences. tech-lead-subagent is the writer only when an external contract changes; otherwise the main session writes the ADR (no tech-lead dispatch). Link it from the spec's `design.md` and from the service `README.md` ADR index.
+   - For each significant decision (architecture, data model, new dependency, API style, security posture), write `[service]/docs/adr/NNNN-<decision>.md` (`<system-root>/docs/adr/` when it spans services) with the next free number: context, options, decision, consequences. The main session is the writer. Link it from the spec's `design.md` and from the service `README.md` ADR index.
    - If no such decision exists, write one line: "No ADR needed: [reason]". An accepted ADR is immutable: supersede it with a new ADR, never rewrite it.
    - Gate: every decision the spec depends on has an ADR or an explicit "no ADR needed".
 

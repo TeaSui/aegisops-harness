@@ -16,12 +16,10 @@ These files express user preferences within the host's instruction hierarchy and
 
 After brainstorming, for substantive work (anything that edits code), BEFORE editing any file, classify the change and state the tier and the reason in one line. Trust boundary = YES if the change touches ANY of: PII or financial data; auth, session or permission rules; money, billing or payments; a new endpoint, webhook or public surface; a new external vendor; security config or secrets (TLS, JWT, IAM, encryption). Unsure counts as YES. Domains = distinct stacks (backend, frontend, mobile, infra, data pipeline, AI/LLM, DevOps).
 
-| Trust boundary | Domains | Tier | Required process |
-|---|---|---|---|
-| NO | 1 | Fast path | TDD + verification, no dispatch |
-| NO | 2+ | Coordinated fast path | `writing-plans` plan, then dispatch domain leaf agents, integration check |
-| YES | 1 | Full workflow | Security subagent first, TechLead (contract-mode) if a contract changes, plan, `subagent-driven-development`, QA, then `/upgrade-service-docs` |
-| YES | 2+ | Orchestrator | Load skill `orchestrating-multi-domain-work`; Security, TechLead, plan, implement, code review, QA |
+| Trust boundary | Tier | Required process |
+|---|---|---|
+| NO (any number of domains) | Fast path | TDD + verification, no dispatch; across several domains edit in dependency order and run the integration check before merge |
+| YES (any number of domains) | Full workflow | Security subagent first, contract draft + contract gate if an external contract changes, plan, `subagent-driven-development`, code review, QA, then `/upgrade-service-docs` |
 
 Read `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` for the full rules (small-change escape hatch, mid-execution promotion) when the tier is not obvious. Never skip a required step silently; if you shrink one, say so. Use a skill when the user names it or it materially helps the task. Load only the relevant skill and supporting references; do not trigger a workflow from a remote keyword match. Prefer the Skill tool when available; otherwise read its documented entry point and disclose unavailable capabilities.
 

@@ -7,7 +7,7 @@ description: Execute an explicitly delegated end-to-end outcome autonomously, in
 
 Inspect relevant project instructions, existing changes, code and test commands before asking intake questions. Preserve the user's current work. Establish the goal, scope and measurable success criteria from the request and available evidence; ask only when a material constraint cannot be resolved.
 
-Select the tier in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`; autonomy does not remove Security, contract, QA or permission boundaries. Fast path uses an in-context checklist, TDD where meaningful and relevant verification, with no formal plan or agent ceremony. Coordinated work uses an owned plan and independent leaves. Trust-boundary work obtains Security and any required contracts before the implementation plan. Multi-domain trust-boundary work uses the orchestrator where available.
+Select the tier in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`; autonomy does not remove Security, contract, QA or permission boundaries. Fast path uses an in-context checklist, TDD where meaningful and relevant verification, with no formal plan or agent ceremony. Trust-boundary work obtains Security and any required contracts before the implementation plan.
 
 For substantial work or sessions that need recovery, persist `.goal/state.md` or the accepted plan location with goal, acceptance evidence, tasks/dependencies/status, decisions and blockers. Avoid scaffolding a state directory for a tiny fix. Update at meaningful checkpoints; reread after resume/compaction. Never recreate unknown state from memory.
 

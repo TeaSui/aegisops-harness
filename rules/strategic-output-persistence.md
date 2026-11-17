@@ -2,8 +2,8 @@
 
 Strategic agents persist outputs so they survive across sessions. **Paths, file ownership and lifecycle are owned by `references/documentation-layout.md`** — read it before writing; this rule only adds the obligations below.
 
-- Each strategic agent writes only its own file in the feature's change-spec folder (`docs/specs/<feature>/`): BA → `requirements.md`, UI/UX → `ui-design.md`, Security → `security.md`, TechLead → `design.md` + `contracts/` (+ ADRs in `docs/adr/`, ratified terms in `glossary.md`), BA → `measurement.md` (when measurement is in scope). TechLead contract-mode ("Stop after Phase 2") changes delegation only, never storage. The named writer applies when that agent is dispatched; if the tier or `/prompt-builder` does not dispatch it, the integrating session writes the file instead (`references/documentation-layout.md` §6.3), so a file never has two writers.
-- Glossary terms: BA seeds, TechLead ratifies, in the top-scope `glossary.md`. Specs, contracts and dispatch prompts link to named terms instead of redefining them (link, do not restate).
+- Each strategic agent writes only its own file in the feature's change-spec folder (`docs/specs/<feature>/`): UI/UX → `ui-design.md`, Security → `security.md`. The integrating (main) session writes `requirements.md`, `design.md`, `contracts/` (+ ADRs in `docs/adr/`, ratified terms in `glossary.md`) and `measurement.md` (skill `measurement-planning`, when measurement is in scope), so a file never has two writers (`references/documentation-layout.md` §6.3).
+- Glossary terms: The integrating session proposes and ratifies them in the top-scope `glossary.md`. Specs, contracts and dispatch prompts link to named terms instead of redefining them (link, do not restate).
 - Reuse an existing equivalent location in the target project instead of creating a parallel tree, and return the exact path written.
 
 Implementation agents READ these files, never regenerate them. Living reference docs (`docs/*.md`) are updated from verified code via `/upgrade-service-docs`, not by strategic agents.
@@ -27,7 +27,7 @@ git log --oneline -- <module-path> | wc -l  # total commits on the module since 
 **When flagged:** the implementation agent returns `DONE_WITH_CONCERNS` (not `DONE`) and includes a staleness note:
 ```
 CONCERN: docs/specs/foo/design.md last updated <date/SHA>; <N> commits to <module> since then.
-Recommend re-running TechLead (contract-mode) before the next dispatch that touches this contract.
+Recommend re-drafting the contract and re-running `scripts/check-contract.py` before the next dispatch that touches it.
 ```
 
-The dispatcher (orchestrator or main session) decides whether to re-run the strategic agent or proceed with the concern noted. Do NOT silently use a stale doc.
+The dispatcher (the main session) decides whether to re-run the strategic agent or proceed with the concern noted. Do NOT silently use a stale doc.

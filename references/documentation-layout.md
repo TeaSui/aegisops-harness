@@ -32,7 +32,7 @@ Owner of every living file: `/generate-service-docs` (build/normalize) and `/upg
 ├── configuration.md     # Config keys, feature flags, environment variables
 ├── troubleshooting.md   # Failure modes, dashboards, debugging playbook, known concerns / tech debt
 ├── diagrams/            # Mermaid sources used above
-├── adr/                 # NNNN-<decision>.md — owner: tech-lead-subagent
+├── adr/                 # NNNN-<decision>.md — owner: integrating session
 ├── specs/<feature>/      # Change specs (§4) — never touched by normalization
 └── plans/               # Optional; plans not tied to one change — never touched by normalization
 ```
@@ -68,7 +68,7 @@ Same owners as §2.
 │   ├── how-to-safely-modify-a-flow.md
 │   ├── key-files-and-entrypoints.md
 │   └── common-debugging-playbooks.md
-├── glossary.md                     # Owner: tech-lead-subagent (ratifies BA-proposed terms)
+├── glossary.md                     # Owner: integrating session (proposes and ratifies terms)
 ├── adr/                            # Cross-service decisions — never touched by normalization
 ├── specs/<feature>/                 # Cross-service changes — never touched by normalization
 └── plans/                          # Optional — never touched by normalization
@@ -80,15 +80,15 @@ Same owners as §2.
 
 | File | Single writer | Content | When |
 |---|---|---|---|
-| `README.md` | integrating session (main session/orchestrator) and `/upgrade-service-docs` | Frontmatter (below), one-paragraph summary, file index, traceability table (requirement → status → evidence) | Always |
-| `requirements.md` | business-analyst-subagent | Stories, acceptance criteria (Gherkin or EARS), business rules (`US-n`, `AC-n`, `BR-n`), `New terms` | User-visible behavior |
+| `README.md` | integrating session (main session) and `/upgrade-service-docs` | Frontmatter (below), one-paragraph summary, file index, traceability table (requirement → status → evidence) | Always |
+| `requirements.md` | integrating session | Stories, acceptance criteria (Gherkin or EARS), business rules (`US-n`, `AC-n`, `BR-n`), `New terms` | User-visible behavior |
 | `ui-design.md` | ui-ux-designer-subagent | Flows, wireframes, all component states, responsive + accessibility rules | UI needing design |
 | `security.md` | security-engineer-subagent | Threat model (assets, trust boundaries, STRIDE, OWASP) + numbered rules (`AUTH-01`…) with severity and provenance | Trust-boundary work |
-| `design.md` | tech-lead-subagent | Design, contract delta, data-model delta, rollout, links to ADRs; RFC-style while open | New/changed contract or architecture |
-| `contracts/` | tech-lead-subagent | Proposed machine-readable deltas (OpenAPI, AsyncAPI, JSON Schema, proto) | As above |
-| `measurement.md` | business-analyst-subagent | Metrics, funnel, **analytics** event taxonomy (distinct from domain events), experiments, consent gating | Must be measurable |
-| `concern-report.md` | tech-lead-subagent | Existing vs required compatibility analysis | Optional |
-| `plan.md` | integrating session (`writing-plans`) | Tasks, ownership, order, parallelism, validation; exempt from freezing | Coordinated, full-workflow, orchestrator tiers |
+| `design.md` | integrating session | Design, contract delta, data-model delta, rollout, links to ADRs; RFC-style while open | New/changed contract or architecture |
+| `contracts/` | integrating session | Proposed machine-readable deltas (OpenAPI, AsyncAPI, JSON Schema, proto) | As above |
+| `measurement.md` | integrating session (`measurement-planning`) | Metrics, funnel, **analytics** event taxonomy (distinct from domain events), experiments, consent gating | Must be measurable |
+| `concern-report.md` | integrating session | Existing vs required compatibility analysis | Optional |
+| `plan.md` | integrating session (`writing-plans`) | Tasks, ownership, order, parallelism, validation; exempt from freezing | Full-workflow tier |
 
 `README.md` frontmatter — the **only** lifecycle metadata in the folder; other files carry none:
 
@@ -100,6 +100,9 @@ affects: [<service-or-module>, ...]
 accepted_by: <name/date>            # set only on explicit user/team approval
 source_revision: [<repo>@<sha>, ...] # set on promotion; one entry per affected repo
 superseded_by: <slug>               # when applicable
+contract: none                      # none | external — external = a contract with consumers outside the changed module; contracts/ must then pass scripts/check-contract.py
+contract_source: <path>             # optional: authoritative OpenAPI file for the compatibility check (else auto-detected)
+breaking: approved                  # optional: a breaking change against contract_source was explicitly approved
 updated: YYYY-MM-DD
 ---
 ```
@@ -119,9 +122,9 @@ updated: YYYY-MM-DD
 
 1. **Owning scope.** Service root for single-service work. The **system root** is the nearest ancestor holding a `docs/00-overview/` folder, or else the nearest ancestor containing two or more service roots — it is not tied to the name `Sources/`. Work only in authorized scopes. If services are separate git repos and the system root is not under version control, say so in the result; cross-service specs then cannot ride a feature branch.
 2. **Reuse beats default.** If the project already has an equivalent location (`docs/security/`, `docs/decisions/`, `openapi/`, module READMEs, …), write there and return that exact path. Never migrate, rename or duplicate existing docs unless the user asks.
-3. **One writer per file**, as named in §2–§4. Everyone else reads and cites. The named agent writes when it is dispatched; when the routing tier does not dispatch it (BA when the request already carries acceptance criteria; tech-lead-subagent when there is no external contract change), the integrating session is the single writer of that file for the change, in the same location and format.
+3. **One writer per file**, as named in §2–§4. Everyone else reads and cites. Security writes `security.md` and UI/UX writes `ui-design.md` when dispatched; the integrating session is the single writer of every other file for the change (requirements, design, contracts, measurement, ADRs, glossary), in the stated location and format. When the change has an external contract, `scripts/check-contract.py` must pass on `contracts/` before implementation.
 4. **Authoritative contract source.** Discover it before writing: contract-first projects keep it in a schema folder the build consumes (`api/`, `openapi/`, `proto/` with buf, …); code-first stacks (springdoc, NestJS, FastAPI) generate it from code, so the code is the source and `api-contracts.md` links the generated spec. Create a new schema folder only in a contract-first project that lacks one. Prose files link to the source and never re-type schemas.
-5. **Glossary.** Top-scope `glossary.md` (system root, or repo root for single-repo projects). BA proposes terms in `requirements.md`; tech-lead-subagent ratifies them into `glossary.md`. Per-service entities live in `data-model.md`; cross-service ones in `03-cross-cutting/shared-concepts.md`.
+5. **Glossary.** Top-scope `glossary.md` (system root, or repo root for single-repo projects). The integrating session proposes terms in `requirements.md` and ratifies them into `glossary.md`. Per-service entities live in `data-model.md`; cross-service ones in `03-cross-cutting/shared-concepts.md`.
 6. **Fast path** creates no spec folder. If it changes documented behavior, update the affected living file in the same change.
 7. **Docs are tracked.** An ignored doc never reaches `git status`, worktrees or the PR. If `git check-ignore -q docs/specs/x.md` succeeds (often a personal `core.excludesFile`), add `!/docs/` and `!/docs/**` to the repository `.gitignore`; repository patterns override `core.excludesFile`. `scripts/check-setup.py` warns about this.
 

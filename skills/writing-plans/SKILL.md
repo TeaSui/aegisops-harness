@@ -1,11 +1,11 @@
 ---
 name: writing-plans
-description: Write an actionable implementation plan for substantial or coordinated work once requirements and applicable security/contracts are established.
+description: Write an actionable implementation plan for substantial work once requirements and applicable security/contracts are established.
 ---
 
 # Implementation plans
 
-Use the routing tier to decide whether a written plan is needed. Fast path uses an in-context checklist. Before strategic dispatches, an initial coordination outline may state dependencies and intended outputs; the implementation plan follows the actual Security/TechLead artifacts and precedes implementers.
+Use the routing tier to decide whether a written plan is needed. Fast path uses an in-context checklist. Before strategic dispatches, an initial coordination outline may state dependencies and intended outputs; the implementation plan follows the actual Security artifacts and contracts and precedes implementers.
 
 Save substantial plans per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`: a feature plan goes to `docs/specs/<feature>/plan.md` beside its spec; a plan not tied to one feature goes to `docs/plans/YYYY-MM-DD-<topic>.md`; honor the user's chosen location. Include goal, accepted design, scope exclusions, canonical inputs and validation. In existing/non-Git workspaces, preserve the user's files and workflow; no automatic git initialization, worktree or commit is required just to persist a plan. Use isolation when concurrent work or risky changes warrant it and the runtime supports it.
 

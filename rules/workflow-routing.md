@@ -19,40 +19,25 @@ A "domain" = a distinct stack surface: backend, frontend, mobile, AWS/infra, dat
 
 ## Routing Tiers
 
-| Trust boundary? | Domains | Tier |
-|---|---|---|
-| **NO** | 1 | **Fast path** |
-| **NO** | 2+ | **Coordinated fast path** |
-| **YES** | 1 | **Full workflow** |
-| **YES** | 2+ | **Orchestrator** |
+| Trust boundary? | Tier |
+|---|---|
+| **NO** (any number of domains) | **Fast path** |
+| **YES** (any number of domains) | **Full workflow** |
 
 ### Fast path
 Implement with TDD + verification. Brainstorming only if design genuinely unclear. Before editing, state the approach in 2–3 lines in the reply (no artifact). No plan document. No worktree. No subagent dispatch. No review loops. Before opening a PR or handing off, run the single pre-PR pass in `rules/pre-pr-review.md`.
+When the change spans several domains: write the task order in 2-3 lines before touching the second domain, edit in dependency order (a RED test that must exist before another domain's fix comes first), follow TDD in each domain, and run the smoke test at the integration point before merge; do not skip it because each side passed in isolation.
 
-### Coordinated fast path
-Multi-domain, no trust boundary (e.g., cross-service refactor, shared-schema rename, DX-only change touching frontend + backend).
-- Write a lightweight plan (`writing-plans` skill) so parallel changes stay in sync.
-- Dispatch domain leaf agents directly — no Security, no BA, no TechLead.
-- Lanes run in parallel unless one needs another's output (e.g. a RED test that must exist before another lane's fix); the plan states the order.
-- Each leaf follows TDD + verification.
-- No formal review loops. No orchestrator.
-- Integration-check before merge: run the smoke test at the integration point; do not skip because each side passed in isolation.
-
-### Full workflow (single-domain trust boundary)
-scope/design clarification → coordination outline → Security subagent → **TechLead (contract-mode) if architecture or API contract work is needed** → implementation plan → `subagent-driven-development` → QA (with live API validation when a service is running) → after GO/merge, `/upgrade-service-docs` promotes the spec into living docs.
-TechLead is optional for this tier — skip when the change has no new contract surface (e.g., tightening validation on an existing endpoint). When invoked here, TechLead runs in contract-mode ("Stop after Phase 2"); it does NOT delegate — the main session dispatches implementers using custom agent definitions as context.
-
-### Orchestrator (multi-domain trust boundary)
-The main session runs the `orchestrating-multi-domain-work` skill and sequences: **scope/design clarification (or BA) → coordination outline → Security → TechLead (contract-mode) → implementation plan → implementation → code review → QA (with live API validation when a service is running) → after GO/merge, `/upgrade-service-docs`.**
-Runtime dependency resolution. Parallel when safe. TechLead runs in contract-mode only; the orchestrator (not TechLead) dispatches implementers.
+### Full workflow (any trust boundary, any number of domains)
+scope/design clarification → coordination outline → Security subagent → **draft `design.md` + `contracts/` and pass the contract gate (`scripts/check-contract.py`) if an external contract changes** → implementation plan → `subagent-driven-development` (independent domain tasks run in parallel when safe; dependent ones in order) → code review → QA (with live API validation when a service is running) → after GO/merge, `/upgrade-service-docs` promotes the spec into living docs.
+Contract drafting is needed only for an external contract change (HTTP/RPC API, event, shared schema, public library API); skip it when there is no new contract surface (e.g., tightening validation on an existing endpoint). The main session drafts the contracts and the contract gate verifies them; the main session dispatches implementers using custom agent definitions as context.
 
 ## Mid-execution domain expansion
 
 If a task begins in one tier but discovers additional scope mid-execution, re-classify before proceeding:
 
-- Fast path → discovers second domain → promote to **coordinated fast path**; write a lightweight plan before touching the second domain.
-- Fast path / coordinated fast path → discovers trust boundary → **stop**, promote to full workflow (1 domain) or orchestrator (2+). Do not retrofit Security after the fact on in-flight code; dispatch Security on the unmerged work.
-- Full workflow → discovers second domain → promote to **orchestrator**. The existing Security output is reusable; add TechLead contract-mode before fanning out.
+- Fast path → discovers trust boundary → **stop**, promote to full workflow. Do not retrofit Security after the fact on in-flight code; dispatch Security on the unmerged work.
+- Full workflow → discovers another domain: keep the full workflow, add that domain's tasks to the plan, reuse the existing Security output, and re-run the contract gate if the contract grows.
 
 Do not silently stay in the lower tier. Promotion is mandatory once the trigger is met.
 
@@ -64,11 +49,11 @@ A trust-boundary change may use the tier **one step lighter** if ALL of the foll
 3. The trust-boundary trigger is a touch, not a new decision (e.g., renaming a field already classified as PII, not introducing a new PII field).
 4. An existing Security rule or threat model already covers the touched code path (cite the resolved Security artifact path, default `docs/specs/<feature>/security.md` per `references/documentation-layout.md`).
 
-With all four true: full workflow → fast path with TDD; orchestrator → coordinated fast path. Document the decision in the commit message: "Escape hatch applied: <cite rule>". If any condition fails, use the full tier.
+With all four true: full workflow → fast path with TDD. Document the decision in the commit message: "Escape hatch applied: <cite rule>". If any condition fails, use the full tier.
 
 ## Ambiguous?
 
-Walk the 6-item checklist above. If any item is YES, full workflow or orchestrator. Otherwise fast path (or coordinated fast path for 2+ domains). Do not rely on a single gut-check question.
+Walk the 6-item checklist above. If any item is YES, full workflow. Otherwise fast path. Do not rely on a single gut-check question.
 
 ## Design Decision Quality
 

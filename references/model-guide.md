@@ -29,14 +29,11 @@ Frontmatter sets the normal job; a dispatcher overrides `model` only when a task
 
 | Agent | Model | Effort | Rationale | Override up when |
 |---|---|---|---|---|
-| tech-lead-subagent | opus | high | Architecture and contract judgment; errors propagate to every implementer | `fable` for major migrations/refactors or system-wide architecture |
 | security-engineer-subagent | opus | high | Threat modeling is a judgment call where misses are expensive and hard to spot | `fable` for novel auth/crypto/payment designs |
 | code-reviewer | opus | medium | Independent gate; review findings are judgment, not checkable output | `high` for large or trust-boundary diffs |
-| business-analyst-subagent | sonnet | medium | Requirements and measurement documents | `opus` for rigorous experiment design (power/MDE, sequential testing) |
 | ui-ux-designer-subagent | sonnet | medium | Spec documents with explicit states and rules | — |
 | backend / frontend / mobile / platform / data engineers | sonnet | high | Spec-driven coding against accepted contracts with tests to self-verify; `high` because these run in gated tiers where rework costs more than effort | `opus` for ambiguous bugs, cross-cutting refactors or when `high` still fails |
 | qa-subagent | sonnet | medium | Runs tests and checks evidence; outputs are checkable | `high` for large release scopes |
-| orchestrating-multi-domain-work (skill) | main session | — | Runs in the main session (`opus` default, `fable` for long multi-agent runs) | — |
 
 ## Use in Claude Code
 

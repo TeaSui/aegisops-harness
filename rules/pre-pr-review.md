@@ -4,7 +4,7 @@ Before opening a PR, and before handing a change to review:
 
 1. Run verification and show its output (see `references/agent-discipline.md` § Verification).
 2. Review the diff in a fresh context, not in the implementation conversation:
-   - Full workflow / orchestrator tiers: dispatch `code-reviewer` with the diff, the plan and contract paths, and `REVIEW.md` if present.
+   - Full workflow tier: dispatch `code-reviewer` with the diff, the plan and contract paths, and `REVIEW.md` if present.
    - Fast-path tiers (no subagent dispatch): run the `code-review` skill once on the diff.
 3. Fix each finding, or clear it with a stated reason backed by evidence. A note alone does not clear a finding.
 4. Re-review only the diff added by those fixes.
