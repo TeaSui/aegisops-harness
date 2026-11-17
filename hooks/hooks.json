@@ -1,5 +1,5 @@
 {
-  "description": "tea-sdlc security, review gates, TDD reminder, session bootstrap and eval-upgrade auto-trigger hooks",
+  "description": "tea-sdlc security, review gates, TDD and contract gates, session bootstrap and eval-upgrade auto-trigger hooks",
   "hooks": {
     "PreToolUse": [
       {
@@ -19,6 +19,11 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-gate.py\" check",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/contract-gate.py\"",
+            "timeout": 20
           }
         ]
       },
@@ -29,6 +34,11 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-gate.py\" check",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/contract-gate.py\"",
+            "timeout": 20
           }
         ]
       }

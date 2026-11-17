@@ -21,6 +21,18 @@ def deny(reason):
     sys.exit(2)
 
 
+def contract_findings(root):
+    # Hard gate: blocks only on real findings; a broken checker must not block PRs.
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('check_contract', PLUGIN_ROOT / 'scripts' / 'check-contract.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return [m for level, m in module.scan(root) if level == 'FAIL']
+    except Exception:
+        return []
+
+
 def git(args, cwd):
     return subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, timeout=30)
 
@@ -60,6 +72,12 @@ def main():
     if not isinstance(open_findings, int) or open_findings != 0:
         deny(f'pr-review-gate: review record lists {open_findings!r} open finding(s); '
              'fix or clear them, re-record, then retry.')
+
+    contract_failures = contract_findings(top.stdout.strip())
+    if contract_failures:
+        deny('pr-review-gate: an active spec declares an external contract that fails the contract gate '
+             '(python3 "' + str(PLUGIN_ROOT / 'scripts' / 'check-contract.py') + '" --scan <repo>):\n  - '
+             + '\n  - '.join(contract_failures[:8]))
     sys.exit(0)
 
 
