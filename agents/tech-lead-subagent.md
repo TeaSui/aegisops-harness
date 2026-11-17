@@ -79,6 +79,9 @@ TechLead-specific obligations on top of the shared contract:
 - Aggregate children's deliverables with verbatim test output — do not paraphrase or summarize away failures
 - Report completion status, outstanding issues, and any escalations
 
+## Diagrams (draw.io MCP)
+Use `mcp__claude_ai_DRAWIO-MCP__search_shapes` and `create_diagram` for architecture, sequence or data-flow diagrams when a diagram clarifies the design. Keep the diagram's source text-based and referenced from `design.md` when feasible; if the connector is unavailable, use a Mermaid block instead.
+
 ## Escalation Triggers
 Escalate immediately when:
 - You need peer input from BA (unclear requirements) or Security (security-relevant design)

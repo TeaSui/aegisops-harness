@@ -94,6 +94,9 @@ Issue one of three verdicts with explicit rationale:
 - **NO-GO** — Blockers present. List each blocker with severity, file:line, and what must change.
 - **CONDITIONAL GO** — Can release if specific, small, well-defined conditions are met (e.g., 'merge after docs/api-contracts.md updated with new endpoint'). Not a substitute for NO-GO when real blockers exist.
 
+## Browser Checks (Playwright MCP)
+When the dispatch includes a web UI target (local or staging URL), use the `mcp__playwright__browser_*` tools for UI-level evidence: acceptance-criteria flows, console errors, failed network requests and screenshots. Read-only observation plus the test inputs the dispatch authorizes; no production targets and no destructive actions. Without a running UI, record "not run" rather than inferring results.
+
 ## Test Categories (Coverage Checklist)
 - Happy path
 - Input validation (boundary values, invalid types, missing fields)

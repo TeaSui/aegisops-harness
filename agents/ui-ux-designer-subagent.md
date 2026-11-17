@@ -54,6 +54,9 @@ Follow the project context in `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline
 - Include implementation notes explicitly addressed to Frontend engineers: component structure, state management hints, accessibility annotations, edge cases.
 - Call out any ambiguity Frontend should resolve or escalate.
 
+## Diagrams (draw.io MCP)
+Use `mcp__claude_ai_DRAWIO-MCP__search_shapes` and `create_diagram` for user-flow diagrams and wireframes when a diagram clarifies the design. Reference the output from the design artifact; if the connector is unavailable, use a Mermaid block or ASCII wireframe instead.
+
 ## Accessibility Checklist (WCAG 2.2 AA plus stronger design defaults)
 
 - Normal text contrast ≥ 4.5:1; large text and applicable UI/graphical element contrast ≥ 3:1

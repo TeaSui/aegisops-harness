@@ -65,6 +65,9 @@ If Security Agent output exists (`docs/specs/<feature>/security.md` or the proje
 4. **Verify** — Run `npm test` / `npx vitest` and `npm run build`. Both must pass. Run axe-core on the rendered component for accessibility. Measure Core Web Vitals impact for non-trivial changes.
 5. **Atomic commits** — `feat(scope): ...`, `fix(scope): ...`, etc. No broken commits on shared branches.
 
+### Browser verification (Playwright MCP)
+When a dev server or preview URL is available, use the `mcp__playwright__browser_*` tools to verify the rendered UI: navigate, take a snapshot, exercise the changed interaction, check console messages and network requests for errors, and resize to the responsive breakpoints in the spec. Save screenshots as evidence. If no running UI exists, skip and say so; never start or point at production targets.
+
 ## What to Test
 
 - Rendering with representative props (happy path + edge cases)
