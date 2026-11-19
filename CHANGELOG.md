@@ -1,5 +1,63 @@
 # Changelog
 
+## 3.0.0 — 2026-11-19
+
+AIDLC: a full-workflow change now moves through **spec → plan → build → test → review → ship → promote** as a stage machine whose gates are code. Each gate checks that the evidence exists and still matches the code; none of them asks a model. No plugin compared (superpowers, addy-osmani/agent-skills, mattpocock-skills, ponytail) enforces its lifecycle in code or traces requirements to tests; this release does both.
+
+### Added
+- **`scripts/aidlc.py`**, the lifecycle engine (stdlib only, Python 3.9+), and **`references/aidlc.md`**, its contract. Stages `proposed → accepted → planned → building → verified → reviewed → shipped → implemented`, plus `partially-implemented`, `superseded`, `abandoned`. Commands: `status`, `check`, `advance` (with `--back --reason`), `next`, `task-done`, `verify`, `ruling`, `stamp`, `trace`, `init`; every command has `--json`. Gates:
+  - `accepted`: a unique `key`, keyed requirements (`RFD-1`) each with acceptance criteria and a `Verify:` method, a blind spec check with every guess closed, `security.md`, the contract gate, a recorded approval.
+  - `planned`: a task graph where every requirement is covered, dependencies resolve, there is no cycle, and tasks that may run in parallel share no file.
+  - `building`: the feature branch is recorded.
+  - `verified`: every task ticked by a passing test command; every requirement referenced by a test (exact ID, or `test_rfd_1…` in a test name); with JUnit, every requirement has a passing test; the latest suite run is green on the current code.
+  - `reviewed`: `review.md` with a Spec axis and a Standards axis that are never merged, no open finding, a QA verdict, the review stamped on the verified code, and the code committed.
+  - `shipped`: `ship.md` with GO, a rollback plan and a post-release verification; CI green; the changelog mentions the version; the code unchanged since review.
+  - `implemented`: the traceability table written into the spec README.
+- **One evidence chain.** The code fingerprint is a hash over git blob IDs of every file except docs, Markdown, changelog and licence. It is equal for the working tree and the commit, so "the tests ran on this code, the review saw this code, this commit is that code, the PR head is this commit" is a chain of equalities. It runs in 0.2 s on 50,000 files.
+- **Requirement → test traceability:** `aidlc trace` lists requirement → tasks → tests → last result, and `--write` puts the table in the spec.
+- **Parallel build:** `aidlc next` gives the ready tasks in batches that share no file. `task-done` holds a lock and ticks by ID, so parallel implementers do not lose updates.
+- **Decisions instead of stalls:** `aidlc ruling` records the decision, why, and what it costs if wrong. The ledger is the decision record.
+- **`hooks/ship-gate.py`**: `gh pr merge` waits for the `shipped` gate.
+  - It checks the branch being merged; another branch is checked out in a temporary worktree.
+  - It re-checks specs already marked shipped, refuses abandoned specs, refuses a PR head that differs from the checked commit, and refuses a PR named through a variable.
+  - `pr-review-gate.py` accepts a branch-bound spec that passes `reviewed`, so committing the spec files after review keeps the PR open.
+- **SubagentStart rules** (`autopilot.py subagent`): every non-read-only subagent gets the house rules it never saw in the bootstrap — leaf only, return contract, TDD, requirement IDs in test names, stay in your files, contract findings go back to the dispatcher. Learned from ponytail.
+- **New skills:**
+  - `spec-check`: a fresh agent that reads only the spec lists what it would have to guess. Learned from superpowers' builder check.
+  - `shipping`: PR, CI, version and changelog, GO/NO-GO, merge through the gate, post-release verification, promote.
+- **Router:** ship/release/deploy go to `shipping`; "where are we / what's next" goes to `aidlc status`. The session-start snapshot shows each active spec's stage, the blockers of its next gate and its next parallel batch, using a fast status mode inside the 10 s hook budget.
+- **`evals/`**, learned from addy-osmani/agent-skills and ponytail:
+  - 144 deterministic routing cases, 0 known gaps; precision and recall per skill.
+  - A description lint with a TF-IDF collision check.
+  - A headless runner for paid suites with Wilson intervals and a baseline compare:
+    - `passive`: 18 prompts that do not name the skill.
+    - `tdd`: was the test red before the code?
+    - `lifecycle`: one money feature taken from spec to ship. The fixture has a local origin and a fake `gh` whose checks run the tests.
+- **CI** (`.github/workflows/ci.yml`): unit tests, `check-setup` and the free evals on Python 3.9 and 3.12. `evals.yml` runs the paid suites weekly or on demand and fails on a regression.
+
+### Changed
+- **Skills on the stage machine:** brainstorming (spec with `aidlc init`, one approval), writing-plans (task graph), executing-plans and subagent-driven-development (batches from `aidlc next`; a fresh implementer one model tier up after two failed fix rounds; version bump before the final verify), requesting- and receiving-code-review (two axes plus QA into `review.md`), finishing-a-development-branch (fast path only), verification-before-completion (the gate is the evidence), `/upgrade-service-docs` (promote stage), `/prompt-builder` (generates AIDLC prompts).
+- **Docs and rules:** `writing-software-docs` writes keyed change-spec requirements. The documentation layout, workflow-routing, pre-PR review, agents registry, code-reviewer and qa-subagent all follow the stages. `rules/review-loop-limits.md` allows one fresh re-dispatch one tier up instead of a third fix round.
+- **Router precision:**
+  - "write", "store", "validate" and "persist" count as change verbs.
+  - A monitoring alarm for errors is not a bug report; "iOS Safari" is not mobile.
+  - "validate the mobile number" is not branch validation; a bare "deploy script" is not a release.
+
+### Fixed
+- **README:** a duplicated half hooks table left by the 2.9.0 edit is gone.
+- **Headless eval durations:** a session that waits on background agents emits several `result` events, so durations are now wall clock instead of the last segment (84 s reported for a 12-minute run).
+
+### Verified
+- 307 unit tests; `check-setup.py` PASS; routing eval 144/144; description lint PASS.
+- An independent review of the engine and hooks found 6 high and 8 medium issues, each reproduced; all are fixed test-first. The new tests fail on the pre-hardening engine: 21 failures and 9 errors.
+- First lifecycle run (before hardening, no remote or CI in the fixture), one money feature from a prompt that names no skill, stage or command:
+  - Both sessions passed five gates through `aidlc advance` (`proposed → … → reviewed`), with 7 and 8 keyed requirements, 14 and 15 spec guesses closed, and 4 and 7 rulings.
+  - Both stopped at `reviewed` because no CI existed. One session wrote `ship.md` and recorded "no CI" instead of inventing a result.
+- After hardening (default model, one run per case unless noted):
+  - `tdd` 8/8, baseline 12/12.
+  - `passive` 14/18, baseline 16/18; within noise.
+  - **`lifecycle` 0/3: a regression to investigate before release.** All three sessions stopped at about 938 s, at stages building, building and verified. One plausible cause, not yet confirmed: the stricter gates (code must be committed, fresh JUnit) and the fake-gh fixture. Records: scratchpad `final/lifecycle/`.
+
 ## 2.9.0 — 2026-11-19
 
 Autopilot: the user no longer has to remember or type a slash command or a skill name.
