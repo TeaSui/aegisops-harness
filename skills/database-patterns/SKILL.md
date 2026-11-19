@@ -101,8 +101,10 @@ FROM org_tree
 ORDER BY path;
 
 -- MySQL 8+: build the path as a string instead of an array
--- base:      CAST(LPAD(id, 10, '0') AS CHAR(1000)) AS path
--- recursive: CONCAT(ot.path, '/', LPAD(e.id, 10, '0'))
+-- base:      CAST(LPAD(id, 20, '0') AS CHAR(1000)) AS path
+-- recursive: CONCAT(ot.path, '/', LPAD(e.id, 20, '0'))
+-- The base SELECT fixes the column width (strict mode: "Data too long"), so size CHAR(n)
+-- for max depth; LPAD truncates values longer than its width (20 fits BIGINT).
 ```
 
 ### Pattern: CTE for Upsert with Returning
@@ -197,7 +199,7 @@ ALTER TABLE orders DROP COLUMN status;
 1. **Never DROP COLUMN in the same deploy as the code change.** Old code instances may still need it.
 2. **Add columns as NULLABLE** or with a server-side DEFAULT. `NOT NULL` without default locks the table for backfill.
 3. **CREATE INDEX CONCURRENTLY** (PostgreSQL) to avoid blocking writes.
-4. **Large table ALTERs** — MySQL: `pt-online-schema-change` or `gh-ost` for tables > 1M rows. PostgreSQL: prefer metadata-only changes (nullable `ADD COLUMN`, constant `DEFAULT` on PG 11+), `ADD CONSTRAINT … NOT VALID` then `VALIDATE CONSTRAINT`, and a `lock_timeout`; table-rewriting changes (type changes) go through expand/contract. `pg_repack` only removes bloat online — it does not apply schema changes.
+4. **Large table ALTERs** — MySQL: `pt-online-schema-change` or `gh-ost` for tables > 1M rows. PostgreSQL: prefer metadata-only changes (nullable `ADD COLUMN`, non-volatile `DEFAULT` on PG 11+), `ADD CONSTRAINT … NOT VALID` (FK/CHECK) then `VALIDATE CONSTRAINT` (takes only SHARE UPDATE EXCLUSIVE), and a `lock_timeout`; table-rewriting changes (type changes) go through expand/contract. `pg_repack` only removes bloat online — it does not apply schema changes.
 5. **Test migrations against a production-size dataset.** A migration that takes 1 second on dev can lock production for minutes.
 
 ### Flyway Naming Convention

@@ -79,20 +79,22 @@ Add the service's shutdown lifecycle and real handlers. This is a source-checked
 
 ### Custom Spans
 
+Java: use the OpenTelemetry API (`opentelemetry-api` + `opentelemetry-instrumentation-annotations`, API only, no OTel SDK or agent) with dd-java-agent and `dd.trace.otel.enabled=true` (dd-java-agent 1.24.0+). The older Datadog API path (`@Trace` from dd-trace-api plus OpenTracing's `GlobalTracer`) still works, but do not mix the two in one service. Tag spans with categories, never amounts, account numbers or other Level 2+ data (`references/data-privacy-patterns.md`).
+
 ```java
 // Java — add custom spans for business operations
-import datadog.trace.api.Trace;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 
 @Service
 public class PaymentService {
 
-    @Trace(operationName = "payment.authorize", resourceName = "authorize")
+    @WithSpan("payment.authorize")   // child span of the current trace
     public PaymentResult authorize(PaymentRequest request) {
-        // Automatically creates a child span under the current trace
-        Span span = GlobalTracer.get().activeSpan();
-        span.setTag("payment.amount", request.getAmount());
-        span.setTag("payment.currency", request.getCurrency());
-        span.setTag("payment.provider", "stripe");
+        Span span = Span.current();
+        span.setAttribute("payment.currency", request.getCurrency());
+        span.setAttribute("payment.method_type", request.getMethodType()); // e.g. card, bank_transfer
+        span.setAttribute("payment.provider", "stripe");
         // ...
     }
 }
@@ -103,8 +105,7 @@ public class PaymentService {
 func (s *PaymentService) Authorize(ctx context.Context, req PaymentRequest) (*PaymentResult, error) {
     span, ctx := tracer.StartSpanFromContext(ctx, "payment.authorize",
         tracer.ResourceName("authorize"),
-        tracer.Tag("payment.amount", req.Amount),
-        tracer.Tag("payment.currency", req.Currency),
+        tracer.Tag("payment.currency", req.Currency), // no amounts: Level 2 data
     )
     defer span.Finish()
 

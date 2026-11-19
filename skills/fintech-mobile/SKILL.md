@@ -261,9 +261,10 @@ class NotificationHandler {
       alert: true,
       badge: true,
       sound: true,
-      // criticalAlert needs Apple's Critical Alerts entitlement, which Apple grants for
-      // health, safety and security-monitoring apps — not banking. Use the Time Sensitive
-      // interruption level for security alerts instead.
+      // criticalAlert needs Apple's approved Critical Alerts entitlement; Apple's HIG reserves
+      // Critical for urgent health and safety information (public agencies, health or home
+      // apps), so a banking app should not expect it. Send security and transaction alerts with
+      // APNs `"interruption-level": "time-sensitive"` (iOS 15+; HIG cites account security).
       criticalAlert: false,
     );
 
@@ -387,7 +388,7 @@ KYC-MOB-06: Document preview before submit — allow retake
 
 class TransactionRepositoryImpl implements TransactionRepository {
   final TransactionRemoteDataSource _remote;
-  final TransactionLocalDataSource _local;   // Isar or Hive
+  final TransactionLocalDataSource _local;   // encrypted DB, e.g. drift (OFFLINE-06)
   final ConnectivityService _connectivity;
 
   @override
@@ -423,7 +424,7 @@ OFFLINE-02: Show "Last updated X minutes ago" indicator when offline
 OFFLINE-03: Read-only when offline — disable transfer/payment buttons
 OFFLINE-04: Queue non-financial actions offline (profile updates), sync on reconnect
 OFFLINE-05: Never queue financial transactions offline — require connectivity
-OFFLINE-06: Encrypted local database (SQLCipher-backed, e.g. via sqflite/drift SQLCipher builds; Isar 3 has no built-in encryption) with the key in Keychain/Keystore
+OFFLINE-06: Encrypted local database (drift 2.32+ with SQLite3MultipleCiphers via the `sqlite3` hook `source: sqlite3mc`, or `sqflite_sqlcipher`; `sqlcipher_flutter_libs` is end-of-life; Isar 3 has no built-in encryption) with the key in Keychain/Keystore
 ```
 
 ## App Security Hardening

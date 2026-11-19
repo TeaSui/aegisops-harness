@@ -140,7 +140,8 @@ tasks.named('test') {
 ```
 
 ```java
-// src/test/java/com/example/RunCucumberTest.java — JUnit Platform suite runner
+// src/test/java/com/example/RunCucumberTest.java — JUnit Platform suite runner (works on any
+// Gradle/Maven; recent Gradle can also run features directly via testDefinitionDirs)
 import org.junit.platform.suite.api.*;
 import static io.cucumber.junit.platform.engine.Constants.GLUE_PROPERTY_NAME;
 

@@ -192,6 +192,18 @@ def main():
             elif not (root / target).exists() and not (path.parent / target).exists():
                 errors.append('%s: missing bundled reference %s' % (rel, target))
 
+    # Every bundled file must ship: a personal core.excludesFile pattern (e.g. `cdk*`) can keep one out of every
+    # release while it still works in the author's checkout. Only meaningful when the root is its own repository.
+    top = git(['rev-parse', '--show-toplevel'], root)
+    if top.returncode == 0 and Path(top.stdout.strip()).resolve() == root:
+        shipped = [p.relative_to(root).as_posix() for d in SCANNED + ('.claude-plugin',) for p in (root / d).rglob('*')
+                   if p.is_file() and '__pycache__' not in p.parts and p.name != '.DS_Store'
+                   and not p.relative_to(root).as_posix().startswith(EXCLUDED)]
+        ignored = git(['check-ignore', '--no-index', '--', *shipped], root).stdout.split() if shipped else []
+        for rel in ignored:
+            errors.append('%s is ignored by git (check `git check-ignore -v %s`), so it never ships; add a `!` '
+                          'exception to the repository .gitignore' % (rel, rel))
+
     # Hooks compile, and every skill/command name the autopilot can point the session to exists in the plugin.
     for path in sorted((root / 'hooks').glob('*.py')):
         try:

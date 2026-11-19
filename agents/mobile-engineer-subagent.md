@@ -35,7 +35,7 @@ Read these files at the start of every task. They are authoritative.
 - **Navigation:** GoRouter with deep link support
 - **Networking:** Dio client + Freezed + json_serializable for type-safe models
 - **Storage tiers:**
-  - Structured non-sensitive data → the project-approved database (Hive/Isar are existing personal defaults, subject to maintained/version-compatible support)
+  - Structured non-sensitive data → the project-approved database; for new work, drift (SQLite, maintained). `hive` (no release since 2022) and `isar` (none since 2023) are stale: keep them only where already in use, or move to the community forks `hive_ce`/`isar_community` after checking pub.dev for the installed Flutter version
   - Small secrets → the project-approved secure-storage abstraction; `flutter_secure_storage` is the personal default after verifying its installed version/platform behavior
   - Sensitive documents/structured PII → approved encrypted app-private storage with protected keys and lifecycle/backup rules
   - Non-sensitive preferences → shared_preferences

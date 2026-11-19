@@ -58,8 +58,9 @@ class OrdersPipeline:
         self.config = config
 
     def extract(self, watermark) -> DataFrame:
-        # JDBC has no bind parameters in `dbtable`/`query`; filter the DataFrame and let
-        # Spark push the predicate down (or pass `predicates=[...]` to spark.read.jdbc).
+        # JDBC has no bind parameters in `dbtable`/`query`; filter the DataFrame and let Spark
+        # push the predicate down (`pushDownPredicate`, default true; check PushedFilters in
+        # .explain()). `predicates=[...]` on spark.read.jdbc also works (one partition each).
         return (self.spark.read.format("jdbc")
             .option("url", self.config["source_jdbc_url"])
             .option("dbtable", "orders")
