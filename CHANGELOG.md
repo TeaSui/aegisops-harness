@@ -35,6 +35,7 @@ Every skill, command, rule, reference and agent was checked for whether it works
 ### Verified
 - `python3 -m unittest discover -s tests`: 107 tests pass. `python3 scripts/check-setup.py`: PASS.
 - Headless runs with `claude -p --plugin-dir` (Claude Code 2.1.319, `sonnet`), one run per scenario. The prompt note reached the model verbatim. On “add mul()” the session loaded `brainstorming`, stated Fast path, and wrote and ran a failing test before the code. On a “pure rename” it first finished with “I ran no tests”; the Stop gate sent it back, and it checked the callers and ran `npm test` before reporting.
+- Passive triggering, 18 headless sessions (Claude Code 2.1.319, default model, one run per case, prompts that describe the situation without naming the skill): 9/18 loaded an expected skill before the audit, 14/18 after it, 16/18 after the last router and brainstorming fixes. The two left are a one-line failing test the session fixed from the test output without `systematic-debugging`, and a single SQL query it wrote and ran without `database-patterns`.
 - Router precision, replayed locally on 198 distinct past prompts of one user (not committed): the first version annotated 82 of them, mostly questions, prompt/README edits and git chores; this release annotates 16, each a code change, a bug report or a pasted implementation prompt.
 
 ## 2.8.0 — 2026-11-17
