@@ -1,0 +1,10 @@
+{"type": "system", "subtype": "init", "claude_code_version": "9.9.9", "model": "test-model", "session_id": "s", "tools": [], "skills": []}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "e0", "name": "Edit", "input": {"file_path": "/x/repo/src/math.js", "old_string": "a", "new_string": "b"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "e0", "content": "tdd-gate: write a failing test first", "is_error": true}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "w", "name": "Write", "input": {"file_path": "/x/repo/test/math.test.js", "content": "..."}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w", "content": "File created", "is_error": false}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": "node --test"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b1", "content": "\u2716 divide throws (1.2ms)\n  AssertionError [ERR_ASSERTION]: Missing expected exception\n\u2139 fail 1", "is_error": true}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "e", "name": "Edit", "input": {"file_path": "/x/repo/src/math.js", "old_string": "a", "new_string": "b"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "e", "content": "The file has been updated", "is_error": false}]}}
+{"type": "result", "subtype": "success", "is_error": false, "duration_ms": 20000, "num_turns": 4, "total_cost_usd": 0.3, "result": "done"}

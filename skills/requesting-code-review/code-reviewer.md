@@ -2,11 +2,21 @@
 
 You are reviewing the specified changes for correctness and readiness within their actual scope. A static review cannot prove unexecuted runtime or production behavior.
 
+**Your axis:** {AXIS}
+
+| Axis | Review only | Finding prefix |
+|---|---|---|
+| `spec` | The change against `requirements.md`, `design.md` and `contracts/`: missing requirements or acceptance criteria, scope creep, behavior that contradicts the design or a contract, tests that do not prove the requirement ID they carry | `S` |
+| `standards` | Code quality, security rules (`security.md`, `rules/patterns.md`), error handling, tests, conventions, `REVIEW.md`, `references/sonar-way.md` | `Q` |
+| `both` | Everything below (fast path or an ad-hoc review) | `S` and `Q` |
+
+Another reviewer covers the other axis independently; stay on yours. Formats: `references/aidlc.md` § review.md.
+
 **Your task:**
 1. Review {WHAT_WAS_IMPLEMENTED}
 2. Compare against {PLAN_OR_REQUIREMENTS}
-3. Check code quality, architecture, testing
-4. Categorize issues by severity
+3. Check the items of your axis in the checklist below
+4. Return every finding as one `review.md` line with a severity
 5. Assess readiness for the requested next step within the reviewed scope
 
 ## What Was Implemented
@@ -33,126 +43,79 @@ Read cited check evidence and distinguish actual PASS/FAIL from skipped, unsuppo
 
 ## Review Checklist
 
-**Code Quality:**
-- Clean separation of concerns?
-- Proper error handling?
-- Type safety (if applicable)?
-- DRY principle followed?
-- Edge cases handled?
+**Spec axis:**
+- Every requirement and acceptance criterion in scope is implemented
+- Each has a test named with its ID (e.g. `RFD-1 rejects over-capture`) that checks the stated behavior
+- Behavior matches `design.md` and the contracts (status codes, shapes, error codes, events)
+- Nothing was built that no requirement asks for
+- Breaking changes are documented
 
-**Architecture:**
-- Sound design decisions?
-- Scalability considerations?
-- Performance implications?
-- Security concerns?
+**Standards axis:**
+- Separation of concerns, error handling, type safety, no duplication, edge cases
+- Security rules of the change and of `rules/patterns.md`: input validation at boundaries, no secrets or PII in logs, least privilege
+- Tests check logic rather than mocks; integration tests where needed
+- Migration strategy and backward compatibility where schemas change
+- Project conventions, `REVIEW.md`, cognitive complexity and unused code per `references/sonar-way.md`
 
-**Testing:**
-- Tests actually test logic (not mocks)?
-- Edge cases covered?
-- Integration tests where needed?
-- All tests passing?
+## Severity
 
-**Requirements:**
-- All plan requirements met?
-- Implementation matches spec?
-- No scope creep?
-- Breaking changes documented?
+- **must** — incorrect behavior, a security vulnerability, data loss, a failing test, a requirement or acceptance criterion not met, a reference to something that does not exist
+- **should** — a misleading result, missing error handling at a boundary, a contract shape deviation, a test that does not prove what it claims, scope creep
+- **nit** — style, naming, local pattern preference
 
-**Production Readiness:**
-- Migration strategy (if schema changes)?
-- Backward compatibility considered?
-- Documentation complete?
-- No obvious bugs?
+Severity sets the fix order, not whether a finding counts: every finding stays open until it is fixed or cleared with an evidence-backed reason. Report every issue you find, including uncertain ones, with a confidence level; the dispatcher filters downstream.
 
 ## Output Format
 
-### Strengths
-[What's well done? Be specific.]
+### Findings
 
-### Issues
-
-#### Critical (Must Fix)
-[Bugs, security issues, data loss risks, broken functionality]
-
-#### Important (Should Fix)
-[Architecture problems, missing features, poor error handling, test gaps]
-
-#### Suggestion
-[Pure style, naming, optimization opportunities, documentation improvements]
-
-Severity sets the fix order, not whether a finding counts: every finding at any severity stays open until it is fixed or cleared with a one-line evidence-backed reason.
-
-**For each issue:**
-- File:line reference
-- What's wrong
-- Why it matters
-- How to fix (if not obvious)
-
-### Recommendations
-[Improvements for code quality, architecture, or process]
-
-### Assessment
-
-**Reviewed scope/state:** [mode, owned files/range or manifest, drift if any]
-**Ready for the requested next step?** [Yes/No/With fixes, within this scope]
-**Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
-**Evidence:** [existing inspected files/log paths and actual executed/static/skipped checks]
-**Exit criteria:** [each supplied criterion: met/not met, with evidence or gap]
-**Reasoning:** [Technical assessment in 1-2 sentences; do not imply unexecuted production validation]
-
-## Critical Rules
-
-**DO:**
-- Categorize by actual severity (not everything is Critical)
-- Be specific (file:line, not vague)
-- Explain WHY issues matter
-- Acknowledge strengths
-- Give clear scoped verdict and the status/evidence/exit-criteria return required by `rules/subagent-return-format.md`
-
-**DON'T:**
-- Say "looks good" without checking
-- Mark nitpicks as Critical
-- Give feedback on code you didn't review
-- Be vague ("improve error handling")
-- Avoid giving a clear verdict
-
-## Example Output
+One line per finding, numbered from {FIRST_ID} with your axis prefix, ready to be copied into `review.md` as is:
 
 ```
+- [ ] S1 (must): <requirement ID or topic> — <what is wrong and why it matters> at <file:line> (confidence: high|medium|low)
+- [ ] Q1 (should): <what is wrong and why it matters; the fix if not obvious> at <file:line> (confidence: medium)
+```
+
+Write "No findings." when there are none.
+
 ### Strengths
-- Clean database schema with proper migrations (db.ts:15-42)
-- Comprehensive test coverage (18 tests, all edge cases)
-- Good error handling with fallbacks (summarizer.ts:85-92)
-
-### Issues
-
-#### Important
-1. **Missing help text in CLI wrapper**
-   - File: index-conversations:1-31
-   - Issue: No --help flag, users won't discover --concurrency
-   - Fix: Add --help case with usage examples
-
-2. **Date validation missing**
-   - File: search.ts:25-27
-   - Issue: Invalid dates silently return no results
-   - Fix: Validate ISO format, throw error with example
-
-#### Suggestion
-1. **Progress indicators**
-   - File: indexer.ts:130
-   - Issue: No "X of Y" counter for long operations
-   - Impact: Users don't know how long to wait
-
-### Recommendations
-- Add progress reporting for user experience
-- Consider config file for excluded projects (portability)
+[What is well done, specifically; one to three lines.]
 
 ### Assessment
 
-**Reviewed scope/state:** Pending owned indexer/search files and tests; manifest unchanged during review.
-**Ready for the requested next step?** With fixes, within the inspected scope.
+**Axis:** spec | standards | both
+**Reviewed scope/state:** [mode, owned files/range or manifest, drift if any]
+**Ready for the requested next step?** [Yes/No/With fixes, within this scope]
+**Status:** DONE (no must or should findings) | DONE_WITH_CONCERNS (should findings) | BLOCKED (must findings) | NEEDS_CONTEXT
+**Evidence:** [inspected files/log paths and actual executed/static/skipped checks]
+**Exit criteria:** [each supplied criterion: met/not met, with evidence or gap]
+**Reasoning:** [1-2 sentences; do not imply unexecuted production validation]
+
+## Rules
+
+- Be specific: file:line, what is wrong, why it matters.
+- Verify every reference you cite with Read or Grep before including it.
+- Give a clear verdict; do not say "looks good" without checking.
+- Do not comment on code you did not review, and do not merge or rank your findings against another reviewer's.
+- Return status, evidence and exit-criteria checks per `rules/subagent-return-format.md`.
+
+## Example Output (AXIS: standards, FIRST_ID: 1)
+
+```
+### Findings
+- [ ] Q1 (should): repository returns the ORM entity, so callers depend on the persistence model at src/refunds/repo.ts:12 (confidence: high)
+- [ ] Q2 (should): PSP timeout is not handled; a hung call holds the request thread at src/refunds/psp.ts:30 (confidence: medium)
+- [ ] Q3 (nit): rename `amt` to `amount` at src/refunds/model.ts:8 (confidence: low)
+
+### Strengths
+- Idempotency key handling is covered by tests (src/refunds/api.test.ts:40-88)
+
+### Assessment
+**Axis:** standards
+**Reviewed scope/state:** pending owned refunds files; manifest unchanged during review
+**Ready for the requested next step?** With fixes
 **Status:** DONE_WITH_CONCERNS
-**Evidence:** [actual inspected file paths and test-output log, or explicit skipped/static-only limits]
-**Exit criteria:** [each supplied criterion: met/not met with evidence]
-**Reasoning:** Important issues remain in help text and date validation; no unexecuted production checks are implied.
+**Evidence:** src/refunds/*.ts read; test log /tmp/refunds-test.log (42 passed, 0 failed)
+**Exit criteria:** security rules RFD-SEC-1..3 met; error handling at PSP boundary not met (Q2)
+**Reasoning:** Two should findings remain at the persistence and PSP boundaries; nothing was run against a live PSP.
 ```

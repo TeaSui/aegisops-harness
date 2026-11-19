@@ -1,0 +1,4 @@
+{"type": "system", "subtype": "init", "claude_code_version": "9.9.9", "model": "test-model", "session_id": "s", "tools": [], "skills": []}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "a1", "name": "Agent", "input": {"subagent_type": "tea-sdlc:security-engineer-subagent", "prompt": "threat model"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a1", "content": [{"type": "text", "text": "STRIDE table"}], "is_error": false}]}}
+{"type": "result", "subtype": "success", "is_error": false, "duration_ms": 60000, "num_turns": 4, "total_cost_usd": 0.5, "result": "done"}

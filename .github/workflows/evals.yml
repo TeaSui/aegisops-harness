@@ -1,0 +1,74 @@
+name: evals
+
+# Paid headless suites: real `claude -p` sessions with this plugin loaded. Manual or weekly only.
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: "Suites to run (comma-separated: passive, tdd, lifecycle, all)"
+        default: "passive,tdd"
+      runs:
+        description: "Runs per case"
+        default: "1"
+      model:
+        description: "Model passed to claude --model (empty: CLI default)"
+        default: ""
+  schedule:
+    - cron: "0 3 * * 1"  # Mondays 03:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals
+  cancel-in-progress: false
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SUITES: ${{ github.event.inputs.suites || 'passive,tdd' }}
+      RUNS: ${{ github.event.inputs.runs || '1' }}
+      MODEL: ${{ github.event.inputs.model || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code && claude --version
+      - name: Install gitleaks (the security gate blocks commits without it)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Configure git identity for fixture repositories
+        run: |
+          git config --global user.email "evals@example.invalid"
+          git config --global user.name "tea-sdlc evals"
+      - name: Run headless suites
+        run: |
+          args=(--suite "$SUITES" --runs "$RUNS" --parallel 4 --out "$RUNNER_TEMP/evals" --compare)
+          if [ -n "$MODEL" ]; then args+=(--model "$MODEL"); fi
+          python3 evals/headless/run.py "${args[@]}"
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/evals/report.md" ]; then cat "$RUNNER_TEMP/evals/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: headless-evals-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/evals/results.json
+            ${{ runner.temp }}/evals/report.md
+            ${{ runner.temp }}/evals/*/*/out.jsonl
+            ${{ runner.temp }}/evals/*/*/judge.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "tea-sdlc",
-      "description": "Comprehensive SDLC framework for Claude Code with specialized multi-tier subagents, skills, commands, rules, quality gates, and automated security reviews.",
+      "description": "AI-driven SDLC: spec \u2192 plan \u2192 build \u2192 test \u2192 review \u2192 ship with code-enforced gates, requirement-to-test traceability, parallel specialist subagents and an autopilot.",
       "source": "./",
       "category": "development",
       "homepage": "https://github.com/TeaSui/tea-sdlc"

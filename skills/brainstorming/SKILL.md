@@ -38,20 +38,24 @@ For an actual visual decision (layouts, mockups, diagrams the user should compar
 
 ## 3. Spec (Full workflow only)
 
-Create `docs/specs/<feature>/` in the owning scope per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` §4, reusing the project's existing locations (§6). Create only the files the change needs:
+The stages, gates and file formats are in `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`; the folder and its writers are in `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` §4 (reuse the project's existing locations, §6). Run the CLI yourself, never ask the user to. Below, `aidlc` stands for `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`.
 
-1. The session writes `README.md` (frontmatter `status: proposed`, `scope`, `affects`, `contract: none|external`, `updated`, plus the file index) and `requirements.md` (`US-n`, `AC-n`, `BR-n`).
-2. Dispatch `security-engineer-subagent` for `security.md` (threat model and numbered rules). Dispatch `ui-ux-designer-subagent` for `ui-design.md` when the UI needs design.
-3. When a contract or the architecture changes, the session writes `design.md` and `contracts/`, following the Security rules. Write an ADR for each decision that outlives the change.
-4. For `contract: external`, run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` and fix the contracts until it passes.
+1. Pick a stable kebab-case slug for this one change and a 2-6 letter key that no other spec uses (`aidlc status` lists the existing specs). Run `aidlc init <feature> --key <KEY>` to create the folder in the owning scope (pass the folder path instead of the slug when it is not the repository's own `docs/specs/`).
+2. Fill `README.md`: summary, file index and the frontmatter fields `scope`, `affects`, `contract: none|external` and `security: required` (or `not-applicable — <reason>`, only under the escape hatch in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`).
+3. Write `requirements.md`: one `### <KEY>-<n>: <title>` heading per requirement, its acceptance criteria as bullets under `Acceptance:` (Given/When/Then or EARS, one observable outcome per bullet, unhappy paths included), and a `Verify:` line (`aidlc.md` §2). Business rules and new terms may follow in any form.
+4. Dispatch `security-engineer-subagent` for `security.md` (threat model and numbered rules), and `ui-ux-designer-subagent` for `ui-design.md` when the UI needs design. Both can run while you write the design.
+5. When a contract or the architecture changes, write `design.md` and `contracts/`, following the Security rules. Write an ADR for each decision that outlives the change. For `contract: external`, run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` and fix the contracts until it passes.
+6. Once the spec files exist, invoke `tea-sdlc:spec-check`. Close every guess it lists: answer it in the spec, or accept the risk with a reason. A guess that needs a product choice gets your most reasonable answer, written into the spec and listed for the approval below.
 
 Do not commit or scaffold an existing repository only because a template says so.
 
 ## 4. One approval point (Full workflow only)
 
-Present the spec once (summary, requirements, design, security rules, contract result) and ask the user to approve it. Approval is a decision only the user can make. If the original request explicitly delegated approval (for example "handle this end to end without checking in"), do not ask; record `accepted_by: <user> (delegated in request)`. Then set `status: accepted` and `accepted_by` in `README.md`. Do not add further confirmation rounds for sections, the plan or execution.
+Present the spec once: summary, requirements, design, security rules, contract result, and the choices you made while closing guesses. Ask the user to approve it; approval is a decision only the user can make. If the original request explicitly delegated approval (for example "handle this end to end without checking in"), do not ask.
 
-Fast path has no approval gate: state the approach and continue.
+Record `accepted_by: <name> (<date>)`, or `<name> (delegated in request)`, in the README frontmatter. Then run `aidlc advance <feature> accepted`. Do not set `status:` by hand. If the gate lists findings, fix them and run it again; fixing a gate finding is not a new approval round, unless the fix changes what the user approved, which you then say in one line. Do not add confirmation rounds for sections, the plan or execution.
+
+Fast path has no approval gate and no spec folder: state the approach and continue.
 
 This never authorizes destructive actions, external publishing or bypassing native controls beyond the user's scope.
 

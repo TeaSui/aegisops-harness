@@ -167,6 +167,14 @@ class CheckContractTest(unittest.TestCase):
         finally:
             cc.yaml = saved
 
+    def test_active_specs_cover_every_active_aidlc_stage(self):
+        for status in ('proposed', 'accepted', 'planned', 'building', 'verified', 'reviewed', 'shipped'):
+            self.readme(contract='external', status=status)
+            self.assertEqual(cc.active_specs(self.root), [self.spec], status)
+        for status in ('implemented', 'partially-implemented', 'superseded', 'abandoned'):
+            self.readme(contract='external', status=status)
+            self.assertEqual(cc.active_specs(self.root), [], status)
+
     def test_exit_codes(self):
         self.readme(contract='external')
         self.contract(full({'/u': {'get': op()}}))

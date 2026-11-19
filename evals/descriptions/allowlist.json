@@ -1,0 +1,54 @@
+{
+  "_comment": "Description pairs whose TF-IDF similarity is above the threshold on purpose. Each entry names what tells the two apart in their descriptions; re-check that reason whenever either description changes. evals/descriptions/run.py reports an entry as stale once its pair scores more than 0.05 below the threshold.",
+  "pairs": [
+    {
+      "pair": [
+        "fintech-mobile",
+        "frontend-react"
+      ],
+      "reason": "same fintech UI vocabulary (KYC, transactions, secure display) on different platforms: frontend-react says web/browser and excludes React Native; fintech-mobile says Flutter/iOS/Android apps and excludes mobile-number fields in web code"
+    },
+    {
+      "pair": [
+        "dispatching-parallel-agents",
+        "subagent-driven-development"
+      ],
+      "reason": "both dispatch subagents: dispatching-parallel-agents runs independent investigations or ad-hoc parallel tasks and points to subagent-driven-development for the full-workflow build; subagent-driven-development owns the build stage of a planned spec"
+    },
+    {
+      "pair": [
+        "requesting-code-review",
+        "subagent-driven-development"
+      ],
+      "reason": "consecutive AIDLC stages sharing aidlc verbs: subagent-driven-development ends at `verified`; requesting-code-review starts when a spec reaches `verified` (or on a review request) and ends at `reviewed`"
+    },
+    {
+      "pair": [
+        "generate-service-docs",
+        "upgrade-service-docs"
+      ],
+      "reason": "both write living docs: generate creates them when a service has none; upgrade promotes a verified or merged change into existing docs and closes the spec"
+    },
+    {
+      "pair": [
+        "spec-check",
+        "writing-plans"
+      ],
+      "reason": "consecutive full-workflow steps over the same spec files: spec-check runs before approval and lists guesses; writing-plans runs after approval and writes plan.md"
+    },
+    {
+      "pair": [
+        "systematic-debugging",
+        "test-driven-development"
+      ],
+      "reason": "chained on purpose for bug fixes (the router emits both): systematic-debugging finds the root cause, test-driven-development governs the failing test before the production edit"
+    },
+    {
+      "pair": [
+        "finishing-a-development-branch",
+        "shipping"
+      ],
+      "reason": "both deliver a branch (PR, merge, 'ship it'); they split by tier and each description points to the other: shipping owns a reviewed full-workflow spec (ship.md, ship gate), finishing-a-development-branch owns fast-path or non-spec work. The router sends a bare 'ship it' to shipping only, while finishing-a-development-branch still lists 'ship it' as a trigger phrase"
+    }
+  ]
+}

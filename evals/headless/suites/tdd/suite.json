@@ -1,0 +1,8 @@
+{
+  "description": "TDD discipline on code-change and bug prompts: a failing test run must happen before the first production edit, and tests must run after the last edit.",
+  "max_turns": 30,
+  "timeout_s": 600,
+  "permission_mode": "acceptEdits",
+  "allowed_tools": ["Skill", "Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "Bash(npm *)", "Bash(node *)",
+                    "Bash(ls *)", "Bash(cat *)", "Bash(git *)"]
+}

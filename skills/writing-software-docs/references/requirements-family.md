@@ -8,6 +8,30 @@ These three sit on a spectrum from business intent → product behavior → exac
 
 When unsure between PRD and FRD: if the reader needs to make a product/scope decision, it's a PRD; if they need to build the exact behavior, it's an FRD.
 
+The `BO-n`, `FR-n`, `NFR-n`, `US-n` and `AC-n` IDs below are for standalone documents. A change spec's `requirements.md` uses the keyed format in the next section instead.
+
+---
+
+## Change-spec requirements — `docs/specs/<feature>/requirements.md`
+
+The requirements of one full-workflow change. The lifecycle gates read this file, the plan's tasks cite its IDs, and each test names the ID it proves, so its shape is fixed: the plugin-root `references/aidlc.md` §2 owns it. In short:
+
+- Each requirement is a heading whose first token is its ID: `### <KEY>-<n>: <title>`. `<KEY>` is the spec's `key:` from its `README.md`; numbers are never reused.
+- Its acceptance criteria are the bullets under an `Acceptance:` line, one observable outcome per bullet. Write them in Given/When/Then or EARS form ("When <trigger>, the <system> shall <response>"), and cover the unhappy paths.
+- A `Verify:` line says how it is proven: `test`, `check — <command or procedure>` or `manual — <reason>`.
+- Business rules, new terms and story text may follow in any form. Only the ID headings define requirements; a PRD-style section that matters to the build becomes a requirement or a bullet of one.
+
+```
+### KYC-2: Reject unsupported ID image formats
+Priority: must
+Acceptance:
+- Given the customer is on the KYC page, when they upload a .docx file, then the upload is rejected with `UNSUPPORTED_FORMAT` and the accepted formats are shown.
+- When an upload is rejected, the KYC service shall keep the customer on the upload step.
+Verify: test
+```
+
+Open questions do not stay as `[NEEDS INPUT]` markers here at approval: the blind spec check turns each into a guess that is resolved in the spec or accepted as a risk.
+
 ---
 
 ## BRD — Business Requirements Document

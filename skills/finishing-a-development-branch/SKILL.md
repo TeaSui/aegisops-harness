@@ -1,9 +1,11 @@
 ---
 name: finishing-a-development-branch
-description: Use when implementation is verified and must be delivered (merge, PR, keep, discard), or the user says open a PR / ship it / merge. Runs the pre-PR review record and the delivery the user already chose; asks only when no choice is known.
+description: Use when fast-path or non-spec work is verified and must be delivered (merge, PR, keep, discard), or the user says open a PR / push it / merge. Runs the single pre-PR review record and the delivery the user already chose; asks only when no choice is known. A branch with an active full-workflow spec goes to tea-sdlc:shipping instead.
 ---
 
 # Finishing a Development Branch
+
+**Which skill.** This skill delivers fast-path and non-spec work. If the current branch belongs to an active full-workflow spec (`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" status` lists it, or a spec `README.md` has `branch:` equal to the current branch), load `tea-sdlc:shipping` instead: it opens the PR, writes `ship.md` and merges through the ship gate. A spec that has not reached `reviewed` yet first goes through `tea-sdlc:requesting-code-review`.
 
 Deliver verified work with the choice the user already gave. Ask only when no delivery choice is known. If no Git branch or worktree is involved, report the verified artifact directly. Native permissions and destructive discard still require their own authorization.
 
@@ -33,7 +35,7 @@ Run `git status`. Commit the changes this work owns in logical steps; leave othe
 
 ## Step 4: Choose the delivery
 
-Use the choice already given. "Open a PR", "ship it" or "push it" means Option 2; "merge it" means Option 1; an autopilot or `tea-sdlc:goal` request that delegates delivery uses the project's normal path (Option 2 when a remote exists, else Option 1).
+Use the choice already given. "Open a PR" or "push it" means Option 2 ("ship it" on a spec branch goes to `tea-sdlc:shipping`); "merge it" means Option 1; an autopilot or `tea-sdlc:goal` request that delegates delivery uses the project's normal path (Option 2 when a remote exists, else Option 1).
 
 Only when no choice is known, present the four options once and wait:
 
@@ -48,10 +50,7 @@ Implementation complete. What would you like to do?
 
 ## Step 5: Pre-PR review record (Options 1 and 2)
 
-Run the single pre-PR pass in `${CLAUDE_PLUGIN_ROOT}/rules/pre-pr-review.md`:
-
-- Fast path: run the `code-review` skill once on the diff.
-- Full workflow: dispatch `code-reviewer` on the diff, unless `tea-sdlc:subagent-driven-development` already recorded a pass for the current HEAD.
+Run the single pre-PR pass in `${CLAUDE_PLUGIN_ROOT}/rules/pre-pr-review.md`: the built-in `code-review` skill once on the diff (`tea-sdlc:requesting-code-review`, fast path pass).
 
 Fix each finding or clear it with evidence, commit the fixes, then record the pass for the current HEAD:
 
@@ -73,7 +72,7 @@ git merge <feature-branch>
 git branch -d <feature-branch> # only if tests pass
 ```
 
-Full workflow: after the merge, run `upgrade-service-docs <service> <feature>` yourself to promote the spec into the living docs. Then clean up the worktree (Step 7).
+Then clean up the worktree (Step 7).
 
 ### Option 2: Push and create a PR
 
@@ -89,7 +88,7 @@ EOF
 )"
 ```
 
-With a non-GitHub remote nothing blocks `gh`; still record the pass, push, and give the user the PR description to open the PR. Full workflow: once the PR merges (or QA returns `GO`), run `upgrade-service-docs <service> <feature>` yourself. Keep the worktree: review fixes land there.
+With a non-GitHub remote nothing blocks `gh`; still record the pass, push, and give the user the PR description to open the PR. Keep the worktree: review fixes land there.
 
 ### Option 3: Keep as-is
 
@@ -130,12 +129,14 @@ Options 2 and 3 keep the worktree.
 
 ## Quick reference
 
-| Option | Pre-PR record | Merge | Push | Keep worktree | Delete branch | upgrade-service-docs (Full workflow) |
-|---|---|---|---|---|---|---|
-| 1. Merge locally | yes | yes | - | - | yes | after merge |
-| 2. Create PR | yes | - | yes | yes | - | after PR merge or QA `GO` |
-| 3. Keep as-is | - | - | - | yes | - | - |
-| 4. Discard | - | - | - | - | yes (force) | - |
+| Option | Pre-PR record | Merge | Push | Keep worktree | Delete branch |
+|---|---|---|---|---|---|
+| 1. Merge locally | yes | yes | - | - | yes |
+| 2. Create PR | yes | - | yes | yes | - |
+| 3. Keep as-is | - | - | - | yes | - |
+| 4. Discard | - | - | - | - | yes (force) |
+
+Fast-path changes have no spec to promote: the living docs they affect are updated in the same change.
 
 ## Rules
 
@@ -147,4 +148,4 @@ Options 2 and 3 keep the worktree.
 
 ## Integration
 
-Called by `tea-sdlc:subagent-driven-development` (after integration and required reviews) and `tea-sdlc:executing-plans` (after all tasks). Uses the worktree management of the runtime only when this task created an isolated checkout.
+Called for fast-path and non-spec work, and by `tea-sdlc:executing-plans` when its plan has no AIDLC spec. Full-workflow specs are delivered by `tea-sdlc:shipping`. Uses the worktree management of the runtime only when this task created an isolated checkout.

@@ -1,6 +1,6 @@
 ---
 name: receiving-code-review
-description: Use when review feedback arrives (from the code-reviewer subagent, the code-review skill, a PR comment or the user), before changing code for it — verify each finding against the code, fix or clear it with evidence, push back when it is wrong, and skip performative agreement (tea-sdlc — follows the routing tiers and hook gates)
+description: Use when review feedback arrives (from the code-reviewer subagent, the code-review skill, a PR comment or the user), before changing code for it — verify each finding against the code, fix or clear it with evidence (in the full workflow, close each line of review.md with `fixed:` or `cleared:` and re-stamp after the re-review), push back when it is wrong, and skip performative agreement (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
 # Code Review Reception
@@ -115,7 +115,29 @@ FOR multi-item feedback:
   4. Verify no regressions
 ```
 
-In the pre-PR pass, run one diff-only re-review of the fixes (`${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`), then commit and record the pass per `requesting-code-review` (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open after that re-review go to the user as explicit open items, not another loop.
+## Where findings live
+
+**Full workflow (review stage):** the findings are the lines in the spec's `review.md` (format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` § review.md). Close each one on its own line, never by deleting or rewording it:
+
+```markdown
+- [x] S1 (must): RFD-1 second criterion is not implemented at src/refunds/api.ts:41 — fixed: src/refunds/api.ts:44, test "RFD-1 rejects over-capture"
+- [x] Q2 (nit): rename `amt` at src/refunds/model.ts:8 — cleared: matches the PSP field name, see design.md §2
+```
+
+- `fixed:` names where the fix is and, for behavior, the test (named with the requirement ID) that proves it.
+- `cleared:` gives the evidence that the finding does not apply: a search result, a design section, a test, or the user's decision (`cleared: accepted by <name> — <reason>`).
+- A finding from a PR comment, QA or the user during this stage is added to the axis it belongs to with the next free ID, then closed the same way.
+
+After the fixes: run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full suite>"` again (the code changed), get the one diff-only re-review, close what it adds, then re-stamp and advance:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" stamp <f> review
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> reviewed
+```
+
+A stamp is valid only for the code it was taken on; any later code change needs a new `verify` and a new stamp. A finding that is still open after the re-review goes to the user only when the decision is theirs; otherwise go back with `aidlc advance <f> building --back --reason "<finding>"`.
+
+**Fast path:** run one diff-only re-review of the fixes (`${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`), then commit and record the pass per `requesting-code-review` (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open after that re-review go to the user as explicit open items, not another loop.
 
 ## When To Push Back
 

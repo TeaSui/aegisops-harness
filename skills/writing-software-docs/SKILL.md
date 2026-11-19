@@ -17,6 +17,7 @@ Not every "write up" or "document this" wants one of these documents. If the use
 
 | The user wants to capture… | Type | Owning role | Reference file |
 |---|---|---|---|
+| The requirements of one change in a full-workflow spec (`docs/specs/<feature>/requirements.md`) | **Change-spec requirements** | Main session | `references/requirements-family.md` |
 | What the business wants and why (objectives, scope, success metrics) | **BRD** | BA, BO, PM | `references/requirements-family.md` |
 | Why a product feature exists, how it works, how success is measured | **PRD** | PM, PO | `references/requirements-family.md` |
 | Exact functional behavior — inputs, outputs, validation, exceptions | **FRD** | BA, Dev | `references/requirements-family.md` |
@@ -67,15 +68,18 @@ Open the matching reference file, follow its structure exactly, and fill every s
 
 Collect every `[NEEDS INPUT]` and `[ASSUMED]` into an **Open Questions** section at the end so the reader sees all open decisions at a glance. Number requirements and rules (FR-1, BR-1, AUTH-01…) so downstream docs, tests, and reviews can cite them precisely.
 
+**Requirement IDs depend on where the document lives.** A change spec's `requirements.md` uses keyed headings, `### <KEY>-<n>: <title>` with `Acceptance:` bullets and a `Verify:` line, because the lifecycle gates, the plan and the tests cite those IDs (`references/requirements-family.md`, Change-spec requirements). `US-n`, `AC-n` and `FR-n` are for standalone documents only (a BRD, PRD, FRD or story set that is not a spec's `requirements.md`). In a change spec, an open question is not left as a marker at approval: the blind spec check (`tea-sdlc:spec-check`) turns each one into a guess that is resolved or accepted as a risk.
+
 ## Step 4 — Deliver
 
-Save to the layout path when the document is a spec artifact of the current change (full-workflow requirements/design/contracts/ADR) or the user asked for a file; otherwise return it in the conversation. When you create `docs/specs/<feature>/`, also create its `README.md` with `status: proposed` frontmatter (layout §4). When the user wants it published through a document connector, keep this structure and publish there.
+Save to the layout path when the document is a spec artifact of the current change (full-workflow requirements/design/contracts/ADR) or the user asked for a file; otherwise return it in the conversation. Create a new spec folder with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" init <feature> --key <KEY>` (it writes the `README.md` with `status: proposed`; stages and formats in `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`), not by hand. When the user wants it published through a document connector, keep this structure and publish there.
 
 When you do save, use `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` (reuse the project's existing equivalent location first):
 
 | Type | Location |
 |---|---|
-| BRD, PRD, FRD, User Story + AC | `docs/specs/<feature>/requirements.md` |
+| Change-spec requirements | `docs/specs/<feature>/requirements.md` (keyed format) |
+| BRD, PRD, FRD, User Story + AC | Where the user asks. When one becomes a spec's `requirements.md`, rewrite its requirements as keyed headings; the other sections can stay below as prose |
 | RFC, Specification | `docs/specs/<feature>/design.md` (machine contracts in `contracts/`) |
 | ADR | `docs/adr/NNNN-<decision>.md` |
 | Concern Report | `docs/specs/<feature>/concern-report.md` |

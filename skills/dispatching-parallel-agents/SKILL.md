@@ -1,11 +1,23 @@
 ---
 name: dispatching-parallel-agents
-description: Use in the full workflow, or when the user asks for parallel investigation, to run 2+ independent investigations or tasks with disjoint files concurrently via subagents. Not for fast-path implementation (no dispatch). For an error crossing services use debug-parallel; to execute a written plan use subagent-driven-development.
+description: Use in the full workflow, or when the user asks for parallel investigation, to run 2+ independent investigations or tasks with disjoint files concurrently via subagents. In a full-workflow build the batches come from `aidlc next`, driven by subagent-driven-development. Not for fast-path implementation (no dispatch). For an error crossing services use debug-parallel.
 ---
 
 # Dispatching Parallel Agents
 
 **Tier check first.** Dispatch only in the full workflow (`${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`) or when the user asked for parallel investigation. On the fast path, work in this session without subagents. For an error that crosses services, run `debug-parallel`; to execute a written plan, use `tea-sdlc:subagent-driven-development`.
+
+## Full-workflow builds: batches come from `aidlc next`
+
+In the build stage you do not group tasks yourself. `tea-sdlc:subagent-driven-development` runs
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" next <f> --json
+```
+
+which returns the frontier of `plan.md` already split into batches whose tasks share no file and have every dependency done (`${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` § plan.md). Dispatch one batch per message, one Agent call per task: the agent is the task's `owner`, the owned files are exactly the task's `files`, and the prompt is the implementer template of that skill. Do not move a task into an earlier batch or merge two batches; when a task needs a file another task owns, that is a plan change (edit `plan.md` and re-run the `planned` check), not a dispatch decision.
+
+The rest of this skill covers the other use: parallel investigation of independent problems.
 
 ## Overview
 

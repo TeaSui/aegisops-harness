@@ -1,0 +1,155 @@
+# Routing eval cases for hooks/autopilot.py. One JSON object per line; fields are documented in run.py.
+# Prompts are written for this suite (no prompt text from real sessions). Keep them short and realistic.
+# --- code change and bug chain -------------------------------------------------------------------------------
+{"id": "chain-feature", "prompt": "Add a function clamp(value, min, max) to src/math.js.", "expect": ["brainstorming", "test-driven-development"], "forbid": ["systematic-debugging"], "forbid_trust": true, "tier": "fast", "tags": ["chain"]}
+{"id": "chain-refactor", "prompt": "Refactor the order handler to use dependency injection", "expect": ["brainstorming", "test-driven-development"], "tier": "fast", "tags": ["chain"]}
+{"id": "chain-rename", "prompt": "Rename the getUser method to findUser across the codebase", "expect": ["brainstorming", "test-driven-development"], "forbid": ["systematic-debugging"], "tags": ["chain"]}
+{"id": "chain-red-tests", "prompt": "npm test is red since this morning, sort it out.", "expect": ["brainstorming", "systematic-debugging", "test-driven-development"], "tags": ["chain", "debug"]}
+{"id": "chain-exception", "prompt": "The checkout endpoint throws a NullPointerException when the cart is empty, fix it", "expect": ["systematic-debugging", "test-driven-development"], "trust": ["money", "new public surface"], "tier": "full", "tags": ["chain", "debug", "trust"]}
+{"id": "chain-ui-bug-fast", "prompt": "Fix the bug where the Save button is misaligned", "expect": ["systematic-debugging", "test-driven-development"], "forbid_trust": true, "tier": "fast", "tags": ["chain", "debug"]}
+{"id": "chain-pagination-bug", "prompt": "Fix the pagination bug in the orders list component", "expect": ["systematic-debugging"], "forbid": ["debug-parallel"], "tags": ["chain", "debug"]}
+{"id": "chain-multi-service", "prompt": "The 502 errors across services started after the deploy, fix it", "expect": ["systematic-debugging", "debug-parallel"], "forbid": ["shipping"], "tags": ["chain", "debug"]}
+{"id": "chain-steering-fix", "prompt": "ok, fix that bug", "expect": ["systematic-debugging"], "tags": ["chain", "debug"]}
+{"id": "chain-steering-add", "prompt": "no, add a retry", "expect": ["brainstorming", "test-driven-development"], "tags": ["chain"]}
+{"id": "chain-failing-test-tags", "prompt": "<context>The repo uses Go.</context> fix the failing test", "expect": ["systematic-debugging", "test-driven-development"], "tags": ["chain", "false-friend"]}
+# --- trust boundary: each label ------------------------------------------------------------------------------
+{"id": "trust-pii", "prompt": "Add an email field to the customer profile API", "expect": ["brainstorming", "test-driven-development"], "trust": ["PII"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-pii-logged", "prompt": "Fix the bug where the user's phone number is logged in plain text", "expect": ["systematic-debugging"], "trust": ["PII"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-auth", "prompt": "Add a refresh token rotation to the auth module", "expect": ["test-driven-development"], "trust": ["auth"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-auth-bug", "prompt": "Users see a 500 error after the token expires; fix the login bug", "expect": ["systematic-debugging", "test-driven-development"], "trust": ["auth"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-rbac", "prompt": "Add role-based permissions to the admin endpoints", "expect": ["test-driven-development"], "trust": ["auth", "new public surface"], "tags": ["trust"]}
+{"id": "trust-money", "prompt": "Add a function that computes the transfer fee", "expect": ["test-driven-development"], "trust": ["money"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-money-ledger", "prompt": "Fix the refund calculation bug in the ledger module", "expect": ["systematic-debugging"], "trust": ["money"], "tags": ["trust"]}
+{"id": "trust-surface", "prompt": "Create a new endpoint that lists orders", "expect": ["test-driven-development"], "trust": ["new public surface"], "forbid_trust": ["money"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-webhook", "prompt": "Add a webhook handler for partner events", "expect": ["test-driven-development"], "trust": ["new public surface"], "tags": ["trust"]}
+{"id": "trust-vendor", "prompt": "Integrate the Stripe API to charge cards", "expect": ["test-driven-development"], "trust": ["external vendor", "money"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-vendor-otp", "prompt": "Integrate the Twilio API to send OTP codes", "expect": ["test-driven-development"], "trust": ["external vendor", "auth"], "tags": ["trust"]}
+{"id": "trust-secrets", "prompt": "Move the API keys from code to secrets manager and fix the handler", "expect": ["test-driven-development"], "trust": ["secrets/crypto config"], "tier": "full", "tags": ["trust"]}
+{"id": "trust-tls", "prompt": "Update the TLS certificate loading code in the gateway service", "expect": ["test-driven-development"], "trust": ["secrets/crypto config"], "tags": ["trust"]}
+{"id": "trust-payment-api", "prompt": "Add a payment API for the e-wallet", "expect": ["brainstorming"], "trust": ["money"], "tier": "full", "tags": ["trust"]}
+# --- intents (process skills and commands) -------------------------------------------------------------------
+{"id": "intent-goal", "prompt": "Make it end-to-end autonomous: add input validation to src/math.js", "expect": ["goal", "brainstorming", "test-driven-development"], "tags": ["intent"]}
+{"id": "intent-goal-handle", "prompt": "handle everything end-to-end, I do not want to keep reminding you", "expect": ["goal"], "tags": ["intent"]}
+{"id": "intent-clarify", "prompt": "Ask me clarifying questions first, then build a notification feature", "expect": ["clarify"], "tags": ["intent"]}
+{"id": "intent-clarify-after", "prompt": "Build a notification system for this app. Ask me questions first.", "expect": ["clarify"], "tags": ["intent"]}
+{"id": "intent-expert-lens", "prompt": "What would a senior payments engineer do about idempotency here", "expect": ["expert-lens"], "tags": ["intent"]}
+{"id": "intent-expert-lens-question", "prompt": "How do the best teams handle idempotency keys?", "expect": ["expert-lens"], "forbid": ["test-driven-development"], "tags": ["intent", "question"]}
+{"id": "intent-reframe", "prompt": "Play devil's advocate on our plan to move to microservices", "expect": ["reframe"], "forbid": ["brainstorming"], "tags": ["intent"]}
+{"id": "intent-reframe-missing", "prompt": "We plan to rewrite the monolith in Go. What am I missing", "expect": ["reframe"], "tags": ["intent"]}
+{"id": "intent-reframe-second", "prompt": "Second opinion: we want to drop the integration tests to speed up CI", "expect": ["reframe"], "tags": ["intent"]}
+{"id": "intent-docs-prd", "prompt": "Write a PRD for a referral program in this shop.", "expect": ["writing-software-docs"], "forbid": ["test-driven-development"], "tags": ["intent"]}
+{"id": "intent-docs-stories", "prompt": "Draft user stories with acceptance criteria for the refund flow", "expect": ["writing-software-docs"], "tags": ["intent"]}
+{"id": "intent-docs-adr", "prompt": "Write an ADR for the decision to use Kafka", "expect": ["writing-software-docs", "messaging-patterns"], "tags": ["intent", "domain"]}
+{"id": "intent-docs-rfc", "prompt": "Draft an RFC for moving to event sourcing", "expect": ["writing-software-docs"], "tags": ["intent"]}
+{"id": "intent-measurement", "prompt": "Define a North Star metric and the activation funnel for onboarding", "expect": ["measurement-planning"], "tags": ["intent"]}
+{"id": "intent-measurement-ab", "prompt": "Design an A/B test for the new pricing page", "expect": ["measurement-planning"], "tags": ["intent"]}
+{"id": "intent-generate-docs", "prompt": "Generate the docs for the order-api service", "expect": ["generate-service-docs"], "forbid": ["upgrade-service-docs"], "tags": ["intent"]}
+{"id": "intent-generate-docs-document", "prompt": "Document this service", "expect": ["generate-service-docs"], "tags": ["intent"]}
+{"id": "intent-upgrade-docs", "prompt": "The docs are outdated after the refund change, update the documentation", "expect": ["upgrade-service-docs"], "forbid": ["generate-service-docs", "test-driven-development"], "tags": ["intent"]}
+{"id": "intent-upgrade-docs-refresh", "prompt": "Refresh the living docs for payments", "expect": ["upgrade-service-docs"], "tags": ["intent"]}
+{"id": "intent-incident-revert", "prompt": "Yesterday we reverted a commit because the fee rounding broke checkout totals", "expect": ["incident-to-eval"], "tags": ["intent"]}
+{"id": "intent-incident-rollback", "prompt": "We had to rollback yesterday, the release broke checkout", "expect": ["incident-to-eval"], "tags": ["intent"]}
+{"id": "intent-incident-postmortem", "prompt": "Write a post-mortem for last night's outage", "expect": ["incident-to-eval"], "tags": ["intent"]}
+{"id": "intent-find-docs", "prompt": "Does the Node.js test runner support test.each like Jest? Give me the source.", "expect": ["find-docs"], "forbid": ["test-driven-development", "brainstorming"], "tags": ["intent", "question"]}
+{"id": "intent-find-docs-version", "prompt": "Which version of Spring Boot added virtual threads?", "expect": ["find-docs", "backend-languages"], "tags": ["intent", "question"]}
+{"id": "intent-find-docs-deprecated", "prompt": "Is this still supported in Node 22?", "expect": ["find-docs"], "tags": ["intent", "question"]}
+{"id": "intent-validate", "prompt": "Check the pending change in this repo is ready before I open a PR", "expect": ["validate-feature"], "tags": ["intent"]}
+{"id": "intent-validate-mine", "prompt": "Validate my changes", "expect": ["validate-feature"], "tags": ["intent"]}
+{"id": "intent-receive-review", "prompt": "A reviewer left this on src/math.js: divide must guard against zero. Deal with the review.", "expect": ["receiving-code-review"], "forbid": ["requesting-code-review"], "tags": ["intent"]}
+{"id": "intent-receive-pr-comments", "prompt": "Address the PR comments on the refund endpoint", "expect": ["receiving-code-review"], "forbid": ["requesting-code-review"], "tags": ["intent"]}
+{"id": "intent-request-review", "prompt": "I am done with the sub() change; get it reviewed before merge.", "expect": ["requesting-code-review"], "forbid": ["receiving-code-review"], "tags": ["intent"]}
+{"id": "intent-request-review-mine", "prompt": "Review my changes before I push", "expect": ["requesting-code-review"], "tags": ["intent"]}
+{"id": "intent-open-pr", "prompt": "Open a PR for this branch", "expect": ["finishing-a-development-branch"], "expect_text": ["pre-pr-review"], "forbid": ["shipping"], "tags": ["intent"]}
+{"id": "intent-merge", "prompt": "Merge it", "expect": ["finishing-a-development-branch"], "forbid": ["shipping"], "tags": ["intent"]}
+{"id": "intent-ship-it", "prompt": "Ship it", "expect": ["shipping"], "forbid": ["finishing-a-development-branch"], "tags": ["intent"]}
+{"id": "intent-ship-release", "prompt": "Cut a release for the wallet fixes", "expect": ["shipping"], "tags": ["intent"]}
+{"id": "intent-ship-version", "prompt": "Release v1.2", "expect": ["shipping"], "tags": ["intent"]}
+{"id": "intent-ship-deploy", "prompt": "Deploy this to production", "expect": ["shipping"], "tags": ["intent"]}
+{"id": "intent-prove-it", "prompt": "are you sure? double-check it", "expect": ["prove-it"], "tags": ["intent", "question"]}
+{"id": "intent-prove-it-bare", "prompt": "Prove it", "expect": ["prove-it"], "tags": ["intent"]}
+# --- lifecycle status questions -------------------------------------------------------------------------------
+{"id": "lifecycle-where", "prompt": "Where are we on the refund feature?", "expect_text": ["Lifecycle state", "aidlc.py"], "forbid": ["brainstorming", "test-driven-development"], "tags": ["lifecycle", "question"]}
+{"id": "lifecycle-next", "prompt": "What's next?", "expect_text": ["aidlc.py"], "tags": ["lifecycle", "question"]}
+{"id": "lifecycle-stage", "prompt": "Which stage is the refund spec in?", "expect_text": ["aidlc.py"], "tags": ["lifecycle", "question"]}
+# --- domain skills -------------------------------------------------------------------------------------------
+{"id": "domain-security", "prompt": "Threat model the transfer function in src/wallet.js.", "expect": ["fintech-security", "security-engineer-subagent"], "tags": ["domain"]}
+{"id": "domain-security-review", "prompt": "Do a security review of the refund handler", "expect": ["fintech-security"], "tags": ["domain"]}
+{"id": "domain-backend-fastapi", "prompt": "Add a FastAPI endpoint that lists orders", "expect": ["backend-languages", "test-driven-development"], "trust": ["new public surface"], "tags": ["domain"]}
+{"id": "domain-backend-spring", "prompt": "Add a Spring Boot endpoint for listing refunds", "expect": ["backend-languages"], "trust": ["money", "new public surface"], "tags": ["domain"]}
+{"id": "domain-database-query", "prompt": "Write a Postgres query that returns each customer's latest order, using CTEs.", "expect": ["database-patterns"], "tags": ["domain"]}
+{"id": "domain-database-migration", "prompt": "Add an index and a migration for the orders table in Postgres", "expect": ["database-patterns", "test-driven-development"], "tags": ["domain"]}
+{"id": "domain-messaging-kafka", "prompt": "Design a Kafka consumer for order-created events with retries and a dead-letter topic.", "expect": ["messaging-patterns"], "tags": ["domain"]}
+{"id": "domain-messaging-sqs", "prompt": "Add an SQS consumer for refund events", "expect": ["messaging-patterns"], "tags": ["domain"]}
+{"id": "domain-cdk", "prompt": "Write CDK tests for the payments stack", "expect": ["cdk-testing"], "tags": ["domain"]}
+{"id": "domain-data-pipeline", "prompt": "Build a PySpark ETL job that loads orders into the data warehouse", "expect": ["data-pipeline-patterns"], "tags": ["domain"]}
+{"id": "domain-data-dbt", "prompt": "Write a dbt model for the daily revenue table", "expect": ["data-pipeline-patterns"], "tags": ["domain"]}
+{"id": "domain-react", "prompt": "Add a React component for the transaction list", "expect": ["frontend-react", "test-driven-development"], "forbid": ["fintech-mobile"], "tags": ["domain"]}
+{"id": "domain-nextjs", "prompt": "Fix the Next.js page that renders the dashboard", "expect": ["frontend-react"], "tags": ["domain"]}
+{"id": "domain-mobile-flutter", "prompt": "Add biometric login to the Flutter app", "expect": ["fintech-mobile"], "forbid": ["frontend-react"], "tags": ["domain"]}
+{"id": "domain-mobile-swiftui", "prompt": "Add a SwiftUI screen for transaction history", "expect": ["fintech-mobile", "test-driven-development"], "tags": ["domain"]}
+{"id": "domain-observability", "prompt": "Add Datadog APM tracing to the order service", "expect": ["observability", "test-driven-development"], "tags": ["domain"]}
+{"id": "domain-contract-pact", "prompt": "Add a Pact consumer-driven test for the order API", "expect": ["api-contract-testing"], "forbid": ["messaging-patterns"], "tags": ["domain", "false-friend"]}
+{"id": "domain-contract-openapi", "prompt": "Validate the OpenAPI spec against the implementation", "expect": ["api-contract-testing"], "tags": ["domain"]}
+{"id": "domain-bdd", "prompt": "Write Cucumber feature files for the refund scenarios", "expect": ["bdd-cucumber"], "tags": ["domain"]}
+{"id": "domain-bdd-gherkin", "prompt": "Write Gherkin scenarios for the login flow", "expect": ["bdd-cucumber"], "tags": ["domain"]}
+{"id": "domain-several", "prompt": "Add a Go handler for refunds with a Kafka producer and a Postgres write", "expect": ["database-patterns", "messaging-patterns", "test-driven-development"], "trust": ["money"], "tags": ["domain"]}
+{"id": "domain-question-still-named", "prompt": "What is the difference between a CTE and a subquery?", "expect": ["database-patterns"], "forbid": ["test-driven-development", "brainstorming"], "tags": ["domain", "question"]}
+# --- false friends -------------------------------------------------------------------------------------------
+{"id": "ff-react-native", "prompt": "Fix the React Native login screen", "expect": ["fintech-mobile"], "forbid": ["frontend-react"], "tags": ["false-friend"]}
+{"id": "ff-react-native-build", "prompt": "Build a React Native screen for the wallet balance", "expect": ["fintech-mobile"], "forbid": ["frontend-react"], "tags": ["false-friend"]}
+{"id": "ff-cloudwatch-alarm", "prompt": "Add a CloudWatch alarm for Lambda errors", "forbid": ["observability"], "tags": ["false-friend"]}
+{"id": "ff-cloudwatch-dashboard", "prompt": "Add a CloudWatch dashboard for the API", "forbid": ["observability"], "tags": ["false-friend"]}
+{"id": "ff-pact-consumer", "prompt": "Add a Pact consumer test for the billing service", "expect": ["api-contract-testing"], "forbid": ["messaging-patterns"], "tags": ["false-friend"]}
+{"id": "ff-load-balancer", "prompt": "Update the load balancer health check path", "forbid_trust": ["money"], "allow_silent": true, "tags": ["false-friend"]}
+{"id": "ff-load-balancer-bug", "prompt": "Fix the load balancer timeout error", "expect": ["systematic-debugging"], "forbid_trust": ["money"], "tags": ["false-friend"]}
+{"id": "ff-mobile-number", "prompt": "Validate the mobile number format", "forbid": ["fintech-mobile"], "allow_silent": true, "tags": ["false-friend"]}
+{"id": "ff-new-session", "prompt": "Fix the retry logic, then spawn a new session to rerun it", "expect": ["test-driven-development"], "forbid_trust": ["auth"], "tags": ["false-friend"]}
+{"id": "ff-new-session-run", "prompt": "Add retry logic to the batch job. Use a new session per run.", "expect": ["test-driven-development"], "forbid_trust": ["auth"], "tags": ["false-friend"]}
+{"id": "ff-role-tag", "prompt": "<role>\nYou are a backend engineer.\n</role>\nAdd a retry to the order client", "expect": ["test-driven-development"], "forbid_trust": ["auth"], "tags": ["false-friend"]}
+{"id": "ff-role-tag-inline", "prompt": "<role>You are a principal engineer.</role> Refactor the order module", "expect": ["test-driven-development"], "forbid_trust": ["auth"], "tags": ["false-friend"]}
+{"id": "ff-model-tokens", "prompt": "Reduce the tokens the summarize function spends per model call", "expect": ["test-driven-development"], "forbid_trust": ["auth"], "tags": ["false-friend"]}
+{"id": "ff-tanstack-queries", "prompt": "Fix the TanStack queries cache bug", "forbid": ["database-patterns"], "tags": ["false-friend"]}
+{"id": "ff-cloudformation", "prompt": "Lint the CloudFormation template", "forbid": ["cdk-testing"], "allow_silent": true, "tags": ["false-friend"]}
+{"id": "ff-readme-table", "prompt": "Refactor the README table", "forbid": ["database-patterns", "test-driven-development"], "allow_silent": true, "tags": ["false-friend"]}
+{"id": "ff-flow-mention", "prompt": "Is this prompt following spec → adr → tdd → implement → test → create PR?", "silent": true, "tags": ["false-friend", "question"]}
+{"id": "ff-flow-description", "prompt": "Prompt builder now emits six stages: spec → adr → tdd → implement → create PR", "silent": true, "tags": ["false-friend"]}
+# --- silence: questions, small talk, prose, git/ops, slash commands, non-English ------------------------------
+{"id": "silent-thanks", "prompt": "thanks!", "silent": true, "tags": ["silence"]}
+{"id": "silent-ok", "prompt": "ok", "silent": true, "tags": ["silence"]}
+{"id": "silent-morning", "prompt": "Good morning", "silent": true, "tags": ["silence"]}
+{"id": "silent-lgtm", "prompt": "Looks good to me", "silent": true, "tags": ["silence"]}
+{"id": "silent-question-index", "prompt": "how does the session table index work?", "silent": true, "tags": ["silence", "question"]}
+{"id": "silent-question-payment", "prompt": "explain how the payment flow works?", "silent": true, "tags": ["silence", "question"]}
+{"id": "silent-question-thread-safe", "prompt": "Is the wallet module thread safe?", "silent": true, "tags": ["silence", "question"]}
+{"id": "silent-question-run-tests", "prompt": "How do I run the tests?", "silent": true, "tags": ["silence", "question"]}
+{"id": "silent-question-root-cause", "prompt": "What's the root cause of the flaky test?", "silent": true, "tags": ["silence", "question"]}
+{"id": "silent-question-api-key", "prompt": "Do we need to create a long-term API key?", "silent": true, "tags": ["silence", "question"]}
+{"id": "silent-prose-readme", "prompt": "Update README.md to match the current setup", "silent": true, "tags": ["silence", "prose"]}
+{"id": "silent-prose-rules", "prompt": "Add backward compatibility to the rules", "silent": true, "tags": ["silence", "prose"]}
+{"id": "silent-prose-skill", "prompt": "Improve the wording of the brainstorming skill", "silent": true, "tags": ["silence", "prose"]}
+{"id": "silent-prose-changelog", "prompt": "Update the CHANGELOG for 2.4.0", "silent": true, "tags": ["silence", "prose"]}
+{"id": "silent-prose-slash", "prompt": "Remove \"/tdd-feature\", I do not need the new-project feature", "forbid": ["test-driven-development"], "allow_silent": true, "tags": ["silence", "prose"]}
+{"id": "silent-git-version", "prompt": "Bump version and commit", "silent": true, "tags": ["silence", "git-ops"]}
+{"id": "silent-git-branches", "prompt": "Remove all the experiment branches and old worktrees", "silent": true, "tags": ["silence", "git-ops"]}
+{"id": "silent-git-author", "prompt": "Change the author of every commit to my personal email", "silent": true, "tags": ["silence", "git-ops"]}
+{"id": "silent-git-push", "prompt": "Commit and push the changes", "silent": true, "tags": ["silence", "git-ops"]}
+{"id": "silent-git-remote", "prompt": "Delete the old remote branches", "silent": true, "tags": ["silence", "git-ops"]}
+{"id": "silent-slash-command", "prompt": "/upgrade-service-docs payments", "silent": true, "tags": ["silence"]}
+{"id": "silent-non-english", "prompt": "Thêm API thanh toán cho ví điện tử", "silent": true, "tags": ["silence"]}
+{"id": "silent-switched-off", "prompt": "Fix the login bug", "env": {"TEA_SDLC_AUTOPILOT": "off"}, "silent": true, "tags": ["silence"]}
+# --- SubagentStart rules -------------------------------------------------------------------------------------
+{"id": "subagent-backend", "mode": "subagent", "agent_type": "backend-engineer-subagent", "expect_text": ["tea-sdlc rules for this subagent", "tdd-gate", "subagent-return-format.md"], "tags": ["subagent"]}
+{"id": "subagent-namespaced", "mode": "subagent", "agent_type": "tea-sdlc:code-reviewer", "expect_text": ["tea-sdlc rules for this subagent"], "tags": ["subagent"]}
+{"id": "subagent-general-purpose", "mode": "subagent", "agent_type": "general-purpose", "expect_text": ["do not dispatch further agents"], "tags": ["subagent"]}
+{"id": "subagent-explore-silent", "mode": "subagent", "agent_type": "Explore", "silent": true, "tags": ["subagent", "silence"]}
+{"id": "subagent-plan-silent", "mode": "subagent", "agent_type": "Plan", "silent": true, "tags": ["subagent", "silence"]}
+{"id": "subagent-guide-silent", "mode": "subagent", "agent_type": "claude-code-guide", "silent": true, "tags": ["subagent", "silence"]}
+{"id": "subagent-switched-off", "mode": "subagent", "agent_type": "backend-engineer-subagent", "env": {"TEA_SDLC_AUTOPILOT": "off"}, "silent": true, "tags": ["subagent", "silence"]}
+# --- former known gaps, fixed in 3.0.0 (keep them: they guard against regressions) --------------------
+{"id": "gap-write-function", "prompt": "Write a function that validates IBANs", "expect": ["brainstorming", "test-driven-development"], "tags": ["fixed-gap"]}
+{"id": "gap-balance-check", "prompt": "Implement a balance check before transfers", "expect": ["test-driven-development"], "trust": ["money"], "tags": ["trust", "fixed-gap"]}
+{"id": "gap-store-pii", "prompt": "Store the customer's date of birth and passport number in the profile service code", "expect": ["test-driven-development"], "trust": ["PII"], "tags": ["trust", "fixed-gap"]}
+{"id": "gap-ios-safari", "prompt": "The login page crashes on iOS Safari", "expect": ["systematic-debugging"], "forbid": ["fintech-mobile"], "tags": ["false-friend", "fixed-gap"]}
+{"id": "gap-validate-number", "prompt": "Validate the mobile number field in the signup form code", "forbid": ["validate-feature", "fintech-mobile"], "tags": ["false-friend", "fixed-gap"]}
+{"id": "gap-deploy-script", "prompt": "Fix the deploy script error", "expect": ["systematic-debugging"], "forbid": ["shipping"], "tags": ["false-friend", "fixed-gap"]}
+{"id": "gap-cloudwatch-errors", "prompt": "Add a CloudWatch alarm for Lambda errors", "forbid": ["systematic-debugging"], "tags": ["false-friend", "fixed-gap"]}

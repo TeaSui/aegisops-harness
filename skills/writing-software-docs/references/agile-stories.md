@@ -2,7 +2,7 @@
 
 The most common requirement format in Agile. A story names *who*, *what*, and *why*; the acceptance criteria make "done" observable so QA can test it and a developer knows when to stop.
 
-Note: in this repo's workflow, user stories are written by the main session and persist to `docs/specs/<feature>/requirements.md` (`references/documentation-layout.md`). Use this structure whether you're the main session or a human author.
+Note: in this repo's workflow, user stories are written by the main session. A standalone story set uses the `US-n`/`AC-n` IDs below. When stories go into a change spec's `docs/specs/<feature>/requirements.md` (`references/documentation-layout.md`), each requirement becomes a keyed `### <KEY>-<n>:` heading with its criteria as `Acceptance:` bullets and a `Verify:` line (`requirements-family.md`, Change-spec requirements); the story text can stay under it.
 
 ## Story structure
 

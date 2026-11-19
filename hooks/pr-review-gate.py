@@ -33,6 +33,39 @@ def contract_findings(root):
         return []
 
 
+def spec_review(top, cwd):
+    """(passed, message) for full-workflow specs bound to the current branch, or (None, None) when there are none.
+
+    The review stage of references/aidlc.md is keyed to the code fingerprint, not to HEAD, so committing review.md,
+    the ledger or README after `aidlc advance reviewed` keeps the review valid. Any failure to load the engine means
+    "no opinion" and the HEAD record below decides, as before."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('tea_sdlc_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
+        aidlc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(aidlc)
+        branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd).stdout.strip()
+        bound = [p for p in aidlc.specs_for_branch(top, branch)
+                 if aidlc.stage(p) not in ('implemented', 'partially-implemented', 'superseded', 'abandoned')]
+        if not bound:
+            return None, None
+        problems = []
+        for path in bound:
+            failures = [m for level, m in aidlc.check(path, 'reviewed') if level == 'FAIL']
+            if failures:
+                rel = pathlib.Path(path).resolve().relative_to(pathlib.Path(top).resolve()).as_posix()
+                problems.append(f'{rel} (stage {aidlc.stage(path)}) has not passed the `reviewed` gate:\n    - '
+                                + '\n    - '.join(failures[:6]))
+        if problems:
+            return False, ('pr-review-gate: this branch carries a full-workflow spec whose review stage is not done.\n  '
+                           + '\n  '.join(problems)
+                           + f'\nFinish it (skill tea-sdlc:requesting-code-review), then `python3 "{PLUGIN_ROOT}/scripts/'
+                             'aidlc.py" advance <spec> reviewed`, then retry.')
+        return True, None
+    except Exception:
+        return None, None
+
+
 def git(args, cwd):
     return subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, timeout=30)
 
@@ -54,6 +87,17 @@ def main():
     head = git(['rev-parse', 'HEAD'], cwd)
     if top.returncode or head.returncode:
         deny('pr-review-gate: not in a git repository with commits; cannot verify the pre-PR review.')
+
+    reviewed, message = spec_review(top.stdout.strip(), cwd)
+    if reviewed is False:
+        deny(message)
+    if reviewed:
+        contract_failures = contract_findings(top.stdout.strip())
+        if contract_failures:
+            deny('pr-review-gate: an active spec declares an external contract that fails the contract gate '
+                 '(python3 "' + str(PLUGIN_ROOT / 'scripts' / 'check-contract.py') + '" --scan <repo>):\n  - '
+                 + '\n  - '.join(contract_failures[:8]))
+        sys.exit(0)
 
     repo_id = hashlib.sha256(top.stdout.strip().encode()).hexdigest()[:16]
     sha = head.stdout.strip()

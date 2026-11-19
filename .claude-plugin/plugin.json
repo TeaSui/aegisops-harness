@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "tea-sdlc",
-  "version": "2.9.0",
-  "description": "SDLC framework for Claude Code that runs itself: specialist subagents, trust-boundary routing, TDD/contract/verification/secret/pre-PR gates and an autopilot that loads the right skill or command for each prompt, so nobody has to remember slash commands.",
+  "version": "3.0.0",
+  "description": "AI-driven SDLC for Claude Code: a spec \u2192 plan \u2192 build \u2192 test \u2192 review \u2192 ship stage machine with code-enforced gates and requirement-to-test traceability, specialist subagents building in parallel, and an autopilot that runs the right skill, command or gate without being asked.",
   "author": {
     "name": "Tea Nguyen",
     "email": "nguyenminhtung.developer@gmail.com",
@@ -13,6 +13,7 @@
   "license": "MIT",
   "keywords": [
     "agents",
+    "aidlc",
     "architecture",
     "autopilot",
     "code-review",
@@ -22,7 +23,9 @@
     "sdlc",
     "security-gate",
     "skills",
+    "spec-driven",
     "tdd",
+    "traceability",
     "workflow"
   ]
 }

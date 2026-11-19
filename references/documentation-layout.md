@@ -1,6 +1,6 @@
 # Documentation Layout (single source of truth)
 
-This file owns **where project documentation lives, who writes each file, and how a document moves through its lifecycle**. Agents, commands, skills and rules point here and do not restate the tree. If another tea-sdlc file disagrees with this one, this file wins — fix the other file.
+This file owns **where project documentation lives, who writes each file, and how a document moves through its lifecycle** (the stage machine of a full-workflow change spec, its gates and the formats of its AIDLC files are owned by `references/aidlc.md`). Agents, commands, skills and rules point here and do not restate the tree. If another tea-sdlc file disagrees with this one, this file wins — fix the other file.
 
 Paths to tea-sdlc files (`rules/…`, `references/…`) in this file are relative to the plugin root (the parent of this `references/` folder). Documentation paths are **target-project** paths relative to the owning scope root (§6.1), never relative to the plugin.
 
@@ -9,9 +9,9 @@ Paths to tea-sdlc files (`rules/…`, `references/…`) in this file are relativ
 | Kind | Answers | Mutability | Location | Prior art |
 |---|---|---|---|---|
 | **Living reference** | What does the system do *now*? | Rewritten to match verified code | `docs/*.md` (fixed set, §2/§3) | arc42 + C4, Diátaxis reference/explanation |
-| **Change spec** | What are we changing, and why? | Edited while `proposed`/`accepted`; frozen once `implemented` | `docs/specs/<feature>/` | GitHub Spec Kit `specs/<feature>/`, Kiro `.kiro/specs/<feature>/` |
+| **Change spec** | What are we changing, and why? | Edited while active (`proposed` to `shipped`); frozen once `implemented` | `docs/specs/<feature>/` | GitHub Spec Kit `specs/<feature>/`, Kiro `.kiro/specs/<feature>/` |
 | **Decision record** | Why X over Y? | Immutable once accepted; superseded, never rewritten | `docs/adr/NNNN-<decision>.md` | Nygard ADR, MADR |
-| **Workflow state** | How do we execute, where are we? | Disposable | `docs/specs/<feature>/plan.md`, `docs/plans/` | Spec Kit `plan.md`/`tasks.md` |
+| **Workflow state** | How do we execute, where are we? | Disposable (`ledger.md` is append-only) | `docs/specs/<feature>/plan.md`, `ledger.md`, `docs/plans/` | Spec Kit `plan.md`/`tasks.md` |
 
 Role-based trees (`docs/requirements/`, `docs/security/`, `docs/contracts/`, `docs/design/`, `docs/domain/`) are **not used for new work**: they scatter one change across five folders and never say whether content is intent or fact. Projects that already use them keep them (§6.2, §8).
 
@@ -76,28 +76,36 @@ Same owners as §2.
 
 ## 4. Change spec — `docs/specs/<feature>/`
 
-`<feature>` is a stable kebab-case slug naming **one change**, not a feature area (`auth-login`, then later `auth-login-mfa`). No numbers, dates or `-v2`. Re-runs reuse the folder only while its status is `proposed` or `accepted`; once `implemented` or `superseded`, a further change gets a new slug that links back.
+`<feature>` is a stable kebab-case slug naming **one change**, not a feature area (`auth-login`, then later `auth-login-mfa`). No numbers, dates or `-v2`. Re-runs reuse the folder only while the spec is active (`proposed` to `shipped`); once `implemented`, `partially-implemented`, `superseded` or `abandoned`, a further change gets a new slug that links back. Create the folder with `scripts/aidlc.py init` (`references/aidlc.md` §3).
 
 | File | Single writer | Content | When |
 |---|---|---|---|
-| `README.md` | integrating session (main session) and `/upgrade-service-docs` | Frontmatter (below), one-paragraph summary, file index, traceability table (requirement → status → evidence) | Always |
-| `requirements.md` | integrating session | Stories, acceptance criteria (Gherkin or EARS), business rules (`US-n`, `AC-n`, `BR-n`), `New terms` | User-visible behavior |
+| `README.md` | integrating session (main session) and `/upgrade-service-docs`; `aidlc advance` edits `status`, `updated`, `branch` | Frontmatter (below), one-paragraph summary, file index, `## Traceability` table (requirement → tasks → tests → result, `aidlc trace --write`) | Always |
+| `requirements.md` | integrating session | One `### <KEY>-<n>:` heading per requirement with `Acceptance:` bullets (Gherkin or EARS) and `Verify:` (`references/aidlc.md` §2); business rules, `New terms` | Full-workflow tier |
+| `spec-check.md` | blind spec checker (skill `spec-check`); the integrating session closes each guess | Guesses a reader of the spec alone would have to make, each resolved or accepted as a risk | Full-workflow tier |
 | `ui-design.md` | ui-ux-designer-subagent | Flows, wireframes, all component states, responsive + accessibility rules | UI needing design |
-| `security.md` | security-engineer-subagent | Threat model (assets, trust boundaries, STRIDE, OWASP) + numbered rules (`AUTH-01`…) with severity and provenance | Trust-boundary work |
+| `security.md` | security-engineer-subagent | Threat model (assets, trust boundaries, STRIDE, OWASP) + numbered rules (`AUTH-01`…) with severity and provenance | Trust-boundary work, unless README says `security: not-applicable — <reason>` |
 | `design.md` | integrating session | Design, contract delta, data-model delta, rollout, links to ADRs; RFC-style while open | New/changed contract or architecture |
 | `contracts/` | integrating session | Proposed machine-readable deltas (OpenAPI, AsyncAPI, JSON Schema, proto) | As above |
 | `measurement.md` | integrating session (`measurement-planning`) | Metrics, funnel, **analytics** event taxonomy (distinct from domain events), experiments, consent gating | Must be measurable |
 | `concern-report.md` | integrating session | Existing vs required compatibility analysis | Optional |
-| `plan.md` | integrating session (`writing-plans`) | Tasks, ownership, order, parallelism, validation; exempt from freezing | Full-workflow tier |
+| `plan.md` | integrating session (`writing-plans`); `[x]` set only by `aidlc task-done` | Task graph: covers, depends, owner, files, exit (`references/aidlc.md` §2); exempt from freezing | Full-workflow tier |
+| `ledger.md` | `aidlc` only, append-only | Stage transitions, task completions, rulings, test runs, review stamps | From `accepted` |
+| `review.md` | integrating session, from the reviewers' findings; `aidlc stamp review` writes its fingerprint | Spec and Standards review axes, each finding `fixed:` or `cleared:` | Before `reviewed` |
+| `ship.md` | integrating session (skill `shipping`) | GO/NO-GO decision, version, checks, rollback, post-release verification | Before `shipped` |
 
 `README.md` frontmatter — the **only** lifecycle metadata in the folder; other files carry none:
 
 ```yaml
 ---
-status: proposed        # proposed | accepted | implemented | partially-implemented | superseded
+status: proposed        # proposed | accepted | planned | building | verified | reviewed | shipped | implemented
+                        #   side states: partially-implemented | superseded | abandoned (references/aidlc.md §1)
+key: RFD                # 2-6 capital letters, unique per repository; prefixes every requirement ID
+branch: feat/<slug>     # written by `aidlc advance building`
+security: required      # or: not-applicable — <reason> (escape hatch only)
 scope: <service> | system
 affects: [<service-or-module>, ...]
-accepted_by: <name/date>            # set only on explicit user/team approval
+accepted_by: <name> (<date>)        # set only on explicit user/team approval, or `<name> (delegated in request)`
 source_revision: [<repo>@<sha>, ...] # set on promotion; one entry per affected repo
 superseded_by: <slug>               # when applicable
 contract: external                  # set none only when no consumer outside the changed module; omit to auto-detect from contracts/ (external = contracts/ must pass scripts/check-contract.py)
@@ -111,11 +119,13 @@ updated: YYYY-MM-DD
 
 ## 5. Lifecycle
 
-1. **Propose.** Strategic agents write their own files; the integrating session creates `README.md` with `status: proposed`.
-2. **Accept.** Only the integrating session sets `status: accepted`, and only after explicit user/team approval, recording `accepted_by`. Implementers consume `accepted` specs; they consume a `proposed` spec only when the dispatch says so explicitly.
-3. **Decide.** A decision that outlives the change becomes an ADR; the spec links it instead of re-arguing it.
+The stages of a full-workflow change spec (`proposed` → `accepted` → `planned` → `building` → `verified` → `reviewed` → `shipped` → `implemented`), the gate of each one and the commands that move it are owned by `references/aidlc.md`. Only `aidlc advance` changes `status:`; nobody edits it by hand. The rules below are the ones that stay with the documentation:
+
+1. **Propose.** Strategic agents write their own files; the integrating session creates the folder (`aidlc init`) with `status: proposed`.
+2. **Accept.** Only explicit user/team approval, recorded in `accepted_by`, lets the integrating session advance the spec to `accepted`. Implementers consume `accepted` (or later) specs; they consume a `proposed` spec only when the dispatch says so explicitly.
+3. **Decide.** A decision that outlives the change becomes an ADR; the spec links it instead of re-arguing it. A smaller decision taken during the build is a ruling in `ledger.md`.
 4. **Implement.** Implementers apply the accepted `contracts/` delta to the project's authoritative contract source (§6.4) and build against the spec. They never rewrite strategic files; contradictions found in code are returned as `DONE_WITH_CONCERNS`.
-5. **Promote.** After QA `GO` or merge, `/upgrade-service-docs <service> <feature>` folds verified behavior into the living files, appends the change's active security rules to the living `security.md` register as `<feature>/AUTH-01` with a link, sets `status: implemented` (or `partially-implemented` with the traceability table showing pending items) and `source_revision`. Intent is never rewritten to match what shipped. `source_revision` must name a commit that contains the change (`git merge-base --is-ancestor <change-commit> <sha>` succeeds). If the change is not yet committed and merged, keep `status: accepted`, leave `source_revision` unset and report it.
+5. **Promote.** After the spec is `shipped` and merged, `/upgrade-service-docs <service> <feature>` folds verified behavior into the living files, appends the change's active security rules to the living `security.md` register as `<feature>/AUTH-01` with a link, writes the `## Traceability` table, sets `source_revision` and advances the spec to `implemented` (or sets `partially-implemented` with the traceability table showing pending items). Intent is never rewritten to match what shipped. `source_revision` must name a commit that contains the change (`git merge-base --is-ancestor <change-commit> <sha>` succeeds). If the change is not yet committed and merged, keep the current status, leave `source_revision` unset and report it.
 6. **Supersede.** A later change creates a new slug, marks the old `README.md` `superseded_by`, and retires its rules in the register.
 
 ## 6. Resolution rules (read before writing)
@@ -130,7 +140,7 @@ updated: YYYY-MM-DD
 
 ## 7. Staleness
 
-The check in `rules/strategic-output-persistence.md` applies to living files and to specs with status `proposed` or `accepted`. Specs that are `implemented`, `partially-implemented` (for their implemented items) or `superseded` are history and are never "refreshed"; readers use the living files for current behavior.
+The check in `rules/strategic-output-persistence.md` applies to living files and to active specs (`proposed` to `shipped`). Specs that are `implemented`, `partially-implemented` (for their implemented items), `superseded` or `abandoned` are history and are never "refreshed"; readers use the living files for current behavior.
 
 ## 8. Legacy path mapping (for reading old projects or an explicit migration)
 

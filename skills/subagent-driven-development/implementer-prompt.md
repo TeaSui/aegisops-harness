@@ -1,130 +1,99 @@
 # Implementer Subagent Prompt Template
 
-Use this template when dispatching an implementer subagent.
+Use this template to dispatch one task from `plan.md` (one batch from `aidlc next` = one message with one dispatch per task).
 
-Dispatch to the **domain leaf agent** from the registry in `rules/agents.md`
-(backend-engineer-subagent, frontend-engineer-subagent, mobile-engineer-subagent, etc. — pick by the
-task's stack); fall back to `general-purpose` only when no domain agent fits. This template satisfies
-`rules/dispatch-prompt-contract.md` via markdown headings (fields, not tags, are the contract). It is
-adapted to the selected model/effort using `references/model-guide.md`. Enumerate owned
-files/modules, prerequisites and exit criteria clearly for every model. Keep task/security constraints
-and evidence requirements regardless of model choice; do not assume a model performs an omitted
-review automatically. Use the available Agent tool (`Task` alias is supported).
+Dispatch to the task's `owner` from the registry in `rules/agents.md`
+(backend-engineer-subagent, frontend-engineer-subagent, mobile-engineer-subagent, etc.); fall back to
+`general-purpose` only when no domain agent fits. This template satisfies
+`rules/dispatch-prompt-contract.md` via markdown headings (fields, not tags, are the contract). Adapt it to the
+selected model/effort using `references/model-guide.md`. Keep task, security and contract constraints and the
+evidence requirements regardless of model. Formats of `plan.md`, `requirements.md` and the ledger:
+`references/aidlc.md`.
 
 ```
-Task tool (domain leaf agent per rules/agents.md):
-  description: "Implement Task N: [task name]"
+Agent tool (the task's owner per rules/agents.md):
+  description: "Implement T<n>: [task title]"
   prompt: |
-    You are implementing Task N: [task name]
+    You are the [owner] implementing T<n>: [task title] of spec docs/specs/<feature>/.
 
-    ## Task Description
+    ## Task (verbatim from plan.md)
 
-    [FULL TEXT of task from plan - paste it here, don't make subagent read file]
+    [The full task block: title, covers, depends, owner, files, exit]
+
+    ## Requirements this task covers
+
+    [For each covered ID, the heading and its acceptance criteria copied from requirements.md, e.g.
+     RFD-1: Refund a captured payment
+     - Given a captured payment, when a refund for the full amount is requested, then ...
+     - Given a refund request above the captured amount, then it is rejected with REFUND_EXCEEDS_CAPTURE.]
 
     ## Context
 
-    [Scene-setting: where this fits, dependencies, architectural context]
+    [Where this fits, what finished tasks it builds on, the relevant parts of design.md]
+    Inputs to read: docs/specs/<feature>/design.md, docs/specs/<feature>/contracts/ (if any),
+    docs/specs/<feature>/security.md (each rule that applies to your files), the files you own.
+    Rulings already made for this spec (from ledger.md): [paste the ones that touch this task, or "none"]
 
-    ## Ownership and Constraints
+    ## Ownership and constraints
 
-    [Owned files/modules, allowed actions, out-of-scope files, required security/contract inputs]
-    You are not alone in the codebase. Preserve existing/user/other-agent edits, including in
-    shared files. Do not delete/reset unrelated work or expand scope to make a test pass.
-    [Actual verification commands or discovery instructions and one exit criterion per requirement]
+    You may change only these paths: [the task's files, (new) marking files to create].
+    Other agents are implementing other tasks in the same checkout right now. Preserve their edits and the
+    user's; never revert, reset or delete work you did not write.
+    Do not edit docs/specs/** (contracts/, plan.md, ledger.md, review.md, README.md belong to the main session).
+    If a contract looks wrong or the contract gate fails, return NEEDS_CONTEXT with the finding instead.
+    If the task needs a file outside your list, return BLOCKED with the scope change you need.
+    Do not commit; the main session commits after the batch.
 
-    ## Before You Begin
+    ## Exit criteria
 
-    If you have questions about:
-    - The requirements or acceptance criteria
-    - The approach or implementation strategy
-    - Dependencies or assumptions
-    - Anything unclear in the task description
+    - [One line per acceptance criterion this task must satisfy]
+    - Exit test command passes: `[the command the main session will run with aidlc task-done]`
 
-    Raise material ambiguities before dependent changes; continue independent authorized work with clear requirements.
+    ## Your job
 
-    ## Your Job
-
-    Once you're clear on requirements:
-    1. Implement exactly what the task specifies
-    2. Follow TDD for behavior changes, with safe owned-patch recovery; use applicable structural/isolated checks for prose/config
-    3. Verify the actual changed state/scope and report skipped/unavailable checks explicitly
-    4. Commit only when committing is in scope and applicable task preferences permit it; otherwise leave reviewable pending work
-    5. Self-review (see below)
-    6. Report back
+    1. Follow TDD for behavior changes: write the test, run it, see it fail for the expected reason, then
+       write the code. Use structural checks for prose/config.
+    2. Name every test with the requirement ID it proves, followed by what it checks, e.g.
+       `RFD-1 rejects over-capture` (test name, describe/it string or @DisplayName, as the framework allows).
+       The trace gate finds tests by these IDs; a test without one does not count for the requirement.
+    3. Implement exactly what the task and its acceptance criteria say; nothing more.
+    4. Run the exit test command and keep its output in a log file.
+    5. Self-review (below), then report.
 
     Work from: [directory]
 
-    **While you work:** Investigate unexpected behavior within scope. Clarify decisions whose
-    ambiguity affects correctness; pause dependent work and continue understood independent work.
-    Reuse existing authorization. Never invent required facts or skip a prerequisite silently.
+    While you work: investigate unexpected behavior within scope. When the spec leaves a routine choice open
+    (naming, which existing pattern to follow), choose the option the existing code points to and report it
+    under "Choices made". Return NEEDS_CONTEXT only for a question whose answer changes behavior a requirement
+    describes.
 
-    ## Code Organization
+    ## Code organization
 
-    You reason best about code you can hold in context at once, and your edits are more
-    reliable when files are focused. Keep this in mind:
-    - Follow the file structure defined in the plan
-    - Each file should have one clear responsibility with a well-defined interface
-    - If a file you're creating is growing beyond the plan's intent, stop and report
-      it as DONE_WITH_CONCERNS — don't split files on your own without plan guidance
-    - If an existing file you're modifying is already large or tangled, work carefully
-      and note it as a concern in your report
-    - In existing codebases, follow established patterns. Improve code you're touching
-      the way a good developer would, but don't restructure things outside your task.
+    - Follow the file structure the plan defines; each file has one clear responsibility.
+    - If a new file grows beyond the plan's intent, report DONE_WITH_CONCERNS rather than splitting it on your own.
+    - In existing code, follow established patterns; improve what you touch, do not restructure beyond the task.
 
-    ## When You're in Over Your Head
+    ## When the task is too hard
 
-    It is always OK to stop and say "this is too hard for me." Bad work is worse than
-    no work. You will not be penalized for escalating.
+    Returning BLOCKED or NEEDS_CONTEXT is fine; bad work is worse than no work. Report what you are stuck on,
+    what you tried and what help you need when the task needs an architectural decision with several valid
+    answers, code beyond what you can find, or restructuring the plan did not anticipate.
 
-    **STOP and escalate when:**
-    - The task requires architectural decisions with multiple valid approaches
-    - You need to understand code beyond what was provided and can't find clarity
-    - You feel uncertain about whether your approach is correct
-    - The task involves restructuring existing code in ways the plan didn't anticipate
-    - You've been reading file after file trying to understand the system without progress
+    ## Self-review before reporting
 
-    **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
-    specifically what you're stuck on, what you've tried, and what kind of help you need.
-    The controller can provide more context, re-dispatch with a more capable model,
-    or break the task into smaller pieces.
+    - Every acceptance criterion above has a test named with its requirement ID, and the test checks behavior,
+      not a mock.
+    - Nothing beyond the task was built; existing patterns were followed.
+    - Only your listed files changed (`git status`).
+    Fix what you find before reporting.
 
-    ## Before Reporting Back: Self-Review
+    ## Return (rules/subagent-return-format.md; any shape)
 
-    Review your work with fresh eyes. Ask yourself:
-
-    **Completeness:**
-    - Did I fully implement everything in the spec?
-    - Did I miss any requirements?
-    - Are there edge cases I didn't handle?
-
-    **Quality:**
-    - Is this my best work?
-    - Are names clear and accurate (match what things do, not how they work)?
-    - Is the code clean and maintainable?
-
-    **Discipline:**
-    - Did I avoid overbuilding (YAGNI)?
-    - Did I only build what was requested?
-    - Did I follow existing patterns in the codebase?
-
-    **Testing:**
-    - Do tests actually verify behavior (not just mock behavior)?
-    - Did I follow TDD if required?
-    - Are tests comprehensive?
-
-    If you find issues during self-review, fix them now before reporting.
-
-    ## Report Format
-
-    Your return must include three things per `rules/subagent-return-format.md`
-    (prose, markdown, or XML — shape is flexible; the information is what matters):
-    1. A status keyword, verbatim: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
-    2. Evidence paths — files changed, test-output logs the dispatcher can Read
-    3. An exit-criteria check — one line per criterion from this prompt, met | not met
-    Plus: concerns (for DONE_WITH_CONCERNS), what's needed (NEEDS_CONTEXT), what was
-    tried and the blocker (BLOCKED), and a next-step recommendation.
-
-    Use DONE_WITH_CONCERNS if you completed the work but have doubts about correctness.
-    Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need
-    information that wasn't provided. Never silently produce work you're unsure about.
+    1. Status: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+    2. Requirement IDs covered, and for each the test names that prove it (file:line)
+    3. Exit test command, its exit code and the log path
+    4. Files changed (must be within the owned list)
+    5. One line per exit criterion: met | not met — reason
+    6. Choices made that the spec did not fix (what, why), so the main session can record them as rulings
+    7. Concerns (DONE_WITH_CONCERNS), what is needed (NEEDS_CONTEXT), or what was tried and the blocker (BLOCKED)
 ```

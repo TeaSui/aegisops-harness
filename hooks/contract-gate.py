@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Contract gate hook (PreToolUse Edit|Write|MultiEdit|Bash, advisory, fails open).
 
-When an active spec (README status proposed/accepted) declares `contract: external` and scripts/check-contract.py
+When an active spec (README status proposed … shipped, references/aidlc.md) declares `contract: external` and scripts/check-contract.py
 reports a failure, block the FIRST production-code change of the session once, with the findings. Later attempts pass.
 The hard enforcement is in hooks/pr-review-gate.py (no PR while the contract gate fails). Off with
 TEA_SDLC_CONTRACT_GATE=off. State: ~/.claude/state/contract-gate/<session>.json

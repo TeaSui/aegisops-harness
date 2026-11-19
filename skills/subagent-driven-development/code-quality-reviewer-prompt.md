@@ -10,8 +10,10 @@ Use this template when dispatching a code quality reviewer subagent.
 Task tool (code-reviewer):
   Use template at skills/requesting-code-review/code-reviewer.md
 
+  AXIS: task (per-task review in the build stage; the two-axis review of the whole change is
+        skills/requesting-code-review/SKILL.md)
   WHAT_WAS_IMPLEMENTED: [from implementer's report]
-  PLAN_OR_REQUIREMENTS: Task N from [plan-file]
+  PLAN_OR_REQUIREMENTS: T<n> from docs/specs/<feature>/plan.md, with the covered requirement IDs
   REVIEW_SCOPE: [committed range OR pending Git work OR non-Git manifest; owned paths and checked state]
   BASE_SHA: [verified starting commit, only for committed-range review; otherwise omit]
   HEAD_SHA: [verified ending commit, only for committed-range review; otherwise omit]
@@ -23,6 +25,8 @@ Task tool (code-reviewer):
 - Are units decomposed so they can be understood and tested independently?
 - Is the implementation following the file structure from the plan?
 - Did this implementation create new files that are already large, or significantly grow existing files? (Don't flag pre-existing file sizes — focus on what this change contributed.)
+- Did the change stay inside the task's `files` list?
+- Are tests named with the requirement ID they prove (e.g. `RFD-1 rejects over-capture`), and do they test behavior rather than mocks?
 
 Choose model/effort via `references/model-guide.md`. Use the available Agent tool
 (`Task` alias supported). For pending review include staged, unstaged and untracked owned

@@ -143,6 +143,14 @@ class PromptRouterTest(HookCase):
         self.assertIn('tea-sdlc:requesting-code-review', self.route('I am done with the sub() change; get it reviewed '
                                                                     'before merge.'))
 
+    def test_release_requests_go_to_shipping(self):
+        for prompt in ('ship it', 'Cut a release for the refund feature', 'deploy this to production'):
+            self.assertIn('tea-sdlc:shipping', self.route(prompt), prompt)
+
+    def test_lifecycle_status_questions_point_to_the_cli(self):
+        for prompt in ('where are we with the refund feature?', "what's next?"):
+            self.assertIn('aidlc.py', self.route(prompt), prompt)
+
     def test_short_steering_messages_still_route(self):
         self.assertIn('tea-sdlc:systematic-debugging', self.route('ok, fix that bug'))
         self.assertIn('tea-sdlc:brainstorming', self.route('no, add a retry'))
@@ -317,8 +325,35 @@ class NudgeTest(HookCase):
         self.assertIn('tea-sdlc:upgrade-service-docs', ctx)
         self.assertIn('refund', ctx)
 
+    def test_merge_of_a_shipped_spec_suggests_promoting_docs(self):
+        spec = self.repo / 'docs' / 'specs' / 'payouts'
+        spec.mkdir(parents=True)
+        (spec / 'README.md').write_text('---\nstatus: shipped\nkey: PAY\n---\n# Payouts\n')
+        self.assertIn('tea-sdlc:upgrade-service-docs', self.bash('gh pr merge 9 --squash', 'Merged'))
+
     def test_merge_without_active_specs_is_silent(self):
         self.assertEqual(self.bash('gh pr merge 42 --squash', 'Merged'), '')
+
+
+class SubagentRulesTest(HookCase):
+    def start(self, agent_type, env=None):
+        return self.context(self.run_hook('subagent', {'agent_type': agent_type, 'agent_id': 'a1'}, env), 'SubagentStart')
+
+    def test_implementers_get_the_house_rules(self):
+        ctx = self.start('tea-sdlc:backend-engineer-subagent')
+        for fragment in ('BLOCKED', 'requirement ID', 'tdd-gate', 'contracts/', 'do not dispatch'):
+            self.assertIn(fragment, ctx)
+        self.assertLess(len(ctx), 2000)
+
+    def test_general_purpose_agents_get_them_too(self):
+        self.assertIn('BLOCKED', self.start('general-purpose'))
+
+    def test_read_only_built_ins_are_left_alone(self):
+        for agent in ('Explore', 'claude-code-guide', 'statusline-setup'):
+            self.assertEqual(self.start(agent), '', agent)
+
+    def test_off_switch(self):
+        self.assertEqual(self.start('general-purpose', {'TEA_SDLC_AUTOPILOT': 'off'}), '')
 
 
 class SessionSnapshotTest(HookCase):

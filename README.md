@@ -2,7 +2,7 @@
 
 > Software Development Life Cycle plugin for Claude Code — specialist subagents, trust-boundary routing, a canonical documentation layout and automated quality gates.
 
-**Version 2.9.0** · [Changelog](CHANGELOG.md) · MIT
+**Version 3.0.0** · [Changelog](CHANGELOG.md) · MIT
 
 `tea-sdlc` turns Claude Code into a coordinated engineering team: 9 specialist subagents, a 2-tier workflow router that escalates on trust boundaries, one documentation structure shared by every agent and command, and hooks that block secret leaks and unreviewed PRs — plus an **autopilot**, so you never have to remember a slash command or a skill name.
 
@@ -52,27 +52,61 @@ You describe the work in English; the plugin decides which skill, command and ga
 | Session start, resume, `/clear`, compaction | Bootstrap plus a project snapshot: active specs with their plan progress and next step, a resumable `.goal/state.md`, open plans, a repository with no `docs/` yet, the superpowers plugin enabled alongside (use the tea-sdlc twin of each shared skill), a missing `gitleaks` (also shown to you, with the install command). Gate state older than 30 days is pruned | `session-start` |
 | Every prompt | Keyword router: code change → `brainstorming` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → Full workflow; domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `security-engineer-subagent`); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
 | Before the first production edit | Write a failing test first (once per session) · fix a failing external contract first | `tdd-gate.py`, `contract-gate.py` |
-| After tool calls | Three failing test runs in a row → `systematic-debugging`; `git revert` → `incident-to-eval`; a merge while a spec is still `accepted` → `upgrade-service-docs` | `autopilot.py post` |
+| After tool calls | Three failing test runs in a row → `systematic-debugging`; `git revert` → `incident-to-eval`; a merge while a spec is `shipped` (or a pre-AIDLC spec is `accepted`) → `upgrade-service-docs` | `autopilot.py post` |
 | Before the session says “done” | Code changed since the last test run → run the tests or say why none applies (once per change set, at most 3 per session) | `autopilot.py stop` |
-| `git commit` / `git push` / `gh pr create` | Secret scan · pre-PR review recorded for `HEAD` | `security-gate.py`, `pr-review-gate.py` |
+| A subagent starts | The house rules travel with it (subagents never see the bootstrap) | `autopilot.py subagent` |
+| `git commit` / `git push` / `gh pr create` / `gh pr merge` | Secret scan · review stage done · ship stage done | `security-gate.py`, `pr-review-gate.py`, `ship-gate.py` |
 
 Notes are hints, not orders: the session skips any that does not fit and names what it applied. Measured on real headless sessions (Claude Code 2.1.319, `sonnet`): with the prompt note the session loaded `brainstorming`, stated the tier and wrote a failing test before the code; on a “pure rename” it first answered *“I ran no tests”*, the stop gate sent it back, and it ran the suite before reporting.
 
-Switches (environment variables, all default on): `TEA_SDLC_AUTOPILOT=off` (prompt and follow-up notes, session snapshot), `TEA_SDLC_VERIFY_GATE=off`, `TEA_SDLC_TDD_GATE=off`, `TEA_SDLC_CONTRACT_GATE=off`.
+Switches (environment variables, all default on): `TEA_SDLC_AUTOPILOT=off` (prompt and follow-up notes, session snapshot, subagent rules), `TEA_SDLC_SHIP_GATE=off`, `TEA_SDLC_VERIFY_GATE=off`, `TEA_SDLC_TDD_GATE=off`, `TEA_SDLC_CONTRACT_GATE=off`.
 
 ---
 
 ## 🧭 Workflow routing
 
-Every substantive task is classified by `rules/workflow-routing.md` on two axes: does it cross a **trust boundary** (PII, auth, payments, new public surface or vendor, secrets/IAM/crypto config) and how many **domains** it touches.
+Every substantive task is classified by `rules/workflow-routing.md`: does it cross a **trust boundary** (PII, auth, payments, new public surface or vendor, secrets/IAM/crypto config)?
 
 ```
 Trust boundary?
  ├─ NO  ──► Fast path       TDD, no subagents, single pre-PR review (several domains: edit in order, integration check)
- └─ YES ──► Full workflow   Security → contract gate (external contract) → plan → implement → review → QA
+ └─ YES ──► Full workflow   the AIDLC stage machine below, every stage behind a gate
 ```
 
-Gated tiers end with `/upgrade-service-docs` after QA `GO` or merge, which promotes the shipped change into the living docs. Promotion to a heavier tier mid-task is mandatory when scope grows (e.g. a fast-path change discovers a trust boundary).
+Promotion to the full workflow mid-task is mandatory when a fast-path change discovers a trust boundary.
+
+---
+
+## 🔁 AIDLC — spec → plan → build → test → review → ship
+
+A full-workflow change lives in `docs/specs/<feature>/` and moves through stages. Only `scripts/aidlc.py advance` moves it, and only when the gate of the next stage passes. The gates are code (no model call): they check that the evidence exists and still matches the code. Formats and gates: [`references/aidlc.md`](references/aidlc.md).
+
+| Stage | Artifact | Gate checks | Skill |
+|---|---|---|---|
+| **spec** → `accepted` | `requirements.md` with keyed IDs (`RFD-1`), acceptance criteria, `Verify:`; `security.md`; `spec-check.md` | IDs unique and keyed, every requirement has criteria, a blind spec check ran and every guess is closed, Security wrote its file, contract gate, one recorded approval | `brainstorming`, `spec-check` |
+| **plan** → `planned` | `plan.md` task graph (`covers`, `depends`, `owner`, `files`, `test`) | every requirement covered, no cycle, no file shared by tasks that may run in parallel | `writing-plans` |
+| **build** → `building` | feature branch; `ledger.md` | branch recorded, not the default branch | `subagent-driven-development` |
+| **test** → `verified` | `aidlc task-done` / `aidlc verify` ledger events | every task ticked by a passing test command, every requirement referenced by a test, a green run whose **code fingerprint** matches the current code, no failing requirement test in JUnit | `subagent-driven-development`, `verification-before-completion` |
+| **review** → `reviewed` | `review.md`: Spec axis, Standards axis, QA verdict | no open finding, QA GO, review stamped against the current code | `requesting-code-review`, `receiving-code-review` |
+| **ship** → `shipped` | `ship.md`: GO, rollback, post-release verification | CI green (`gh pr checks`), changelog has the version, code unchanged since review | `shipping` |
+| **promote** → `implemented` | living docs, README traceability table | traceability written | `/upgrade-service-docs` |
+
+What it gives you that a prose workflow cannot:
+
+- **Requirement → test traceability.** `aidlc trace <feature>` prints every requirement with the tasks that cover it, the tests that reference it and their last result; `--write` puts the table in the spec README.
+- **Parallel build without conflicts.** `aidlc next <feature>` returns the tasks whose dependencies are done, in batches that share no file; the build skill dispatches a batch at once.
+- **Decisions instead of stalls.** The session records `aidlc ruling` (decision, why, cost if wrong) and keeps going; the ledger is the decision record a reviewer reads.
+- **Evidence that cannot go stale silently.** Test runs and reviews are keyed to a fingerprint of the code; change one line and the gate asks for a fresh run.
+- **Hard stops where they matter.** `gh pr create` waits for the review stage, `gh pr merge` for the ship stage (`hooks/ship-gate.py`).
+
+```bash
+python3 scripts/aidlc.py status                  # every spec, its stage, what blocks the next gate
+python3 scripts/aidlc.py next refunds            # tasks ready to build, in conflict-free parallel batches
+python3 scripts/aidlc.py check refunds --to verified
+python3 scripts/aidlc.py trace refunds --write
+```
+
+The session runs these itself; the session-start snapshot shows each active spec's stage, its blockers and its next batch.
 
 ---
 
@@ -103,7 +137,7 @@ One structure for every agent, command and skill, owned by [`references/document
 | Kind | Location | Lifecycle |
 |---|---|---|
 | Living reference — what the system does now | `docs/*.md` per service; `docs/00-overview … 04-ai-friendly/` at system level | Rewritten to match verified code by `/generate-service-docs` and `/upgrade-service-docs` |
-| Change spec — what we are changing and why | `docs/specs/<feature>/` | `proposed → accepted → implemented / superseded` |
+| Change spec — what we are changing and why | `docs/specs/<feature>/` | AIDLC stages `proposed → accepted → planned → building → verified → reviewed → shipped → implemented` |
 | Decision record | `docs/adr/NNNN-<decision>.md` | Immutable once accepted |
 | Workflow state | `docs/specs/<feature>/plan.md`, `docs/plans/` | Disposable |
 
@@ -113,13 +147,17 @@ One structure for every agent, command and skill, owned by [`references/document
 ├── events.md  security.md  configuration.md  troubleshooting.md  diagrams/
 ├── adr/                      NNNN-<decision>.md (main session)
 └── specs/<feature>/
-    ├── README.md             status frontmatter + traceability (integrating session)
-    ├── requirements.md       main session
-    ├── measurement.md        main session, skill measurement-planning (when in scope)
-    ├── ui-design.md          ui-ux-designer
+    ├── README.md             stage frontmatter (key, branch, status) + traceability (main session, aidlc)
+    ├── requirements.md       keyed requirements RFD-1 … with acceptance criteria (main session)
+    ├── spec-check.md         blind spec check: every guess closed (spec-check)
     ├── security.md           security-engineer
+    ├── ui-design.md          ui-ux-designer
     ├── design.md, contracts/ main session (contracts checked by scripts/check-contract.py)
-    └── plan.md               writing-plans
+    ├── measurement.md        measurement-planning (when in scope)
+    ├── plan.md               task graph (writing-plans); ticked only by aidlc task-done
+    ├── ledger.md             aidlc only: advances, task-done, verify, rulings, stamps
+    ├── review.md             Spec + Standards axes + QA verdict
+    └── ship.md               GO / NO-GO, rollback, post-release verification
 ```
 
 Existing projects keep their established locations; the layout file maps legacy folders (`docs/requirements/`, `docs/security/`, `docs/contracts/`, …) and nothing is migrated automatically.
@@ -131,10 +169,10 @@ Existing projects keep their established locations; the layout file maps legacy 
 | Command | Purpose |
 |---|---|
 | `/generate-service-docs` | Build or normalize the living service and system docs from source code |
-| `/upgrade-service-docs` | Promote an implemented change into the living docs and close its spec |
+| `/upgrade-service-docs` | Promote stage: fold a shipped change into the living docs, write its traceability table and close its spec |
 | `/debug-parallel` | Parallel config, diagnostics, code-path and history investigation for multi-service errors |
 | `/prove-it` | List every claim just made and run a check that would fail if it were false; narrow or withdraw what the evidence does not support |
-| `/prompt-builder` | Design a Claude prompt from a description; software changes follow spec → adr → tdd → implement → test → PR |
+| `/prompt-builder` | Design a Claude prompt from a description; a software change gets a prompt that follows the tier: fast path (spec → tdd → implement → test → PR) or the AIDLC stages |
 | `/eval-upgrade` | Score, upgrade and A/B-duel Claude Code assets with the bundled tool in `tools/eval-upgrade/` (Node ≥ 20, no dependencies); state is kept in `~/.claude/state/eval-upgrade` |
 
 ---
@@ -143,7 +181,7 @@ Existing projects keep their established locations; the layout file maps legacy 
 
 | Area | Skills |
 |---|---|
-| Workflow | `session-bootstrap`, `brainstorming`, `measurement-planning`, `writing-plans`, `subagent-driven-development`, `executing-plans`, `dispatching-parallel-agents`, `goal` |
+| Workflow (AIDLC) | `session-bootstrap`, `brainstorming` (spec), `spec-check` (blind spec check), `measurement-planning`, `writing-plans` (task graph), `subagent-driven-development` (parallel build), `executing-plans`, `dispatching-parallel-agents`, `shipping` (ship stage), `goal` |
 | Quality | `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `validate-feature`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `incident-to-eval` |
 | Grounding | `grounding-claims` (codebase and command facts), `find-docs` (library, SDK and CLI facts via Context7 or official docs) |
 | Thinking tools | `clarify` (ask only what changes the work), `expert-lens` (what the best practitioner would notice, do first, refuse), `reframe` (strongest case against the current view) — triggered by the situation or as `/clarify`, `/expert-lens`, `/reframe` |
@@ -159,18 +197,12 @@ Claude API work uses Claude Code's built-in **`/claude-api`** skill plus live do
 | Hook | Event | Behavior |
 |---|---|---|
 | `security-gate.py` | PreToolUse (Bash) | Runs `gitleaks` before `git commit` (staged content) / `git push`; blocks on findings or when gitleaks is unavailable. `git commit -a` is not covered — keep CI scanning as the backstop |
-| `pr-review-gate.py` | PreToolUse (Bash) | Blocks `gh pr create` until a pre-PR review with zero open findings is recorded for `HEAD` via `scripts/mark-pr-review.py`, and while an active external contract fails the contract gate |
+| `pr-review-gate.py` | PreToolUse (Bash) | Blocks `gh pr create` until the review is done: on a branch bound to a full-workflow spec, until the spec passes the `reviewed` gate (keyed to the code fingerprint); otherwise until a review with zero open findings is recorded for `HEAD` via `scripts/mark-pr-review.py`. Also blocks while an active external contract fails the contract gate |
+| `ship-gate.py` | PreToolUse (Bash) | Blocks `gh pr merge` of a branch bound to a full-workflow spec until the spec passes the `shipped` gate (GO decision, rollback plan, green CI, code unchanged since review). Off with `TEA_SDLC_SHIP_GATE=off` |
 | `contract-gate.py` | PreToolUse (Edit/Write/Bash) | Advisory: when an active spec declares an external contract that fails `scripts/check-contract.py`, blocks the first production-code change of a session once. Off with `TEA_SDLC_CONTRACT_GATE=off` |
-| `tdd-gate.py` | PreToolUse (Edit/Write/Bash) + PostToolUse (Bash) | Advisory: records a failing test run per session and blocks the first production-code change that has none, once. Recognises npm/pnpm/yarn/bun, vitest/jest/playwright, pytest/unittest/tox, Gradle/Maven, Go, Cargo, .NET, Flutter, Swift, RSpec and more; shell writes are detected by their target (`>`, `tee`, `sed -i`, inline `open(…,'w')`), not by any code path in a command. Off with `TEA_SDLC_TDD_GATE=off` |
-| `autopilot.py` | UserPromptSubmit, PostToolUse (Edit/Write/Bash), Stop | Prompt router, follow-up notes and the verification gate described in **Autopilot**. Never blocks a tool call; fails silent |
-| `session-start` | SessionStart | Injects the `session-bootstrap` skill (≤ 48 KiB) with the plugin root resolved, plus the project snapshot |
-
----|---|---|
-| `security-gate.py` | PreToolUse (Bash) | Runs `gitleaks` before `git commit` (staged content) / `git push`; blocks on findings or when gitleaks is unavailable. `git commit -a` is not covered — keep CI scanning as the backstop |
-| `pr-review-gate.py` | PreToolUse (Bash) | Blocks `gh pr create` until a pre-PR review with zero open findings is recorded for `HEAD` via `scripts/mark-pr-review.py` |
-| `contract-gate.py` | PreToolUse (Edit/Write/Bash) | Advisory: when an active spec declares an external contract that fails `scripts/check-contract.py`, blocks the first production-code change of a session once. `pr-review-gate.py` enforces it strictly before a PR. Off with `TEA_SDLC_CONTRACT_GATE=off` |
-| `tdd-gate.py` | PreToolUse (Edit/Write/Bash) + PostToolUse (Bash) | Advisory: records a failing test run per session and blocks the first production-code change that has none, once, with a reminder to write the test and see it fail. Off with `TEA_SDLC_TDD_GATE=off` |
-| `session-start` | SessionStart | Injects the `session-bootstrap` skill (≤ 48 KiB) with the plugin root resolved |
+| `tdd-gate.py` | PreToolUse (Edit/Write/Bash) + PostToolUse (Bash) | Advisory: records a failing test run per session and blocks the first production-code change that has none, once. A test run is a command segment that starts with a runner (npm/pnpm/yarn/bun, vitest/jest/playwright, pytest/unittest/tox, Gradle/Maven, Go, Cargo, .NET, Flutter, Swift, RSpec and more), so `npm install -D jest` is not one; shell writes are detected by their target (`>`, `1>`, `&>`, `>|`, `tee`, `sed -i`, `perl -i`, inline `open(…,'w')`). Off with `TEA_SDLC_TDD_GATE=off` |
+| `autopilot.py` | UserPromptSubmit, PostToolUse (Edit/Write/Bash), Stop, SubagentStart | Prompt router, follow-up notes, the verification gate, and the house rules injected into every subagent (leaf only, return contract, TDD, requirement IDs in test names, stay in your files). Never blocks a tool call; fails silent |
+| `session-start` | SessionStart | Injects the `session-bootstrap` skill (≤ 48 KiB) with the plugin root resolved, plus the project snapshot (each active spec's stage, blockers and next batch) |
 
 ---
 
@@ -189,7 +221,18 @@ Claude API work uses Claude Code's built-in **`/claude-api`** skill plus live do
 python3 scripts/check-setup.py
 ```
 
-Checks manifests and version, agent/skill/command frontmatter (alias-only models, valid effort, YAML), that every bundled path reference resolves, that every hook compiles and every `tea-sdlc:<name>` the autopilot can name is a real skill or command, that no `~/.claude/` path or misplaced `${CLAUDE_PLUGIN_ROOT}` remains, and the SessionStart output contract. Run it and `python3 -m unittest discover -s tests` before every release, then bump `version` in `.claude-plugin/plugin.json` and add a `CHANGELOG.md` entry.
+Checks manifests and version, that every bundled file is tracked by git (a personal ignore pattern cannot drop one from the release), agent/skill/command frontmatter (alias-only models, valid effort, YAML), that every bundled path reference resolves, that every hook compiles and every `tea-sdlc:<name>` the autopilot can name is a real skill or command, that no `~/.claude/` path or misplaced `${CLAUDE_PLUGIN_ROOT}` remains, and the SessionStart output contract. Run it and `python3 -m unittest discover -s tests` before every release, then bump `version` in `.claude-plugin/plugin.json` and add a `CHANGELOG.md` entry.
+
+Evaluations ([`evals/README.md`](evals/README.md)):
+
+```bash
+python3 evals/routing/run.py                       # 144 router cases, free, also in CI
+python3 evals/descriptions/run.py                  # description lint + collision check, free, also in CI
+python3 evals/headless/run.py --suite passive,tdd --runs 3 --compare   # real Claude sessions, paid
+python3 evals/headless/run.py --suite lifecycle --runs 2               # spec → ship end to end, paid
+```
+
+`.github/workflows/ci.yml` runs the unit tests, `check-setup.py` and the free evals on Python 3.9 and 3.12 for every push and PR; `evals.yml` runs the paid suites weekly or on demand and fails on a regression against `evals/headless/baseline.json`. A change to a skill description, the router or the bootstrap must not lower a suite's score.
 
 `scripts/validate.sh` starts a headless Claude session that validates pending work in a target project with the `validate-feature` skill.
 
@@ -200,15 +243,18 @@ Checks manifests and version, agent/skill/command frontmatter (alias-only models
 ```
 tea-sdlc/
 ├── .claude-plugin/
-│   ├── plugin.json          # Manifest (name, version, hooks)
+│   ├── plugin.json          # Manifest (name, version)
 │   └── marketplace.json     # Marketplace entry
 ├── agents/                  # 9 subagent definitions
+├── .github/workflows/       # ci.yml (tests, check-setup, free evals), evals.yml (paid headless suites)
 ├── commands/                # 6 slash commands
-├── hooks/                   # hooks.json, autopilot.py, security-gate.py, pr-review-gate.py, tdd-gate.py, contract-gate.py, session-start
+├── evals/                   # routing, description lint, headless passive/tdd/lifecycle suites, baseline
+├── hooks/                   # hooks.json, autopilot.py, security-gate.py, pr-review-gate.py, ship-gate.py, tdd-gate.py, contract-gate.py, session-start
 ├── references/              # Shared guidance (documentation layout, model guide, …)
 ├── rules/                   # Routing, contracts, review and persistence rules
-├── scripts/                 # check-setup.py, check-contract.py, validate.sh, mark-pr-review.py
+├── scripts/                 # aidlc.py (lifecycle engine), check-setup.py, check-contract.py, mark-pr-review.py, validate.sh
 ├── skills/                  # Workflow, quality and domain skills
+├── tests/                   # unit tests for hooks, engine and evals
 ├── CHANGELOG.md
 └── README.md
 ```

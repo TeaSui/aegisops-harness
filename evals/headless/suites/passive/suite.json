@@ -1,0 +1,8 @@
+{
+  "description": "Passive triggering: a prompt that describes a situation without naming the skill; passes when the session invokes an expected skill (Skill tool) or agent (Agent/Task subagent_type).",
+  "max_turns": 8,
+  "timeout_s": 420,
+  "permission_mode": null,
+  "allowed_tools": ["Skill", "Read", "Glob", "Grep", "Bash(npm test*)", "Bash(node *)", "Bash(ls *)", "Bash(cat *)",
+                    "Bash(git log*)", "Bash(git status*)", "Bash(git diff*)"]
+}

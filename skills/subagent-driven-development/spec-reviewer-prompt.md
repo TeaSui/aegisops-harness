@@ -4,6 +4,14 @@ Use this template when dispatching a spec compliance reviewer subagent.
 
 **Purpose:** Verify implementer built what was requested (nothing more, nothing less)
 
+**Two uses:**
+- **Per task (build stage):** "What Was Requested" is the task block plus the acceptance criteria of the
+  requirement IDs it covers; the scope is the task's files.
+- **Spec axis of the review stage** (`skills/requesting-code-review/SKILL.md`): "What Was Requested" is the
+  spec folder — `requirements.md`, `design.md`, `contracts/` — plus the output of `aidlc trace <f>`; the scope
+  is the whole change. Fill `AXIS_RETURN` below so findings come back as `review.md` lines
+  (format: `references/aidlc.md` § review.md).
+
 Choose model/effort using `references/model-guide.md`. Every reviewer receives the
 actual requirements, owned review scope and applicable evidence. Use the available Agent tool
 (`Task` alias supported); no model label substitutes for independent inspection.
@@ -60,6 +68,11 @@ Task tool (general-purpose or code-reviewer):
     - Did they over-engineer or add unnecessary features?
     - Did they add "nice to haves" that weren't in spec?
 
+    **Traceability:**
+    - Does each acceptance criterion have a test named with its requirement ID (e.g. `RFD-1 rejects over-capture`)
+      that checks the behavior the criterion states?
+    - Does any test cite a requirement ID it does not actually check?
+
     **Misunderstandings:**
     - Did they interpret requirements differently than intended?
     - Did they solve the wrong problem?
@@ -70,6 +83,13 @@ Task tool (general-purpose or code-reviewer):
     Report every discrepancy you find, including ones you are uncertain about or consider
     minor. Do not filter for importance or confidence — the dispatcher filters downstream.
     Include a confidence level per finding.
+
+    [AXIS_RETURN — review stage only: "List every finding as one line,
+    `- [ ] S<n> (must|should|nit): <requirement ID or design/contract section> — <what is missing, extra or wrong>
+    at <file:line> (confidence: high|medium|low)`, numbering from S<first>. must = a requirement or acceptance
+    criterion not met, or behavior that contradicts design/contracts; should = partial coverage, a test that does
+    not prove its criterion, scope creep; nit = wording or naming against the glossary. Do not rank across or merge
+    findings; the main session copies your lines into review.md as they are."]
 
     Report per `rules/subagent-return-format.md` (any shape — prose, markdown, or XML):
     - Status DONE when everything matches after code inspection (spec compliant)

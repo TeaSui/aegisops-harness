@@ -1,0 +1,12 @@
+{"type": "system", "subtype": "init", "claude_code_version": "9.9.9", "model": "test-model", "session_id": "s", "tools": [], "skills": []}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "tea-sdlc:test-driven-development"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "s", "content": "Launching", "is_error": false}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "w", "name": "Write", "input": {"file_path": "/x/repo/test/clamp.test.js", "content": "..."}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w", "content": "File created", "is_error": false}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": "npm test"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b1", "content": "not ok 3 - clamp\n# pass 2\n# fail 1", "is_error": true}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "e", "name": "Edit", "input": {"file_path": "/x/repo/src/math.js", "old_string": "a", "new_string": "b"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "e", "content": "The file has been updated", "is_error": false}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "b2", "name": "Bash", "input": {"command": "npm test 2>&1 | tail -5"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b2", "content": "# tests 3\n# pass 3\n# fail 0", "is_error": false}]}}
+{"type": "result", "subtype": "success", "is_error": false, "duration_ms": 40000, "num_turns": 4, "total_cost_usd": 0.4, "result": "done"}

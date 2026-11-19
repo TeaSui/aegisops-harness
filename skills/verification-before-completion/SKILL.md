@@ -1,6 +1,6 @@
 ---
 name: verification-before-completion
-description: Use before saying work is done, fixed or passing, before a commit, PR or handing to the next task — find the check that would show the claim true for the exact state, reuse it only while still valid or run it, and report what the output supports with the evidence beside it (tea-sdlc — follows the routing tiers and hook gates)
+description: Use before saying work is done, fixed or passing, before a commit, PR or handing to the next task — find the check that would show the claim true for the exact state, reuse it only while still valid or run it, and report what the output supports with the evidence beside it; in the full workflow the evidence is a passing aidlc gate on a fingerprinted `aidlc verify` run (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
 # Verification before completion
@@ -24,7 +24,23 @@ A completion claim is something the user acts on: they merge, deploy or move to 
 | Bug fixed | The original symptom no longer reproduces | The code was changed |
 | Regression test works | It failed before the fix and passes after | It passes once |
 | Agent completed | The changed files/diff, cited evidence and exit-criteria results, read by you | The agent's own success report |
-| Requirements met | A line-by-line check against the plan or spec | Tests passing |
+| Requirements met | A line-by-line check against the plan or spec; in the full workflow `aidlc trace` | Tests passing |
+| Full-workflow stage reached | `aidlc check <f> --to <stage>` passes, or `aidlc advance` succeeded | A test run outside `aidlc verify`; a `verify` event whose fingerprint no longer matches the code |
+
+## Full workflow: the gate is the evidence
+
+For a change with a spec folder, the evidence is recorded by the CLI, not by a test run you read in the terminal (formats and gates: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`):
+
+- **Tests pass** means the latest `verify` event in `ledger.md` exited 0 and its code fingerprint equals the current one. Run the suite through `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full suite>"`; a run outside the CLI is not recorded and does not count. Any code edit after that run changes the fingerprint, so run `verify` again before the next claim.
+- **A task is done** means `aidlc task-done` ran its exit command, it exited 0, and the task is ticked; never tick `plan.md` by hand.
+- **Requirements met** means `aidlc trace <f>` shows every requirement with a passing test, a check, or a stated manual verification.
+- **The change is done, verified, reviewed or ready to ship** means the gate for that stage passes. Quote its result; when it lists findings, report the stage the spec is actually at and what blocks the next one, then fix them rather than describing the change as done.
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" check <f> --to <verified|reviewed|shipped>
+```
+
+The fast path keeps the general rules below: the test output for the exact state you are claiming.
 
 ## Scope the claim to the evidence
 

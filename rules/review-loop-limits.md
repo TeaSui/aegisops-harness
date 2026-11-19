@@ -20,7 +20,8 @@ When using subagent-driven-development or any workflow with review loops:
 ## Implementer Fix Rounds
 - When reviewer sends implementer back to fix:
   - Fix round 1: Normal — address specific issues
-  - Fix round 2: Concerning — check if issues are symptoms of a deeper problem. If issues persist after fix round 2 → STOP and escalate. Do not begin a third fix round.
+  - Fix round 2: Concerning — check if issues are symptoms of a deeper problem.
+  - Still failing after round 2: the same implementer does not get a third round. Re-dispatch the task once to a fresh implementer one model tier up (references/model-guide.md), with the reviewers' findings and the failed approaches. If that attempt fails too → STOP and escalate.
 
 ## Convergence Across Rounds
 - A re-review after a fix round covers the fix diff, not the whole change, unless the fix touched shared behavior.

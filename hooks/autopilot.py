@@ -55,19 +55,21 @@ def rx(pattern):
 # A change verb counts only outside command names (`/eval-upgrade`, `create-pr`).
 CHANGE = rx(r'(?<![\w/-])(add|adding|implement\w*|build|create|fix|fixing|refactor\w*|change|modify|update|remove|'
             r'delete|migrate|rename|integrate|upgrade|introduce|rewrite|port|bump|wire up|optimi[sz]e|reduce|'
-            r'improve)(?![\w-])')
+            r'improve|write|store|persist|validate)(?![\w-])')
 # What the change is about. Strong nouns mean code; weak ones mean code unless the prompt is about prose or git/ops.
 STRONG_CODE = rx(r'\b(functions?|methods?|class(es)?|endpoints?|api|apis|unit tests?|migrations?|schemas?|quer(y|ies)|'
                  r'handlers?|controllers?|components?|hooks?|regex)\b'
                  r'|\.(py|ts|tsx|js|jsx|java|kt|go|rs|cs|rb|php|swift|dart|c|cpp|h)\b')
-WEAK_CODE = rx(r'\b(code|feature|services?|modules?|logic|retry|retries|validation|cache|tests?|ui|bug|screen|button)\b')
+WEAK_CODE = rx(r'\b(code|feature|services?|modules?|logic|retry|retries|validation|checks?|cache|tests?|ui|bug|screen|button|alarms?|lambdas?|stacks?|infra\w*)\b')
 PROSE = rx(r'(?<![\w/<])/[a-z][\w-]+|\b(prompts?|rules?|readme|docs?|documentation|documents?|guidelines?|changelog|skills?|commands?|wording|'
            r'spec)\b|\.md\b')
-OPS = rx(r'\b(branch(es)?|worktrees?|repo(sitory|s)?|version|commits?|remote|credentials?|profiles?|publish|tags?|'
+OPS = rx(r'\b(branch(es)?|worktrees?|repo(sitory|s)?|version|commits?|remote|credentials?|aws profiles?|publish|tags?|'
          r'release|author)\b')
 DEBUG = rx(r'\b(bugs?|errors?|exceptions?|stack ?trace|traceback|crash\w*|fail(s|ing|ed|ure)?|broken|regression|'
            r'flaky|not working|does ?n[o\']t work|panic|segfault|npe|nullpointer\w*|timeouts?|5\d\d)\b'
            r'|\b(is|are|went|turned|goes|going) red\b|\bred (builds?|tests?|ci|pipelines?)\b')
+# "an alarm for Lambda errors" defines monitoring; it is not a bug report.
+MONITORED = rx(r'\b(alarms?|alerts?|monitors?|metrics?|dashboards?)\b[^.\n]{0,40}\b(errors?|failures?|timeouts?|5\d\d)\b')
 QUESTION_START = rx(r'^\s*(does|do|did|is|are|was|were|can|could|should|would|will|what|why|how|which|where|when|'
                     r'who)\b')
 MULTI_SERVICE = rx(r'\b(between|across) (the )?(micro)?services\b|\bservices? \S+ (and|->|→) \S+ services?\b')
@@ -100,7 +102,7 @@ DOMAINS = (
     ('data-pipeline-patterns', rx(r'\b(etl|elt|spark|pyspark|databricks|delta lake|dbt|data warehouse|scd|cdc|'
                                   r'airflow)\b')),
     ('frontend-react', rx(r'\b(react(?! native)|next\.?js|jsx|tsx|frontend|front-end|vitest)\b')),
-    ('fintech-mobile', rx(r'\b(flutter|dart|ios|android|swiftui|react native|mobile (app|banking)s?)\b')),
+    ('fintech-mobile', rx(r'\b(flutter|dart|ios(?! safari)|android|swiftui|react native|mobile (app|banking)s?)\b')),
     ('observability', rx(r'\b(datadog|dogstatsd|dd-trace|dd-java-agent|apm)\b')),
     ('api-contract-testing', rx(r'\b(pact|openapi|swagger|contract tests?|consumer[- ]driven)\b')),
     ('bdd-cucumber', rx(r'\b(cucumber|gherkin|bdd|godog)\b|\.feature\b')),
@@ -126,18 +128,23 @@ INTENTS = (
                      r'|\b(does|do|is) (the )?[\w.\-/ ]{1,40}\bsupport\b|\bwhich version\b'
                      r'|\bis (it|this) (deprecated|still supported)\b')),
     ('validate-feature', rx(r'\bready (for|before) (a |the )?(pr|merge|review|release)\b'
-                            r'|\bbefore I open a (pr|pull request)\b|\bvalidate (the|my|this|these|pending)\b'
+                            r'|\bbefore I open a (pr|pull request)\b'
+                            r'|\bvalidate (the |my |this |these )?(pending )?(changes?|branch|work|diff|feature|pr)\b'
                             r'|\bcheck (that )?(the|my|this) (pending )?(changes?|work|diff)\b')),
     ('receiving-code-review', rx(r'\b(reviewer|review comments?|review feedback|pr comments?)\b[^.\n]{0,40}'
                                  r'\b(left|said|says|asks?|wants?|suggests?|flagged|commented)\b'
                                  r'|\b(deal with|address|apply|handle) (the |this |their )?(review|review comments?|'
                                  r'feedback|pr comments?)\b')),
     ('requesting-code-review', rx(r'\b(get|have) (it|this|them|these|the \w+(?: \w+)?) reviewed\b|'r'\breview (my|the|this|these) (code|changes?|diff|pr|branch)\b|\bcode review\b')),
+    ('shipping', rx(r'\bship (it|this|the \w+)\b|\b(cut|make|do) (a |the )?release\b|\brelease (it|this|v?\d[\w.]*)\b'
+                    r'|\bdeploy (it|this)\b|\bdeploy (the \w+ )?to (prod\w*|staging|production)\b|\bgo live\b')),
     ('finishing-a-development-branch', rx(r'(?<!→ )(?<!-> )(?<!auto )\b(open|create|raise|make|send) (a |the )?'
                                           r'(pr|pull request)\b'
-                                          r'|\bship it\b|\bmerge (it|this|the branch)\b')),
+                                          r'|\bmerge (it|this|the branch)\b')),
     ('prove-it', rx(r'\b(are you sure|really (done|fixed|working)|prove it|double[- ]check)\b')),
 )
+LIFECYCLE_STATUS = rx(r'\b(where are we|what\'?s next|what is next|which stage|status of (the|this) (feature|spec|change))\b')
+
 # Intents that frame the whole task run before brainstorming; the others follow the change workflow.
 OPENERS = ('goal', 'clarify', 'expert-lens', 'reframe')
 # Intents that still apply when the prompt is a question; the rest ask for work to be done.
@@ -173,13 +180,14 @@ def route(prompt, rules_dir):
     if question:
         intents = [name for name in intents if name in CONVERSATIONAL]
     else:
-        debug = match_word(DEBUG, text)
+        debug = match_word(DEBUG, MONITORED.sub(' ', text))
         change = match_word(CHANGE, text)
         if not is_code_work(text, debug):
             change = None
         if change or debug:
             trust = [(label, hit) for label, pattern in TRUST if (hit := match_word(pattern, text))]
-    if not (change or debug or intents or domains):
+    status_question = bool(LIFECYCLE_STATUS.search(text))
+    if not (change or debug or intents or domains or status_question):
         return ''
     chain = [i for i in intents if i in OPENERS]
     if change or debug:
@@ -214,6 +222,9 @@ def route(prompt, rules_dir):
     if 'finishing-a-development-branch' in chain:
         lines.append(f'Before the PR: the single pass in {rules_dir}/pre-pr-review.md, recorded with '
                      f'{PLUGIN_ROOT}/scripts/mark-pr-review.py.')
+    if status_question:
+        lines.append(f'Lifecycle state: run python3 "{PLUGIN_ROOT}/scripts/aidlc.py" status (and `next <feature>`) '
+                     'and answer from its output.')
     if domains:
         lines.append('Domain skill, load before answering or coding: '
                      + ', '.join(f'{skill(name)} ("{hit}")' for name, hit in domains) + '.')
@@ -333,12 +344,12 @@ def post(payload, session, cwd):
                 notes.append(f'A commit was just reverted. Load {skill("incident-to-eval")} to turn the defect into '
                              'a regression case for review quality (ask the user only for facts you cannot find).')
             if MERGE.search(command):
-                pending = [(spec, meta) for spec, meta in active_specs(repo_root(cwd), ('accepted',))
+                pending = [(spec, meta) for spec, meta in active_specs(repo_root(cwd), ('accepted', 'shipped'))
                            if str(spec) not in state.get('promote_nudged', [])]
                 if pending:
                     state.setdefault('promote_nudged', []).extend(str(spec) for spec, _ in pending)
                     names = ', '.join(display_path(str(spec), cwd) for spec, _ in pending)
-                    notes.append(f'A merge just ran and these specs are still `accepted`: {names}. When the change '
+                    notes.append(f'A merge just ran and these specs are not promoted yet: {names}. When the change '
                                  f'is merged on the target branch, run {skill("upgrade-service-docs")} yourself to '
                                  'promote it into the living docs and close the spec.')
     if state != before:
@@ -378,9 +389,18 @@ def plan_progress(path):
     return (done, total) if total else None
 
 
+# What each stage needs next, and the skill that does it (references/aidlc.md).
 NEXT_STEP = {
-    'proposed': 'finish requirements/design (+ Security and contracts when the routing tier needs them)',
-    'accepted': 'implement → review → QA, then run upgrade-service-docs after GO/merge',
+    'proposed': 'finish the spec (keyed requirements, security, design/contracts), run tea-sdlc:spec-check, get the '
+                'one approval, then `aidlc advance <spec> accepted`',
+    'accepted': 'plan the task graph with tea-sdlc:writing-plans, then `aidlc advance <spec> planned`',
+    'planned': '`aidlc advance <spec> building` on a feature branch, then build the `aidlc next` batches '
+               '(tea-sdlc:subagent-driven-development)',
+    'building': 'build the `aidlc next` batches; finish tasks with `aidlc task-done`; then `aidlc verify` and advance',
+    'verified': 'two-axis review + QA into review.md (tea-sdlc:requesting-code-review), `aidlc stamp <spec> review`, '
+                'then advance',
+    'reviewed': 'ship stage (tea-sdlc:shipping): PR, CI, ship.md, `aidlc advance <spec> shipped`, merge',
+    'shipped': 'promote with upgrade-service-docs, then `aidlc advance <spec> implemented`',
 }
 
 
@@ -420,6 +440,47 @@ def prune_state(now=None):
                 pass
 
 
+def load_aidlc():
+    spec = importlib.util.spec_from_file_location('tea_sdlc_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def spec_lines(root):
+    """One line per active spec: stage, what the next gate still needs, and the next parallel batch."""
+    cli = f'python3 "{PLUGIN_ROOT}/scripts/aidlc.py"'
+    try:
+        aidlc = load_aidlc()
+        rows = [row for row in aidlc.status(str(root)) if row.get('stage') in NEXT_STEP]
+    except Exception:  # engine missing or broken: fall back to the README status alone
+        aidlc, rows = None, [{'path': str(spec), 'stage': meta.get('status', 'proposed'), 'blockers': []}
+                             for spec, meta in active_specs(root)]
+    lines = []
+    for row in rows[:6]:
+        rel = display_path(str(row['path']), root)
+        stage = row['stage']
+        progress = plan_progress(pathlib.Path(row['path']) / 'plan.md')
+        detail = f', plan {progress[0]}/{progress[1]} tasks done' if progress else ''
+        if row.get('legacy'):
+            detail += ' (legacy: no key, not gated)'
+        elif row.get('blockers'):
+            detail += f'; next gate blocked by: {"; ".join(str(b) for b in row["blockers"][:3])}'
+        elif row.get('passes'):
+            detail += f'; the {row.get("next")} gate already passes — advance it'
+        if aidlc and stage == 'building':
+            try:
+                batch = (aidlc.next_batches(row['path']) or [[]])[0]
+                if batch:
+                    detail += f'; next parallel batch: {", ".join(str(task.get("id")) for task in batch)}'
+            except Exception:
+                pass
+        lines.append(f'Spec {rel} at stage `{stage}`{detail}. Next: {NEXT_STEP[stage].replace("<spec>", rel)}.')
+    if rows:
+        lines.append(f'Lifecycle CLI: {cli} status | next <spec> | check <spec> (references/aidlc.md).')
+    return lines
+
+
 def snapshot(cwd, which=None):
     """Return (context lines for Claude, message for the user or None)."""
     which = which or __import__('shutil').which
@@ -428,14 +489,7 @@ def snapshot(cwd, which=None):
     goal = root / '.goal' / 'state.md'
     if goal.is_file():
         lines.append('Resumable goal: read .goal/state.md first and continue from it (skill tea-sdlc:goal).')
-    for spec, meta in active_specs(root):
-        rel = display_path(str(spec), root)
-        progress = plan_progress(spec / 'plan.md')
-        status = meta.get('status', 'proposed')
-        extra = f', contract: {meta["contract"]}' if meta.get('contract') else ''
-        plan = f', plan {progress[0]}/{progress[1]} tasks done' if progress else ''
-        lines.append(f'Active spec {rel} ({status}{extra}{plan}) → next: '
-                     f'{NEXT_STEP.get(status, "")}.')
+    lines.extend(spec_lines(root))
     plans = sorted((root / 'docs' / 'plans').glob('*.md'), reverse=True)[:2] if (root / 'docs' / 'plans').is_dir() else []
     for plan in plans:
         progress = plan_progress(plan)
@@ -457,6 +511,30 @@ def snapshot(cwd, which=None):
     return lines, user
 
 
+# Subagents never see the SessionStart bootstrap, so the rules they must follow travel with each dispatch.
+READ_ONLY_AGENTS = ('explore', 'claude-code-guide', 'statusline-setup', 'web-fetch', 'plan')
+
+
+def subagent_rules(agent_type):
+    if str(agent_type).split(':')[-1].lower() in READ_ONLY_AGENTS:
+        return ''
+    rules = PLUGIN_ROOT / 'rules'
+    return '\n'.join((
+        'tea-sdlc rules for this subagent (the main session dispatched you; its bootstrap does not reach you):',
+        '- You are a leaf: do not dispatch further agents. If the task needs more, return the dispatch plan and stop.',
+        f'- Return a status (DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT or BLOCKED), evidence paths the dispatcher can '
+        f'Read, and a check of each exit criterion ({rules}/subagent-return-format.md).',
+        '- Evidence before claims: cite file:line or command output; never invent paths, flags or results.',
+        '- TDD: the tdd-gate hook blocks the first production edit without a recorded failing test run. Write the '
+        'test, run it, see it fail, then change the code. Name each test with the requirement ID it covers '
+        '(for example "RFD-1 rejects over-capture") so the trace gate finds it.',
+        '- Stay inside the files your task owns. Do not edit docs/specs/**, contracts/ or another task\'s files unless '
+        'the dispatch says so; others work in the same checkout, never revert their changes.',
+        '- A contract-gate finding means the contract must change: return NEEDS_CONTEXT with it instead of editing '
+        'contracts/.',
+    ))
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ''
     try:
@@ -476,6 +554,10 @@ def main():
         note = post(payload, session, cwd)
         if note and autopilot_on:
             emit('PostToolUse', note)
+    elif mode == 'subagent' and autopilot_on:
+        rules = subagent_rules(payload.get('agent_type', ''))
+        if rules:
+            emit('SubagentStart', rules)
     elif mode == 'stop' and session and os.environ.get('TEA_SDLC_VERIFY_GATE', '').lower() != 'off':
         reason = stop(payload, session, cwd)
         if reason:

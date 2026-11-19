@@ -2,7 +2,7 @@
 """Contract gate: deterministic structure + compatibility check for a spec's `contracts/` folder.
 
 Usage: python3 scripts/check-contract.py <spec-dir> [--base <authoritative-openapi-file>] [--repo <repo-root>]
-       python3 scripts/check-contract.py --scan <repo-root>   # every active spec (proposed/accepted) with contract: external
+       python3 scripts/check-contract.py --scan <repo-root>   # every active spec (proposed…shipped) with contract: external
 
 The spec's README.md frontmatter decides whether the gate applies:
   contract: external | none     (default: external when contracts/ exists, otherwise none)
@@ -30,6 +30,7 @@ try:
 except ImportError:
     yaml = None
 
+ACTIVE = ('proposed', 'accepted', 'planned', 'building', 'verified', 'reviewed', 'shipped')  # references/aidlc.md §1
 METHODS = ('get', 'put', 'post', 'delete', 'patch', 'head', 'options')
 BASE_GUESSES = ('api/openapi.yaml', 'api/openapi.yml', 'api/openapi.json', 'openapi.yaml', 'openapi.yml',
                 'openapi.json', 'src/main/resources/openapi.yaml', 'src/main/resources/api/openapi.yaml')
@@ -277,7 +278,7 @@ def active_specs(root):
     for pattern in ('docs/specs/*/README.md', '*/docs/specs/*/README.md'):
         for readme in sorted(root.glob(pattern)):
             meta = frontmatter(readme)
-            if meta.get('contract') == 'external' and meta.get('status', 'proposed') in ('proposed', 'accepted'):
+            if meta.get('contract') == 'external' and meta.get('status', 'proposed') in ACTIVE:
                 found.append(readme.parent)
     return found
 
