@@ -142,5 +142,66 @@ class CheckSetupCliTest(unittest.TestCase):
         self.assertTrue(any('CLAUDE.md' in w for w in report['warnings']), report['warnings'])
 
 
+
+class PluginIntegrityTest(unittest.TestCase):
+    """check-setup.py run against a scratch copy of the plugin with one defect injected."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name) / 'plugin'
+        import shutil
+        shutil.copytree(ROOT, self.root, ignore=shutil.ignore_patterns('.git', '__pycache__', '.idea', 'node_modules'))
+
+    def check(self):
+        result = subprocess.run([sys.executable, str(self.root / 'scripts' / 'check-setup.py'), '--root',
+                                 str(self.root), '--project', str(self.root)], capture_output=True, text=True,
+                                timeout=60)
+        return json.loads(result.stdout)
+
+    def test_clean_copy_passes(self):
+        self.assertEqual(self.check()['errors'], [])
+
+    def test_dangling_skill_reference_fails(self):
+        hook = self.root / 'hooks' / 'autopilot.py'
+        hook.write_text(hook.read_text().replace("('cdk-testing',", "('no-such-skill',", 1)
+                        + "\n# see tea-sdlc:missing-command\n")
+        errors = ' '.join(self.check()['errors'])
+        self.assertIn('tea-sdlc:missing-command', errors)
+        self.assertIn('no-such-skill', errors)
+
+    def test_hook_with_syntax_error_fails(self):
+        (self.root / 'hooks' / 'broken.py').write_text('def oops(:\n')
+        self.assertIn('hooks/broken.py', ' '.join(self.check()['errors']))
+
+    def test_each_root_is_checked_with_its_own_autopilot(self):
+        hook = self.root / 'hooks' / 'autopilot.py'
+        hook.write_text(hook.read_text().replace("('cdk-testing',", "('no-such-skill',", 1))
+        probe = (
+            'import importlib.util, json, sys, io, contextlib\n'
+            'spec = importlib.util.spec_from_file_location("cs", sys.argv[1]); m = importlib.util.module_from_spec(spec)\n'
+            'spec.loader.exec_module(m)\n'
+            'for root in sys.argv[2:]:\n'
+            '    sys.argv = ["x", "--root", root, "--project", root]; out = io.StringIO()\n'
+            '    with contextlib.redirect_stdout(out): m.main()\n'
+            '    print(json.dumps(json.loads(out.getvalue())["errors"]))\n')
+        result = subprocess.run([sys.executable, '-c', probe, str(ROOT / 'scripts' / 'check-setup.py'), str(ROOT),
+                                 str(self.root)], capture_output=True, text=True, timeout=120)
+        first, second = [json.loads(line) for line in result.stdout.splitlines()[-2:]]
+        self.assertEqual(first, [])
+        self.assertIn('no-such-skill', ' '.join(second))
+
+    def test_check_setup_does_not_touch_the_real_state_dir(self):
+        home = self.root.parent / 'home'
+        stale = home / '.claude' / 'state' / 'tdd' / 'old.json'
+        stale.parent.mkdir(parents=True)
+        stale.write_text('{}')
+        os.utime(stale, (0, 0))
+        subprocess.run([sys.executable, str(self.root / 'scripts' / 'check-setup.py'), '--root', str(self.root),
+                        '--project', str(self.root)], capture_output=True, text=True, timeout=60,
+                       env={**os.environ, 'HOME': str(home)})
+        self.assertTrue(stale.exists())
+
+
 if __name__ == '__main__':
     unittest.main()

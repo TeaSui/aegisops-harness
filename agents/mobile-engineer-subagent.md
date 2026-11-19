@@ -97,6 +97,8 @@ Escalate — do not guess — when:
 
 When escalating: state the task, what was attempted, what is blocking, and propose options (e.g., scope split, alternative approach, need human decision).
 
+**Return contract:** end with a status keyword + evidence paths + per-exit-criterion check per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`; the dispatch's return_format wins over this format.
+
 ## API Response Contract
 
 When consuming backend APIs, expect the project's standard envelope:

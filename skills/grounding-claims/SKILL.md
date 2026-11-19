@@ -1,6 +1,6 @@
 ---
 name: grounding-claims
-description: Use when about to state a fact about the codebase, a library API, a CLI flag, a command's behavior, a commit, or any verifiable external detail - requires citing a source (file:line, tool output, context7 doc) or saying "I don't know"; evidence before assertion, every time
+description: Use when about to assert a codebase, git-history, command-output or subagent-evidence fact not seen in this session's tool output — cite file:line or output, or say "I don't know". For library/API documentation lookups use find-docs.
 ---
 
 # Grounding Claims
@@ -42,7 +42,7 @@ BEFORE asserting any verifiable fact:
 1. IDENTIFY: Is this a verifiable claim? (path, name, flag, behavior, version, history)
 2. LOCATE: Where is the source of truth?
    - Codebase fact → Read / Grep / Glob
-   - Library fact → configured Context7 when available; current official docs, installed help or local source are valid alternatives
+   - Library fact → `find-docs` (configured Context7 when available; current official docs, installed help or local source are valid alternatives)
    - CLI fact → --help / man / code
    - History fact → git log / git show / gh
    - Runtime fact → run the command

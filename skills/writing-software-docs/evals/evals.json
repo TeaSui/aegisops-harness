@@ -5,7 +5,7 @@
       "id": 0,
       "name": "adr-kafka-decision",
       "prompt": "We had a debate this sprint and landed on Kafka over SQS for our KYC event pipeline. The deciding factor was we need per-customer ordering (state transitions can't arrive out of order) and the decision engine needs to replay events. SQS FIFO's throughput caps were the dealbreaker. Can you write this decision up properly so it's on record for the team? We number our architecture decisions.",
-      "expected_output": "An ADR (Architecture Decision Record): Status + Date header, Context, Decision, Alternatives considered (SQS FIFO and at least one more), and honest Consequences (pros AND cons). Sequence-numbered filename like adr-NNNN-...",
+      "expected_output": "An ADR (Architecture Decision Record): Status + Date header, Context, Decision, Alternatives considered (SQS FIFO and at least one more), and honest Consequences (pros AND cons). Sequence-numbered filename like NNNN-<decision>.md (e.g. docs/adr/0007-use-kafka-over-sqs.md)",
       "files": [],
       "assertions": []
     },

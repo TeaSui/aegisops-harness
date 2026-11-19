@@ -28,8 +28,14 @@ interface AppStackProps extends cdk.StackProps {
 
 ## Lambda Patterns
 
+Current CDK v2 prefers an explicit `logGroup` (a `logs.LogGroup` you create, which supports tag propagation and Aspects) over the legacy `logRetention` prop, which uses a custom resource. Check which the installed `aws-cdk-lib` supports and what the project already uses; do not upgrade CDK just for this. [aws-lambda README: Log Group](https://github.com/aws/aws-cdk/blob/main/packages/aws-cdk-lib/aws-lambda/README.md).
+
 ```typescript
 // Standard Lambda construct
+const handlerLogs = new logs.LogGroup(this, 'HandlerLogs', {
+  retention: logs.RetentionDays.ONE_MONTH,
+});
+
 const handler = new lambda.Function(this, 'Handler', {
   functionName: `${props.envName}-my-handler`,
   runtime: lambda.Runtime.NODEJS_22_X,
@@ -49,7 +55,7 @@ const handler = new lambda.Function(this, 'Handler', {
   timeout: Duration.seconds(30),
   memorySize: 512,
   tracing: lambda.Tracing.ACTIVE,
-  logRetention: logs.RetentionDays.ONE_MONTH,
+  logGroup: handlerLogs,
   deadLetterQueue: dlq,
 });
 
@@ -242,13 +248,35 @@ export const handleBatch = async (event: SQSEvent, context: Context): Promise<SQ
   return processBatch(event);
 };
 
-// CloudWatch Alarms
+// Custom metrics (Powertools v2, Embedded Metric Format). Namespace and names follow
+// references/observability-patterns.md (<service>.<entity>.<action>[.<outcome>]).
+import { Metrics, MetricUnit } from '@aws-lambda-powertools/metrics';
+const metrics = new Metrics({ namespace: projectMetricNamespace, serviceName: 'order-service' });
+metrics.addMetric('order_service.order.created', MetricUnit.Count, 1);
+metrics.addMetric('order_service.order.create.duration', MetricUnit.Milliseconds, durationMs);
+metrics.publishStoredMetrics();
+
+// CloudWatch Alarms (thresholds are starting defaults; severities per observability-patterns.md)
 const errorAlarm = handler.metricErrors({ period: Duration.minutes(5) })
   .createAlarm(this, 'LambdaErrors', {
     threshold: 5,
     evaluationPeriods: 2,
     treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    alarmDescription: `${props.envName} handler error rate`,
+    alarmDescription: `[P2] ${props.envName} handler error rate elevated`,
+  });
+
+handler.metricDuration({ statistic: 'p99', period: Duration.minutes(5) })
+  .createAlarm(this, 'LambdaLatencyP99', {
+    threshold: 5000, // ms
+    evaluationPeriods: 3,
+    alarmDescription: `[P3] ${props.envName} handler P99 latency > 5s`,
+  });
+
+dlq.metricApproximateNumberOfMessagesVisible()
+  .createAlarm(this, 'DlqDepth', {
+    threshold: 1,
+    evaluationPeriods: 1,
+    alarmDescription: `[P2] ${props.envName} messages in DLQ — investigate failures`,
   });
 
 // Dashboard

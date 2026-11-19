@@ -83,11 +83,14 @@ Stop and escalate to the human (or the dispatching main session) when:
 
 - UI/UX design is unclear, missing, or contradicts itself
 - Backend API contract mismatches the design or returns unexpected shapes
+- Contract-gate findings (`scripts/check-contract.py`) → do not edit `contracts/`; return `NEEDS_CONTEXT` with the findings
 - An architecture decision is required (state management choice, new library adoption, cross-cutting pattern)
 - Accessibility requirements conflict with the design and cannot be reconciled without a design change
 - You hit the review-loop iteration limit (max 2 fix rounds per review dimension — see `review-loop-limits.md`)
 
 Escalation format: (1) what task, (2) what you tried, (3) what is blocking, (4) proposed options. Then wait for a decision — do not guess.
+
+**Return contract:** end with a status keyword + evidence paths + per-exit-criterion check per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`; the dispatch's return_format wins over this format.
 
 ## Quality Self-Check (before declaring done)
 

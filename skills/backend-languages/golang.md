@@ -1,10 +1,8 @@
 ---
 name: backend-languages-golang
 description: >
-  FOR BACKEND-ENGINEER-SUBAGENT USE ONLY.
   Go backend patterns: standard layout (cmd/internal/pkg), error handling (%w wrapping, sentinel errors),
   consumer-side interfaces, table-driven tests, errgroup, context cancellation, HTTP handler/middleware patterns.
-type: reference
 ---
 
 # Go Backend Patterns
@@ -88,28 +86,30 @@ if errors.As(err, &valErr) { /* access valErr.Field */ }
 ## Testing
 
 ```go
+// Money is never float64: amounts are int64 minor units (cents), rates are basis points.
+// Use github.com/shopspring/decimal when you need arbitrary precision or FX rates.
 func TestOrderService_CalculateTotal(t *testing.T) {
     tests := []struct {
-        name     string
-        items    []LineItem
-        discount float64
-        want     float64
-        wantErr  error
+        name         string
+        items        []LineItem // PriceMinor int64, Qty int64
+        discountBps  int64      // 1000 = 10%
+        wantMinor    int64
+        wantErr      error
     }{
-        {name: "single item no discount", items: []LineItem{{Price: 100, Qty: 2}}, discount: 0, want: 200},
+        {name: "single item no discount", items: []LineItem{{PriceMinor: 100, Qty: 2}}, discountBps: 0, wantMinor: 200},
         {name: "multiple items with discount",
-            items: []LineItem{{Price: 100, Qty: 1}, {Price: 50, Qty: 3}}, discount: 0.1, want: 225},
+            items: []LineItem{{PriceMinor: 100, Qty: 1}, {PriceMinor: 50, Qty: 3}}, discountBps: 1000, wantMinor: 225},
         {name: "empty items returns error", items: nil, wantErr: ErrEmptyOrder},
     }
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            got, err := NewOrderService().CalculateTotal(tt.items, tt.discount)
+            got, err := NewOrderService().CalculateTotal(tt.items, tt.discountBps)
             if !errors.Is(err, tt.wantErr) {
                 t.Fatalf("error = %v, wantErr = %v", err, tt.wantErr)
             }
-            if got != tt.want {
-                t.Errorf("got %v, want %v", got, tt.want)
+            if got != tt.wantMinor {
+                t.Errorf("got %v, want %v", got, tt.wantMinor)
             }
         })
     }

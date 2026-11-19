@@ -2,9 +2,9 @@
 
 > Software Development Life Cycle plugin for Claude Code — specialist subagents, trust-boundary routing, a canonical documentation layout and automated quality gates.
 
-**Version 2.4.0** · [Changelog](CHANGELOG.md) · MIT
+**Version 2.9.0** · [Changelog](CHANGELOG.md) · MIT
 
-`tea-sdlc` turns Claude Code into a coordinated engineering team: 9 specialist subagents, a 2-tier workflow router that escalates on trust boundaries, one documentation structure shared by every agent and command, and hooks that block secret leaks and unreviewed PRs.
+`tea-sdlc` turns Claude Code into a coordinated engineering team: 9 specialist subagents, a 2-tier workflow router that escalates on trust boundaries, one documentation structure shared by every agent and command, and hooks that block secret leaks and unreviewed PRs — plus an **autopilot**, so you never have to remember a slash command or a skill name.
 
 ---
 
@@ -40,6 +40,25 @@ Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commit
 | [`gitleaks`](https://github.com/gitleaks/gitleaks) | Secret gate on `git commit` / `git push` (fails closed when missing) |
 | `gh` | PR review gate (`gh pr create`) |
 | `ruby` (optional) | Full YAML parsing in `scripts/check-setup.py` and `scripts/check-contract.py` (when PyYAML is absent) |
+
+---
+
+## 🛫 Autopilot — nothing to remember
+
+You describe the work in English; the plugin decides which skill, command and gate applies and the session runs them itself. Every slash command below still works when you want it, but none is required.
+
+| When | What fires on its own | Hook |
+|---|---|---|
+| Session start, resume, `/clear`, compaction | Bootstrap plus a project snapshot: active specs with their plan progress and next step, a resumable `.goal/state.md`, open plans, a repository with no `docs/` yet, the superpowers plugin enabled alongside (use the tea-sdlc twin of each shared skill), a missing `gitleaks` (also shown to you, with the install command). Gate state older than 30 days is pruned | `session-start` |
+| Every prompt | Keyword router: code change → `brainstorming` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → Full workflow; domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `security-engineer-subagent`); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
+| Before the first production edit | Write a failing test first (once per session) · fix a failing external contract first | `tdd-gate.py`, `contract-gate.py` |
+| After tool calls | Three failing test runs in a row → `systematic-debugging`; `git revert` → `incident-to-eval`; a merge while a spec is still `accepted` → `upgrade-service-docs` | `autopilot.py post` |
+| Before the session says “done” | Code changed since the last test run → run the tests or say why none applies (once per change set, at most 3 per session) | `autopilot.py stop` |
+| `git commit` / `git push` / `gh pr create` | Secret scan · pre-PR review recorded for `HEAD` | `security-gate.py`, `pr-review-gate.py` |
+
+Notes are hints, not orders: the session skips any that does not fit and names what it applied. Measured on real headless sessions (Claude Code 2.1.319, `sonnet`): with the prompt note the session loaded `brainstorming`, stated the tier and wrote a failing test before the code; on a “pure rename” it first answered *“I ran no tests”*, the stop gate sent it back, and it ran the suite before reporting.
+
+Switches (environment variables, all default on): `TEA_SDLC_AUTOPILOT=off` (prompt and follow-up notes, session snapshot), `TEA_SDLC_VERIFY_GATE=off`, `TEA_SDLC_TDD_GATE=off`, `TEA_SDLC_CONTRACT_GATE=off`.
 
 ---
 
@@ -126,7 +145,7 @@ Existing projects keep their established locations; the layout file maps legacy 
 |---|---|
 | Workflow | `session-bootstrap`, `brainstorming`, `measurement-planning`, `writing-plans`, `subagent-driven-development`, `executing-plans`, `dispatching-parallel-agents`, `goal` |
 | Quality | `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `validate-feature`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `incident-to-eval` |
-| Grounding | `grounding-claims`, `find-docs`, `context7-mcp` |
+| Grounding | `grounding-claims` (codebase and command facts), `find-docs` (library, SDK and CLI facts via Context7 or official docs) |
 | Thinking tools | `clarify` (ask only what changes the work), `expert-lens` (what the best practitioner would notice, do first, refuse), `reframe` (strongest case against the current view) — triggered by the situation or as `/clarify`, `/expert-lens`, `/reframe` |
 | Documentation | `writing-software-docs` (BRD, PRD, FRD, user stories, RFC, ADR, specification, concern report) |
 | Domain | `backend-languages`, `frontend-react`, `fintech-mobile`, `fintech-security`, `database-patterns`, `messaging-patterns`, `data-pipeline-patterns`, `api-contract-testing`, `bdd-cucumber`, `cdk-testing`, `observability` |
@@ -139,6 +158,14 @@ Claude API work uses Claude Code's built-in **`/claude-api`** skill plus live do
 
 | Hook | Event | Behavior |
 |---|---|---|
+| `security-gate.py` | PreToolUse (Bash) | Runs `gitleaks` before `git commit` (staged content) / `git push`; blocks on findings or when gitleaks is unavailable. `git commit -a` is not covered — keep CI scanning as the backstop |
+| `pr-review-gate.py` | PreToolUse (Bash) | Blocks `gh pr create` until a pre-PR review with zero open findings is recorded for `HEAD` via `scripts/mark-pr-review.py`, and while an active external contract fails the contract gate |
+| `contract-gate.py` | PreToolUse (Edit/Write/Bash) | Advisory: when an active spec declares an external contract that fails `scripts/check-contract.py`, blocks the first production-code change of a session once. Off with `TEA_SDLC_CONTRACT_GATE=off` |
+| `tdd-gate.py` | PreToolUse (Edit/Write/Bash) + PostToolUse (Bash) | Advisory: records a failing test run per session and blocks the first production-code change that has none, once. Recognises npm/pnpm/yarn/bun, vitest/jest/playwright, pytest/unittest/tox, Gradle/Maven, Go, Cargo, .NET, Flutter, Swift, RSpec and more; shell writes are detected by their target (`>`, `tee`, `sed -i`, inline `open(…,'w')`), not by any code path in a command. Off with `TEA_SDLC_TDD_GATE=off` |
+| `autopilot.py` | UserPromptSubmit, PostToolUse (Edit/Write/Bash), Stop | Prompt router, follow-up notes and the verification gate described in **Autopilot**. Never blocks a tool call; fails silent |
+| `session-start` | SessionStart | Injects the `session-bootstrap` skill (≤ 48 KiB) with the plugin root resolved, plus the project snapshot |
+
+---|---|---|
 | `security-gate.py` | PreToolUse (Bash) | Runs `gitleaks` before `git commit` (staged content) / `git push`; blocks on findings or when gitleaks is unavailable. `git commit -a` is not covered — keep CI scanning as the backstop |
 | `pr-review-gate.py` | PreToolUse (Bash) | Blocks `gh pr create` until a pre-PR review with zero open findings is recorded for `HEAD` via `scripts/mark-pr-review.py` |
 | `contract-gate.py` | PreToolUse (Edit/Write/Bash) | Advisory: when an active spec declares an external contract that fails `scripts/check-contract.py`, blocks the first production-code change of a session once. `pr-review-gate.py` enforces it strictly before a PR. Off with `TEA_SDLC_CONTRACT_GATE=off` |
@@ -162,7 +189,7 @@ Claude API work uses Claude Code's built-in **`/claude-api`** skill plus live do
 python3 scripts/check-setup.py
 ```
 
-Checks manifests and version, agent/skill/command frontmatter (alias-only models, valid effort, YAML), that every bundled path reference resolves, that no `~/.claude/` path or misplaced `${CLAUDE_PLUGIN_ROOT}` remains, and the SessionStart output contract. Run it before every release, then bump `version` in `.claude-plugin/plugin.json` and add a `CHANGELOG.md` entry.
+Checks manifests and version, agent/skill/command frontmatter (alias-only models, valid effort, YAML), that every bundled path reference resolves, that every hook compiles and every `tea-sdlc:<name>` the autopilot can name is a real skill or command, that no `~/.claude/` path or misplaced `${CLAUDE_PLUGIN_ROOT}` remains, and the SessionStart output contract. Run it and `python3 -m unittest discover -s tests` before every release, then bump `version` in `.claude-plugin/plugin.json` and add a `CHANGELOG.md` entry.
 
 `scripts/validate.sh` starts a headless Claude session that validates pending work in a target project with the `validate-feature` skill.
 
@@ -177,7 +204,7 @@ tea-sdlc/
 │   └── marketplace.json     # Marketplace entry
 ├── agents/                  # 9 subagent definitions
 ├── commands/                # 6 slash commands
-├── hooks/                   # hooks.json, security-gate.py, pr-review-gate.py, tdd-gate.py, contract-gate.py, session-start
+├── hooks/                   # hooks.json, autopilot.py, security-gate.py, pr-review-gate.py, tdd-gate.py, contract-gate.py, session-start
 ├── references/              # Shared guidance (documentation layout, model guide, …)
 ├── rules/                   # Routing, contracts, review and persistence rules
 ├── scripts/                 # check-setup.py, check-contract.py, validate.sh, mark-pr-review.py

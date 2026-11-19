@@ -1,6 +1,6 @@
 # Subagent Return Conventions
 
-**Scope:** Every subagent dispatched via the `Task` tool by the main session (when dispatching per `rules/workflow-routing.md` — full workflow) MUST include three things in its final message:
+**Scope:** Every subagent dispatched via the `Task` tool by the main session (Full workflow, per `rules/workflow-routing.md`) MUST include three things in its final message:
 
 1. A **status** — one of four values (see below)
 2. A list of **evidence paths** — real files/logs the dispatcher can `Read`
@@ -8,15 +8,11 @@
 
 **Format is flexible** — prose, markdown, or XML. The three pieces of information are what matter, not the serialization. Dispatchers parse them regardless of shape.
 
-Use the format that communicates status, evidence and exit checks clearly; no particular serialization is required.
-
-Paired with `rules/dispatch-prompt-contract.md` (which governs the input shape and IS effective at driving agent behavior).
+Paired with `rules/dispatch-prompt-contract.md`, which governs the input shape.
 
 ---
 
 ## Status codes
-
-Four values, reused from `skills/subagent-driven-development/SKILL.md`:
 
 | Status | Meaning | Also required |
 |--------|---------|---------------|

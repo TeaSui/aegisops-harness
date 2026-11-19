@@ -1,14 +1,15 @@
 ---
 name: fintech-mobile
 description: |
-  Fintech mobile patterns for Flutter (primary), iOS, and Android.
+  Fintech mobile-app patterns for Flutter (primary), native iOS and Android apps.
   Biometric authentication flows, secure transaction handling, push notifications
   for financial alerts, KYC document capture, offline-first for financial data.
   Use when: implementing mobile banking features, biometric auth, transaction
   flows, push notifications for financial events, KYC document upload, or
   secure data display on mobile.
-  Triggers on: biometric, mobile payment, transaction screen, push notification,
-  KYC mobile, mobile banking, secure storage, PIN entry.
+  Triggers on: Flutter, iOS/Android app, biometric login, in-app payment, app transaction screen,
+  push notification, KYC capture in the app, mobile banking app, app secure storage, PIN entry.
+  Not for phone/mobile-number fields in web or backend code.
 ---
 
 # Fintech Mobile Patterns
@@ -197,20 +198,23 @@ class _SecureWidgetState extends State<SecureWidget> {
   @override
   void initState() {
     super.initState();
-    if (widget.isSecure) {
-      // Android: FLAG_SECURE prevents screenshots
-      // iOS: UITextField trick or overlay on app switcher
-      FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
-    }
+    // Android: FLAG_SECURE blocks screenshots/recording. iOS: hide content on app-switch
+    // (overlay on AppLifecycleState.inactive). flutter_windowmanager is unmaintained (last
+    // release 2021) — use a project-owned channel (below) or a maintained package verified
+    // for the installed Flutter version.
+    if (widget.isSecure) _secureScreen.invokeMethod('enable');
   }
 
   @override
   void dispose() {
-    if (widget.isSecure) {
-      FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
-    }
+    if (widget.isSecure) _secureScreen.invokeMethod('disable');
     super.dispose();
   }
+
+  static const _secureScreen = MethodChannel('app/secure_screen');
+  // MainActivity.kt handler:
+  //   "enable"  -> window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+  //   "disable" -> window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
   @override
   Widget build(BuildContext context) => widget.child;
@@ -257,7 +261,10 @@ class NotificationHandler {
       alert: true,
       badge: true,
       sound: true,
-      criticalAlert: true,  // for security alerts (requires Apple entitlement)
+      // criticalAlert needs Apple's Critical Alerts entitlement, which Apple grants for
+      // health, safety and security-monitoring apps — not banking. Use the Time Sensitive
+      // interruption level for security alerts instead.
+      criticalAlert: false,
     );
 
     // Handle foreground messages
@@ -300,7 +307,7 @@ class NotificationHandler {
 ```
 PUSH-01: Transaction notifications must NOT contain full account numbers or amounts in payload
 PUSH-02: Notification payload: use data-only messages, build display text client-side
-PUSH-03: Security alerts (new device login) must use critical/max priority
+PUSH-03: Security alerts (new device login) use high priority: Android high-importance channel, iOS Time Sensitive interruption level (not Critical Alerts)
 PUSH-04: User must be able to disable marketing notifications independently
 PUSH-05: Invalidate cached financial data when transaction notification received
 PUSH-06: Test notification delivery with both app foreground and background states
@@ -416,7 +423,7 @@ OFFLINE-02: Show "Last updated X minutes ago" indicator when offline
 OFFLINE-03: Read-only when offline — disable transfer/payment buttons
 OFFLINE-04: Queue non-financial actions offline (profile updates), sync on reconnect
 OFFLINE-05: Never queue financial transactions offline — require connectivity
-OFFLINE-06: Encrypted local database (Isar encryption or SQLCipher)
+OFFLINE-06: Encrypted local database (SQLCipher-backed, e.g. via sqflite/drift SQLCipher builds; Isar 3 has no built-in encryption) with the key in Keychain/Keystore
 ```
 
 ## App Security Hardening
@@ -474,19 +481,21 @@ class Money {
 
   const Money(this.minorUnits, this.currency);
 
-  String format() {
-    final formatter = NumberFormat.currency(
-      locale: 'en_SG',
-      symbol: currencySymbol,
+  String format({String locale = 'en_SG'}) {
+    final formatter = NumberFormat.simpleCurrency(
+      locale: locale,
+      name: currency,
       decimalDigits: decimalPlaces,
     );
     return formatter.format(minorUnits / pow(10, decimalPlaces));
   }
 
+  /// ISO 4217 exponent. Unknown currencies fail loudly instead of assuming 2.
   int get decimalPlaces => switch (currency) {
-    'SGD' || 'USD' || 'MYR' => 2,
-    'JPY' => 0,
-    _ => 2,
+    'VND' || 'KRW' || 'JPY' => 0,
+    'KWD' || 'BHD' || 'OMR' || 'JOD' => 3,
+    'SGD' || 'USD' || 'MYR' || 'PHP' || 'EUR' => 2,
+    _ => throw UnsupportedError('No exponent configured for $currency'),
   };
 }
 ```

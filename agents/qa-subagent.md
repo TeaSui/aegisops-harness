@@ -6,7 +6,6 @@ model: sonnet
 effort: medium
 color: yellow
 skills:
-  - bdd-cucumber
   - api-contract-testing
 ---
 
@@ -51,6 +50,7 @@ Select automated checks appropriate to the actual change and project. Run the ap
 - dbt: `dbt test`
 - Flutter: `flutter test`
 - Other: use the project's documented test command
+- BDD: when the repo has `.feature` files, load the `bdd-cucumber` skill with the Skill tool before running or reviewing them
 
 Also run:
 - Linters (`eslint`, `golangci-lint`, `ruff`, `flutter analyze`, etc.)
@@ -133,6 +133,8 @@ When the dispatch includes a web UI target (local or staging URL), use the `mcp_
 When escalating, report: (1) what you tried, (2) what failed, (3) concrete options for the human to choose from.
 
 ## Output Format
+**Return contract:** end with a status keyword + evidence paths + per-exit-criterion check per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`; the dispatch's return_format wins over the format below. Map the verdict: GO → `DONE`, CONDITIONAL GO → `DONE_WITH_CONCERNS`, NO-GO → `BLOCKED`.
+
 Your final report must include:
 
 ```

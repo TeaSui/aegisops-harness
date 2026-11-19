@@ -6,6 +6,7 @@ plugin, also warns about repository setup that hides instructions or docs from
 worktrees and agents. Those warnings never change the status."""
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -191,10 +192,38 @@ def main():
             elif not (root / target).exists() and not (path.parent / target).exists():
                 errors.append('%s: missing bundled reference %s' % (rel, target))
 
+    # Hooks compile, and every skill/command name the autopilot can point the session to exists in the plugin.
+    for path in sorted((root / 'hooks').glob('*.py')):
+        try:
+            compile(path.read_text(), str(path), 'exec')
+        except (SyntaxError, ValueError, OSError) as error:
+            errors.append('%s does not compile: %s' % (path.relative_to(root).as_posix(), error))
+    invocable = {p.parent.name for p in skills} | {p.stem for p in commands}
+    referenced = set()
+    for path, rel in scanned_files(root):
+        for name in re.findall(r'(?<![\w-])tea-sdlc:([a-z0-9][a-z0-9-]*[a-z0-9])', path.read_text(errors='replace')):
+            referenced.add((name, rel))
+    try:
+        # Load this root's hook under a private name: never reuse a module cached from another root.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('tea_sdlc_autopilot_%d' % id(root), root / 'hooks' / 'autopilot.py')
+        autopilot = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(autopilot)
+        referenced |= {(name, 'hooks/autopilot.py SKILL_NAMES') for name in autopilot.SKILL_NAMES}
+    except Exception as error:  # a broken hook is reported above or here
+        errors.append('hooks/autopilot.py could not be imported: %s' % type(error).__name__)
+    for name, rel in sorted(referenced):
+        if name not in invocable and name != 'tea-sdlc':
+            errors.append('%s: tea-sdlc:%s is not a skill or command of this plugin' % (rel, name))
+
     # SessionStart hook contract
     hook = root / 'hooks/session-start'
     try:
-        result = subprocess.run(['/bin/bash', str(hook)], input='{}', capture_output=True, text=True, timeout=5, cwd=root)
+        # A scratch HOME: the hook prunes old gate state in the user state directory, which a check must never touch.
+        import tempfile
+        with tempfile.TemporaryDirectory() as home:
+            result = subprocess.run(['/bin/bash', str(hook)], input='{}', capture_output=True, text=True, timeout=5,
+                                    cwd=root, env={**os.environ, 'HOME': home})
         payload = json.loads(result.stdout)
         context = payload['hookSpecificOutput']
         if result.returncode or context['hookEventName'] != 'SessionStart' or not isinstance(context['additionalContext'], str):
@@ -209,7 +238,8 @@ def main():
     print(json.dumps({'status': 'PASS' if not errors else 'FAIL', 'version': plugin.get('version'),
                       'agents': len(agents), 'skills': len(skills), 'commands': len(commands),
                       'bundled_references_checked': checked, 'project': str(project) if project else None,
-                      'rules_bytes': sum(p.stat().st_size for p in (root / 'rules').glob('*.md')),
+                      # Always-on cost: the bootstrap injected into every session (rules/ is only read on demand).
+                      'bootstrap_bytes': (root / 'skills/session-bootstrap/SKILL.md').stat().st_size,
                       'errors': errors, 'warnings': warnings,
                       'limits': 'Structure only; no model/API run or behavioral review.'}, indent=2))
     return 1 if errors else 0

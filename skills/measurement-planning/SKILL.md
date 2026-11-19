@@ -5,7 +5,7 @@ description: Use when a feature must be measurable or the user asks for a North 
 
 # Measurement planning
 
-Writes `docs/specs/<feature>/measurement.md` (layout `references/documentation-layout.md` §4). The integrating session is its single writer.
+Writes `docs/specs/<feature>/measurement.md` (layout `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` §4). The integrating session is its single writer.
 
 Make the feature *measurable* before it is built, and design the next experiment after launch. Produce specifications only: no instrumentation code, no publishing.
 
@@ -16,7 +16,7 @@ Make the feature *measurable* before it is built, and design the next experiment
 4. **Experiment validity.** Each experiment: hypothesis, variants, ONE primary metric, MDE, sample size & duration estimate, guardrail metrics, SRM check, pre-registered analysis, no peeking (sequential testing if early looks are needed), stop/ship criteria, named feature-flag/assignment dependency.
 5. **Honest funnels.** Report drop-offs truthfully; cut vanity metrics.
 
-**Ownership lines:** your requirements' value statement is the metric of record — the North Star refines it, never overrides it. The event taxonomy is proposed here and ratified into the contract (`design.md` / `contracts/`) by the integrating session. data-engineer-subagent owns ingestion/storage of the events. Platform owns system telemetry (APM, latency, errors); you own product analytics (activation, retention, funnel, referral). Analytics events are distinct from domain events in `docs/events.md`.
+**Ownership lines:** the requirements' value statement (`requirements.md`) is the metric of record — the North Star refines it, never overrides it. The event taxonomy is proposed here and ratified into the contract (`design.md` / `contracts/`) by the integrating session. data-engineer-subagent owns ingestion/storage of the events. Platform owns system telemetry (APM, latency, errors); this skill covers product analytics (activation, retention, funnel, referral). Analytics events are distinct from domain events in `docs/events.md`.
 
 **`measurement.md` contents:**
 1. North Star & funnel (activation moment, ordered stages, blind stages marked)
@@ -27,4 +27,4 @@ Make the feature *measurable* before it is built, and design the next experiment
 6. Re-enters Routing (trust-boundary/implementation items + owner)
 7. Open questions / assumptions
 
-For rigorous experiment design (power/MDE math, sequential testing, multi-variant interactions) dispatch an experiment-design subagent with the model chosen per `${CLAUDE_PLUGIN_ROOT}/skills/dispatching-parallel-agents/references/model-routing.md`.
+For rigorous experiment design (power/MDE math, sequential testing, multi-variant interactions) use a general-purpose subagent (full workflow) or do it in-session; choose the model per `${CLAUDE_PLUGIN_ROOT}/references/model-guide.md`.

@@ -1,6 +1,6 @@
 ---
 name: verification-before-completion
-description: Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always
+description: Use before saying work is done, fixed or passing, before a commit, PR or handing to the next task — find the check that would show the claim true for the exact state, reuse it only while still valid or run it, and report what the output supports with the evidence beside it (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
 # Verification before completion

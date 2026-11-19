@@ -77,8 +77,10 @@ Read cited check evidence and distinguish actual PASS/FAIL from skipped, unsuppo
 #### Important (Should Fix)
 [Architecture problems, missing features, poor error handling, test gaps]
 
-#### Minor (Nice to Have)
-[Code style, optimization opportunities, documentation improvements]
+#### Suggestion
+[Pure style, naming, optimization opportunities, documentation improvements]
+
+Severity sets the fix order, not whether a finding counts: every finding at any severity stays open until it is fixed or cleared with a one-line evidence-backed reason.
 
 **For each issue:**
 - File:line reference
@@ -135,7 +137,7 @@ Read cited check evidence and distinguish actual PASS/FAIL from skipped, unsuppo
    - Issue: Invalid dates silently return no results
    - Fix: Validate ISO format, throw error with example
 
-#### Minor
+#### Suggestion
 1. **Progress indicators**
    - File: indexer.ts:130
    - Issue: No "X of Y" counter for long operations

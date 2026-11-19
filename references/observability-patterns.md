@@ -1,163 +1,166 @@
-# Observability Rules
+# Observability Standards
+
+Platform-agnostic standards for structured logging, metrics, tracing, alerting, dashboards and health checks. Thresholds and targets are starting defaults; the project's telemetry stack, SLOs and on-call policy override them. Vendor implementations: `references/aws-patterns.md` (CloudWatch, Lambda Powertools), `skills/observability/SKILL.md` (Datadog).
 
 ## Structured Logging
 
-**Required fields on every log entry:**
+All services emit structured JSON logs.
+
 ```json
 {
-  "timestamp": "2026-03-30T10:00:00.000Z",
+  "timestamp": "2026-01-15T10:30:00.000Z",
   "level": "INFO",
-  "service": "order-processor",
-  "environment": "prod",
-  "correlationId": "req-abc123",       // trace requests across services
-  "userId": "user-xyz",                 // when user context available (mask PII)
-  "requestId": "lambda-request-id",     // platform request ID
-  "message": "Order processed",
+  "service": "order-service",
+  "env": "prod",
+  "version": "1.2.3",
+  "correlationId": "req-abc-123",
+  "message": "Order created",
   "durationMs": 145,
-  "data": { }                           // structured context — no PII
+  "orderId": "ord-456"
 }
 ```
 
-**Log levels:**
-- `ERROR`: Exceptions, failures requiring attention, SLA breaches
-- `WARN`: Degraded state, retries, fallbacks, approaching limits
-- `INFO`: Key business events (order created, payment processed, user registered)
-- `DEBUG`: Detailed execution flow — disabled in production by default
+| Field | Required | Notes |
+|-------|----------|-------|
+| `timestamp` | yes | ISO 8601, always UTC |
+| `level` | yes | `DEBUG` \| `INFO` \| `WARN` \| `ERROR` \| `FATAL` |
+| `service` | yes | Matches the service registry name |
+| `env` | yes | `dev` \| `staging` \| `prod` |
+| `version` | yes | Matches the deployed artifact |
+| `correlationId` | yes | Propagated across service calls (see Tracing) |
+| `message` | yes | Human-readable; no PII |
+| `requestId` | when available | Platform request ID |
+| `durationMs` | for timed operations | |
+| business IDs | as needed | Surrogate keys (`customerId`, `orderId`), never PII |
+
+| Level | Use for |
+|-------|---------|
+| `DEBUG` | Detailed flow for local development; off in production by default |
+| `INFO` | Key business events: request served, order created, job completed |
+| `WARN` | Recoverable anomalies: retry, fallback, deprecated API, approaching a limit |
+| `ERROR` | Operation failed or request could not be served; exception caught at a boundary |
+| `FATAL` | Process-aborting condition; alerts immediately |
 
 **Never log:**
-- Passwords, PINs, tokens, API keys
-- Full PII (see data-privacy.md for masking rules)
-- Stack traces in user-facing responses (server-side only)
-- High-volume debug logs in production (cost and noise)
+- PII: names, emails, phone numbers, national IDs, addresses — mask or omit (`references/data-privacy-patterns.md`). When PII context is needed for debugging, log a surrogate key and join externally.
+- Payment data: card numbers, CVV, bank account numbers (even partial).
+- Credentials: passwords, PINs, OTPs, API keys, tokens, secrets.
+- Stack traces in user-facing responses (server-side logs only).
+- High-volume debug output in production.
 
 ## Metrics
 
-**Standard metrics to emit for every service:**
+**Naming:** `<service>.<entity>.<action>[.<outcome>]`, `snake_case` throughout.
+- The service prefix is mandatory — never a bare `order.created`.
+- An outcome suffix (`failed`, `timeout`, `rejected`) separates error counts from totals.
+- Record the unit in the metric metadata (e.g. milliseconds), not only in the name.
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `request.count` | Counter | Total requests |
-| `request.duration_ms` | Histogram | Latency distribution |
-| `request.error.count` | Counter | Errors by type |
-| `request.success_rate` | Gauge | % successful |
-
-**AWS Lambda (Embedded Metrics Format):**
-```typescript
-import { MetricUnits, Metrics } from '@aws-lambda-powertools/metrics';
-const metrics = new Metrics({ namespace: 'AiDriven', serviceName: 'order-processor' });
-
-metrics.addMetric('OrdersProcessed', MetricUnits.Count, 1);
-metrics.addMetric('ProcessingDuration', MetricUnits.Milliseconds, durationMs);
-metrics.publishStoredMetrics();
+```
+order_service.order.created              # counter
+order_service.order.create.duration      # histogram / timer
+order_service.order.create.failed        # counter (error path)
+payment_service.payment.authorize.duration
+payment_service.payment.authorize.failed
 ```
 
-**Metric naming convention:**
-- Format: `<service>.<action>.<outcome>` (snake_case)
-- Examples: `order.create.success`, `payment.authorize.failure`, `kyc.check.duration_ms`
-- Include dimensions: `environment`, `region`, `service`
+**Standard signals for every service:** request count, request duration (histogram), failed requests by `error_type`, and success rate derived from them — e.g. `order_service.http.request`, `order_service.http.request.duration`, `order_service.http.request.failed`.
+
+**Dimensions / tags** — keep cardinality bounded:
+
+| Good (bounded) | Example values |
+|----------------|----------------|
+| `env` | `prod`, `staging`, `dev` |
+| `service` | `order-service` |
+| `version` | `1.2.3` |
+| `region` | `ap-southeast-1` |
+| `status` | `success`, `failed`, `timeout` |
+| `error_type` | `ValidationError`, `TimeoutError` |
+| `payment_method` | `card`, `wallet`, `bank_transfer` |
+
+Forbidden (unbounded, and some are PII): `user_id`, `order_id`, `request_id` / `trace_id` (use logs for per-request correlation), `email`.
 
 ## Distributed Tracing
 
-- Every request must carry a `correlationId` (X-Request-ID header or generated UUID)
-- Propagate correlation ID through: Lambda → SQS → Step Functions → Lambda
-- AWS X-Ray enabled on all Lambda functions and API Gateway
-- Trace sampling: 100% for errors, 5% for success in production
-- Spans must include: service name, operation, duration, status, key attributes
+- Every request carries a correlation ID: `X-Correlation-Id`, or `traceparent` for W3C Trace Context. Inject it on outbound calls and extract it on inbound ones.
+- Async messages (queues, streams, workflows): put the correlation ID in message attributes/headers.
+- Generate a new ID only at the edge (API gateway or consumer entry point) when none arrived; never mid-flow.
+- Spans include service name, operation, duration, status and key attributes (no PII).
+- Sampling: choose a production success-trace rate (e.g. 5%). Keeping every error trace needs tail-based sampling or error-triggered retention; a head-based sampler decides before the outcome is known, so it cannot guarantee it.
 
 ```typescript
-// Correlation ID propagation pattern
-const correlationId = event.headers?.['x-correlation-id'] ?? crypto.randomUUID();
-const childLogger = logger.createChild({ correlationId });
+// Edge: reuse an incoming correlation ID, else create one
+const correlationId = headers['x-correlation-id'] ?? crypto.randomUUID();
+const log = logger.child({ correlationId });
 ```
 
-## Alerting Standards
+## Alerting
 
-**Alert severity levels:**
-- **P1 (Critical)**: Service down, data loss risk, security breach → Page on-call immediately
-- **P2 (High)**: Degraded performance, error rate elevated → Alert within 5 minutes
-- **P3 (Medium)**: Unusual patterns, approaching limits → Alert within 30 minutes
-- **P4 (Low)**: Informational, trends → Daily digest
+| Severity | Page on-call? | Response | Use for |
+|----------|---------------|----------|---------|
+| **P1 — Critical** | Yes, immediately | 15 min | Service down, data loss risk, security breach, payment or auth broken, SLA breach |
+| **P2 — High** | Yes, after 30 min if not auto-resolved | 1 hour | Elevated error rate, P99 latency over target, DLQ depth growing, connections exhausted |
+| **P3 — Medium** | No (ticket) | Next business day | Non-critical degradation, warning threshold crossed, single-host anomaly |
+| **P4 — Low** | No | 3 business days / digest | Informational, capacity signals, approaching (not breaching) limits |
 
-**Required alarms for every production service:**
-```typescript
-// Error rate alarm
-fn.metricErrors({ period: Duration.minutes(5) })
-  .createAlarm(stack, `${service}-Errors`, {
-    threshold: 5,
-    evaluationPeriods: 2,
-    alarmDescription: 'P2: Lambda error rate elevated',
-  });
+**Alert naming:** `[<Severity>] <service> — <What> <Condition>`, e.g. `[P2] payment-service — P99 latency > 3s for 10 min`.
 
-// Latency alarm
-fn.metricDuration({ statistic: 'p99', period: Duration.minutes(5) })
-  .createAlarm(stack, `${service}-Latency-P99`, {
-    threshold: 5000, // 5 seconds
-    evaluationPeriods: 3,
-    alarmDescription: 'P3: P99 latency exceeds 5s',
-  });
+**Required for every production service:** error-rate alert, P99 latency alert, and a DLQ-depth alert for every dead-letter queue.
 
-// DLQ depth
-dlq.metricApproximateNumberOfMessagesVisible()
-  .createAlarm(stack, `${service}-DLQ-Depth`, {
-    threshold: 1,
-    evaluationPeriods: 1,
-    alarmDescription: 'P2: Messages in DLQ — investigate failures',
-  });
-```
+**Avoid alert fatigue:**
+- No alert without a runbook.
+- Alert on symptoms (user impact), not causes.
+- Group related alerts.
+- Set meaningful thresholds — not "alert on any error".
 
-**Alert fatigue prevention:**
-- No alert without a runbook
-- Alert on symptoms (user impact), not causes
-- Group related alerts
-- Set meaningful thresholds — not "alert on any error"
+## SLO Targets (starting points)
+
+| Signal | Target | Warning |
+|--------|--------|---------|
+| HTTP success rate | ≥ 99.5% (30-day window) | < 99.9% |
+| P99 request latency | ≤ 500 ms | > 300 ms |
+| P99 DB query time | ≤ 100 ms | > 50 ms |
+| Queue consumer lag | < 1,000 messages | > 500 messages |
+| Serverless cold start P95 | ≤ 3 s | > 2 s |
+
+Payment and auth services start stricter: success rate ≥ 99.9%, P99 latency ≤ 200 ms. Override per service based on business criticality.
 
 ## Dashboards
 
-**Minimum dashboard per service:**
-1. Request rate and error rate (side-by-side)
+Minimum per service, named `<env>-<service>-operations`:
+1. Request rate and error rate, side by side
 2. Latency P50 / P95 / P99
-3. Lambda duration and cold start rate
-4. DynamoDB consumed RCU/WCU vs provisioned
-5. SQS queue depth and DLQ depth
-6. Cost per hour (custom metric from billing)
-
-**Dashboard naming:** `<environment>-<service>-operations`
+3. Compute saturation (duration and cold starts for serverless; CPU/memory for containers)
+4. Data store capacity and throttling
+5. Queue depth and DLQ depth
+6. Cost per hour or per transaction, when the platform exposes it
 
 ## Health Checks
 
-**Every API endpoint must have:**
-```typescript
-// GET /health → 200 with service status
+Every API service exposes a health endpoint (`GET /health` → 200):
+
+```json
 {
   "status": "healthy",
   "version": "1.2.3",
-  "timestamp": "2026-03-30T10:00:00Z",
-  "dependencies": {
-    "database": "healthy",
-    "queue": "healthy",
-    "external-api": "degraded"
-  }
+  "timestamp": "2026-01-15T10:30:00Z",
+  "dependencies": { "database": "healthy", "queue": "healthy", "external-api": "degraded" }
 }
 ```
 
-**Liveness vs Readiness:**
-- Liveness: Is the process running? (simple ping)
-- Readiness: Can the service handle traffic? (check dependencies)
+- Liveness: is the process running? (simple ping)
+- Readiness: can the service handle traffic? (checks dependencies)
 
-## Runbook Requirements
+## Runbooks
 
-Every P1/P2 alarm must link to a runbook with:
-1. What this alarm means
+Every P1/P2 alert links to a runbook in the project's runbook location, covering:
+1. What the alert means
 2. Immediate triage steps
 3. Common root causes
 4. Remediation steps
 5. Escalation path
 
-Store runbooks in: Confluence under `Operations > Runbooks > <service>`
-
 ## Cost Observability
 
-- Tag all AWS resources: `Project`, `Environment`, `Service`, `Team`
-- Set AWS Budgets alerts: 80% of monthly budget → email, 100% → page
-- Review cost per service weekly using Cost Explorer
-- Target: cost per transaction trending down quarter-over-quarter
+- Tag all cloud resources with project, environment, service and team.
+- Budget alerts: 80% of the monthly budget → notify, 100% → page.
+- Review cost per service regularly; track cost per transaction over time.

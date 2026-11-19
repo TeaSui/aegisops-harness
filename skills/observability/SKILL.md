@@ -1,41 +1,31 @@
 ---
 name: observability
 description: |
-  DataDog observability: APM instrumentation, custom metrics (StatsD/DogStatsD), log correlation with traces,
+  DataDog: APM instrumentation, custom metrics (StatsD/DogStatsD), log correlation with traces,
   dashboard design, monitor/alert configuration, and DataBricks pipeline monitoring.
-  Use when: instrumenting services with DataDog, creating dashboards or monitors, setting up log pipelines,
-  correlating traces with logs, or monitoring DataBricks jobs.
-  Triggers on: DataDog, DD, APM, traces, custom metrics, DogStatsD, monitors, dashboard, DataBricks monitoring,
-  log correlation, observability, alerting, SLO.
-  Complements references/observability-patterns.md which covers general standards (log format, metric naming, alert severity).
+  Use only when the project uses DataDog: instrumenting services with DataDog, DataDog dashboards or monitors,
+  DataDog log pipelines and trace correlation, or monitoring DataBricks jobs in DataDog.
+  Triggers on: DataDog, DD, dd-trace, dd-java-agent, DogStatsD, DataDog monitors/SLOs, DataBricks monitoring in DataDog.
+  General standards (log format, metric naming, alert severity) live in the plugin's references/observability-patterns.md.
 ---
 
 # DataDog Observability
 
 General observability standards (structured logging format, metric naming convention, alert severity levels)
-are defined in `references/observability-patterns.md`. This skill covers DataDog-specific implementation.
+are defined in `${CLAUDE_PLUGIN_ROOT}/references/observability-patterns.md` — read it first; it wins on conflict. This skill covers DataDog-specific implementation.
 
 ## APM Setup
 
 ### Spring Boot
 
-```yaml
-# application.yml
-management:
-  tracing:
-    enabled: true
-    sampling.probability: 1.0  # 100% in dev/staging, 0.1 in prod
-
-# dd-java-agent handles most instrumentation automatically.
-# Run with: java -javaagent:/path/to/dd-java-agent.jar -jar app.jar
-```
+dd-java-agent instruments automatically: `java -javaagent:/path/to/dd-java-agent.jar -jar app.jar`.
+**Pick one tracer.** Do not also enable Micrometer Tracing (`micrometer-tracing-bridge-*`, `management.tracing.*`) or an OpenTelemetry agent next to dd-java-agent — two tracers produce duplicate or broken traces and conflicting trace IDs in logs. If the project standardizes on Micrometer/OTel, export to DataDog through OTLP instead of the agent.
 
 ```properties
 # datadog.properties or env vars
 dd.service=order-service
 dd.env=prod
 dd.version=1.2.3
-dd.trace.analytics.enabled=true
 dd.logs.injection=true          # inject trace/span IDs into logs
 dd.trace.db.client.split-by-instance=true
 ```
@@ -153,18 +143,18 @@ public class OrderService {
         Timer.Sample sample = Timer.start(metrics);
         try {
             Order order = processOrder(req);
-            metrics.counter("order.created",
+            metrics.counter("order_service.order.created",
                 "product_category", order.getCategory(),
                 "payment_method", order.getPaymentMethod()
             ).increment();
             return toResponse(order);
         } catch (Exception e) {
-            metrics.counter("order.create.failed",
+            metrics.counter("order_service.order.create.failed",
                 "error_type", e.getClass().getSimpleName()
             ).increment();
             throw e;
         } finally {
-            sample.stop(metrics.timer("order.create.duration"));
+            sample.stop(metrics.timer("order_service.order.create.duration"));
         }
     }
 }
@@ -179,7 +169,7 @@ var dd *statsd.Client
 func init() {
     var err error
     dd, err = statsd.New("127.0.0.1:8125",
-        statsd.WithNamespace("order_service."),
+        statsd.WithNamespace("order_service."), // prefixes every name below with the service
         statsd.WithTags([]string{"env:" + os.Getenv("DD_ENV")}),
     )
     if err != nil {
@@ -208,13 +198,15 @@ func (s *OrderService) CreateOrder(ctx context.Context, req CreateOrderRequest) 
 
 | DD Type | Use For | Example |
 |---------|---------|---------|
-| **Count** | Events that happen (increment) | `order.created`, `payment.failed` |
-| **Gauge** | Current value at a point in time | `queue.depth`, `active.connections` |
-| **Histogram** | Distribution of values | `request.duration`, `payload.size` |
-| **Distribution** | Like histogram but aggregated across hosts | `order.total.amount` |
-| **Rate** | Events per second | `requests.per_second` |
+| **Count** | Events that happen (increment) | `order_service.order.created`, `order_service.payment.authorize.failed` |
+| **Gauge** | Current value at a point in time | `order_service.queue.depth`, `order_service.db.active_connections` |
+| **Histogram** | Distribution of values | `order_service.request.duration`, `order_service.payload.size` |
+| **Distribution** | Like histogram but aggregated across hosts | `order_service.order.total_minor` |
+| **Rate** | Events per second | `order_service.request.rate` |
 
-### Metric Naming (Aligns with observability-patterns.md)
+### Metric Naming
+
+Convention: `${CLAUDE_PLUGIN_ROOT}/references/observability-patterns.md`. Service prefix is mandatory — never a bare `order.created`.
 
 ```
 <service>.<entity>.<action>[.<outcome>]
@@ -242,8 +234,7 @@ order_service.payment.authorize.duration # histogram
   "dd.service": "order-service",
   "dd.env": "prod",
   "dd.version": "1.2.3",
-  "order_id": "ord-456",
-  "total": 200.00
+  "order_id": "ord-456"
 }
 ```
 
@@ -435,4 +426,4 @@ finally:
 ### Never Instrument
 - Individual user actions (unbounded cardinality)
 - Debug-level operations in production (cost)
-- PII in tags or log attributes (compliance — see security.md)
+- PII in tags or log attributes (compliance — see `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`)

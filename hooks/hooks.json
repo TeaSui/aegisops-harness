@@ -1,5 +1,5 @@
 {
-  "description": "tea-sdlc security, review gates, TDD and contract gates, session bootstrap and eval-upgrade auto-trigger hooks",
+  "description": "tea-sdlc gates (secrets, pre-PR review, TDD, contract, verification), session bootstrap with project snapshot, prompt autopilot and eval-upgrade auto-trigger",
   "hooks": {
     "PreToolUse": [
       {
@@ -45,7 +45,7 @@
     ],
     "SessionStart": [
       {
-        "matcher": "startup|clear|compact",
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
@@ -73,6 +73,43 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-gate.py\" record",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/autopilot.py\" post",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/autopilot.py\" post",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/autopilot.py\" prompt",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/autopilot.py\" stop",
             "timeout": 10
           }
         ]

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Load one local bootstrap as JSON data. The 48 KiB cap is local policy.
+# Load the session bootstrap plus a short project-state snapshot as JSON data. The 48 KiB cap is local policy.
 set -euo pipefail
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -9,8 +9,12 @@ fi
 
 hook_dir="${BASH_SOURCE[0]%/*}"
 config_root="$(cd -- "$hook_dir/.." && pwd -P)"
+# The heredoc below is python's stdin, so hand the hook payload over through the environment.
+TEA_SDLC_HOOK_INPUT="$(cat 2>/dev/null || true)"
+export TEA_SDLC_HOOK_INPUT
 exec python3 - "$config_root" <<'PY'
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -18,9 +22,10 @@ LIMIT = 49152
 root = Path(sys.argv[1])
 skill = root / 'skills/session-bootstrap/SKILL.md'
 payload = {'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': ''}}
+messages = []
 
 def omit(reason):
-    payload['systemMessage'] = 'Bootstrap omitted: ' + reason + '.'
+    messages.append('Bootstrap omitted: ' + reason + '.')
 
 try:
     if any(p.is_symlink() for p in (root, root / 'skills', skill.parent, skill)):
@@ -41,10 +46,30 @@ try:
 except (OSError, UnicodeError):
     omit('session-bootstrap could not be read as UTF-8')
 
+# Project snapshot: active specs, resumable plans, missing docs or tools. Advisory; never fails the hook.
+try:
+    hook_input = json.loads(os.environ.get('TEA_SDLC_HOOK_INPUT') or '{}')
+    cwd = hook_input.get('cwd') if isinstance(hook_input, dict) else None
+    if os.environ.get('TEA_SDLC_AUTOPILOT', '').lower() != 'off':
+        sys.path.insert(0, str(root / 'hooks'))
+        import autopilot
+        autopilot.prune_state()
+        lines, user_message = autopilot.snapshot(cwd or os.getcwd())
+        if lines:
+            payload['hookSpecificOutput']['additionalContext'] += (
+                '\n<tea-sdlc-autopilot>\nProject state at session start:\n- ' + '\n- '.join(lines[:10])
+                + '\n</tea-sdlc-autopilot>')
+        if user_message:
+            messages.append(user_message)
+except Exception:
+    pass
+
+if messages:
+    payload['systemMessage'] = ' '.join(messages)
 encoded = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
 if len((encoded + '\n').encode('utf-8')) > LIMIT:
     payload['hookSpecificOutput']['additionalContext'] = '[TRUNCATED: bootstrap omitted in full because serialized JSON exceeds the local 48 KiB budget. Load session-bootstrap via Skill if needed.]'
-    omit('the local serialized-output budget was exceeded')
+    payload['systemMessage'] = 'Bootstrap omitted: the local serialized-output budget was exceeded.'
     encoded = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
 print(encoded)
 PY

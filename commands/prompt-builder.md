@@ -1,5 +1,5 @@
 ---
-description: Generate an optimal Claude prompt from a user description. Software-change requests get a prompt that follows the tea-sdlc flow (spec → adr → tdd → implement → test → create PR); other tasks get a minimal or full XML-structured prompt. Asks clarifying questions when details are missing.
+description: Use only when the user asks for a prompt to be written (or runs /prompt-builder) — generates an optimal Claude prompt from a description. Software-change requests get a prompt that follows the tea-sdlc flow (spec → adr → tdd → implement → test → create PR); other tasks get a minimal or full XML-structured prompt. Asks clarifying questions when details are missing.
 argument-hint: "[description of what you want the prompt to do]"
 ---
 
@@ -85,49 +85,51 @@ You are a senior engineer on [service/repo], working through the tea-sdlc flow. 
 </context>
 
 <workflow>
-First, invoke the `brainstorming` skill on this change (scaled to the tier: 2-3 lines for a fast-path fix, a full design for trust-boundary work), then confirm the tier. Do this before reading files or starting stage 1.
+First, invoke the `tea-sdlc:brainstorming` skill on this change (scaled to the tier: 2-3 lines for a fast-path fix, a full design for trust-boundary work), then confirm the tier. Do this before reading files or starting stage 1.
 
 Before stage 1, read `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`. Resolve the owning scope root (§6.1) and the project's existing locations for specs, ADRs and contracts (§6.2, §6.4); reuse them, never create a parallel tree or a numbered/`-v2` duplicate.
 
 Execute in order. Finish a stage and meet its gate before starting the next. Report the stage you are in.
 
 1. SPEC — define what changes and why.
-   - Full workflow: create `[service]/docs/specs/[slug]/` (layout §4). Each file has one writer: `security.md` (threat model + numbered rules) → security-engineer-subagent; `ui-design.md` → ui-ux-designer-subagent; every other file (`requirements.md` with US/AC/BR ids, `design.md`, `contracts/`, `measurement.md` via the `measurement-planning` skill) → the main session. When the context says `External contract change: yes`, the main session drafts `contracts/` and runs `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py [service]/docs/specs/[slug]` until it passes before stage 3; otherwise there is no `contracts/`. Create only the files the change needs. The main session writes `README.md` with the layout §4 frontmatter (`status: proposed`, `scope`, `affects`, `contract: none|external`, `updated`) and the file index.
-   - Full workflow: also `plan.md` in the same folder (tasks, ownership, order, parallelism).
+   - Full workflow: create `[service]/docs/specs/[slug]/` (layout §4). Each file has one writer: `security.md` (threat model + numbered rules) → security-engineer-subagent; `ui-design.md` → ui-ux-designer-subagent; every other file (`requirements.md` with US/AC/BR ids, `design.md`, `contracts/`, `measurement.md` via `tea-sdlc:measurement-planning`) → the main session. When the context says `External contract change: yes`, the main session drafts `contracts/` and runs `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" [service]/docs/specs/[slug]` until it passes before stage 3; otherwise there is no `contracts/`. Create only the files the change needs. The main session writes `README.md` with the layout §4 frontmatter (`status: proposed`, `scope`, `affects`, `contract: none|external`, `updated`) and the file index.
+   - Full workflow: after acceptance, `plan.md` in the same folder via `tea-sdlc:writing-plans` (one `- [ ] Task N:` line per task, owner, order, parallelism).
    - Fast path: state the approach and acceptance criteria in 2–3 lines; no spec folder. If the change alters documented behavior, update the affected living file in the same change (layout §6.6).
-   - Gate: the user approves the spec; only then set `status: accepted` and `accepted_by`. Do not continue on a `proposed` spec unless told to.
+   - Gate (full workflow only): present the spec once and ask the user to approve it; if this request explicitly delegated approval, record `accepted_by: <user> (delegated in request)` instead of asking. Then set `status: accepted` and `accepted_by`. Do not implement on a `proposed` spec.
+   - Fast path: no approval gate; continue.
 
 2. ADR — record decisions that outlive the change.
    - For each significant decision (architecture, data model, new dependency, API style, security posture), write `[service]/docs/adr/NNNN-<decision>.md` (`<system-root>/docs/adr/` when it spans services) with the next free number: context, options, decision, consequences. The main session is the writer. Link it from the spec's `design.md` and from the service `README.md` ADR index.
    - If no such decision exists, write one line: "No ADR needed: [reason]". An accepted ADR is immutable: supersede it with a new ADR, never rewrite it.
    - Gate: every decision the spec depends on has an ADR or an explicit "no ADR needed".
 
-3. TDD — write failing tests first.
+3. TDD — write failing tests first (`tea-sdlc:test-driven-development`).
    - Read the service's `docs/architecture.md` (Code conventions, Test strategy) when present, then 2–3 existing tests to confirm them. Write tests for happy path, edge cases and error conditions from the acceptance criteria, not from the implementation.
    - Run them with the project's own test runner; they MUST fail for the expected reason. Show the failing output.
    - Gate: failing tests exist and fail correctly.
 
 4. IMPLEMENT — minimum code to go green.
+   - Full workflow: execute `plan.md` with `tea-sdlc:subagent-driven-development`. Fast path: implement in this session, no subagent dispatch.
    - Apply the accepted `contracts/` delta to the project's authoritative contract source (layout §6.4); do not re-type schemas in prose. Do not add untested behavior or weaken assertions.
    - Implementers never rewrite spec, ADR or living-doc files. Contradictions with the spec are reported as `DONE_WITH_CONCERNS`, not silently fixed.
    - Gate: the new tests pass.
 
 5. TEST — prove it.
    - Run the full suite (and build, lint, live API validation if a service is running). Fix regressions.
-   - Fast path: single pre-PR pass per `${CLAUDE_PLUGIN_ROOT}/rules/pre-pr-review.md`. Higher tiers: code review and QA `GO`.
+   - Fast path: single pre-PR pass per `${CLAUDE_PLUGIN_ROOT}/rules/pre-pr-review.md`. Full workflow: dispatch `code-reviewer` per `${CLAUDE_PLUGIN_ROOT}/rules/pre-pr-review.md`, record the pass with `${CLAUDE_PLUGIN_ROOT}/scripts/mark-pr-review.py`, and get QA `GO` from `qa-subagent`.
    - Gate: all checks green with evidence; skipped or unavailable checks are stated explicitly.
 
 6. CREATE PR — hand off.
-   - Branch from the default branch, commit in logical steps, open the PR. The description links the spec and ADRs, lists the acceptance criteria with evidence, and notes risks and skipped checks.
-   - After QA `GO` or merge, run `/upgrade-service-docs [service] [slug]`: it updates the living docs, sets the spec `status: implemented` and `source_revision`, and refreshes the ADR index. Living docs are owned by `/generate-service-docs` and `/upgrade-service-docs`; do not hand-edit them in the PR (fast-path exception above).
+   - Branch from the default branch and commit in logical steps. Record the pre-PR pass for the final HEAD with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/mark-pr-review.py" --reviewer <name> --open-findings 0` (the `gh pr create` gate needs it), then open the PR (`tea-sdlc:finishing-a-development-branch`). The description links the spec and ADRs, lists the acceptance criteria with evidence, and notes risks and skipped checks.
+   - Full workflow: after QA `GO` or merge, run `upgrade-service-docs [service] [slug]` yourself: it updates the living docs, sets the spec `status: implemented` and `source_revision`, and refreshes the ADR index. Living docs are owned by `/generate-service-docs` and `/upgrade-service-docs`; do not hand-edit them in the PR (fast-path exception above).
 </workflow>
 
 <constraints>
-- Follow the stages in the order given; do not implement before the spec is accepted and the failing tests exist.
+- Follow the stages in the order given; do not implement before the failing tests exist, and in the full workflow not before the spec is accepted.
 - Never move, rename or delete `specs/`, `adr/`, `plans/` or legacy role folders (`docs/requirements/`, `docs/security/`, `docs/contracts/`, `docs/design/`, `docs/domain/`, `docs/decisions/`); add to them only through the owning stage.
 - Reuse existing project locations for docs and contracts before creating new ones.
 - Report only what you ran; never claim a skipped check passed.
-- If you lack information needed for a stage, stop and ask one targeted question instead of guessing.
+- If information for a stage is missing, ask one targeted question only when the answer changes the design; otherwise state the assumption and continue.
 </constraints>
 
 <output_format>

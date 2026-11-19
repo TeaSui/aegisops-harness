@@ -1,6 +1,6 @@
 ---
 name: writing-software-docs
-description: This skill should be used when the user wants a STRUCTURED, deliverable software document in a recognized industry format — a BRD, PRD, FRD, User Story + Acceptance Criteria, RFC, ADR, Specification, or Concern Report. Triggers on "write a PRD/spec/RFC/ADR", "spec out this feature", "turn these requirements into a doc developers can build", "write up the decision to use X" (→ ADR), or "do a compatibility/concern analysis" (→ Concern Report) — including when the user describes the artifact without naming the type. Use it so the document follows the standard structure that keeps requirements complete, implementable, testable, and codegen-friendly. NOT for code comments, docstrings, READMEs, commit messages, changelogs, chat answers, or quick informal notes — those are plain prose, not structured deliverables; do those directly without this skill.
+description: Use when the user asks to write, draft or spec out a BRD, PRD, FRD, user stories with acceptance criteria, RFC, ADR, specification or concern report ("write a PRD for…", "spec out this feature", "write up the decision to use X", "do a compatibility analysis"), including when the user describes the artifact without naming the type. This skill is the structure authority for these documents even when the result is published through a document connector (Docs, Notion, Confluence, Google Drive) — load it first for the sections, then publish. Not for code comments, docstrings, READMEs, commit messages, changelogs, chat answers or quick informal notes.
 ---
 
 # Writing Software Documents
@@ -35,13 +35,13 @@ If a request spans several types, produce the one that fits the current need and
 
 ## Step 1.5 — Routing check (this skill formats; it does not bypass routing)
 
-This skill is a **structural layer**, not a substitute for the agent-routing model in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` and `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`. Several of these documents are the canonical artifacts of strategic agents: user stories, RFC/ADR/Specification and contracts are written by the main session, and any threat-model-adjacent analysis belongs to `security-engineer-subagent`.
+This skill is a **structural layer**, not a substitute for the agent-routing model in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` and `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`. Several of these documents are canonical spec artifacts: requirements, user stories, RFC/ADR/Specification and contracts are written by the main session; threat-model analysis (`security.md`) belongs to `security-engineer-subagent` and `ui-design.md` to the UI/UX designer.
 
-Before drafting in the main session, check: does the document describe **trust-boundary** work (auth, payments, PII, a new endpoint/webhook, a new external integration — see the `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` checklist) and the owning agent hasn't run? If so, flag it: the artifact should be produced (or reviewed) by that agent, not improvised here. You can still draft a *working sketch*, but say plainly that it isn't a substitute for the agent's output. Formatting a document never converts trust-boundary work into fast-path work.
+Before drafting in the main session, check: does the document describe **trust-boundary** work (auth, payments, PII, a new endpoint/webhook, a new external integration — see the `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` checklist) and `security-engineer-subagent` has not run? If so, flag it: the security review must run before the document can be treated as accepted. You can still draft it, but say plainly that it has not had that review. Formatting a document never converts trust-boundary work into fast-path work.
 
 Use artifact status labels so readers do not mistake a formatted draft for an approved contract:
 - **Working Draft** — written in the main session before required Security and contract gates have run.
-- **Agent-Reviewed** — reviewed or produced by the owning strategic agent, with evidence paths cited.
+- **Security-Reviewed** — the required `security-engineer-subagent` review (and contract gate, when one applies) has run, with evidence paths cited.
 - **Approved** — explicitly accepted by the user/team after the required routing gates.
 
 For trust-boundary RFCs, ADRs, Specifications, or Concern Reports, default to **Working Draft** until the Security review and contract gate are satisfied. Add a short `Routing / Required Review` section near the top naming the missing gate, e.g. `Security review required: new endpoint + PII`.
@@ -67,9 +67,9 @@ Open the matching reference file, follow its structure exactly, and fill every s
 
 Collect every `[NEEDS INPUT]` and `[ASSUMED]` into an **Open Questions** section at the end so the reader sees all open decisions at a glance. Number requirements and rules (FR-1, BR-1, AUTH-01…) so downstream docs, tests, and reviews can cite them precisely.
 
-## Step 4 — Deliver (and save only when it's a real deliverable)
+## Step 4 — Deliver
 
-By default, return the draft in the conversation. **Save to a file only when** the user asked for a persisted artifact, OR you're running as a strategic subagent whose persistence obligation requires it. Don't silently write files for a casual request — per the environment's "confirm before file generation" expectation, ask first if it's unclear whether the user wants a file.
+Save to the layout path when the document is a spec artifact of the current change (full-workflow requirements/design/contracts/ADR) or the user asked for a file; otherwise return it in the conversation. When you create `docs/specs/<feature>/`, also create its `README.md` with `status: proposed` frontmatter (layout §4). When the user wants it published through a document connector, keep this structure and publish there.
 
 When you do save, use `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` (reuse the project's existing equivalent location first):
 
@@ -82,7 +82,7 @@ When you do save, use `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`
 
 Do **not** write `docs/specs/<feature>/security.md` from this skill — that file is the Security agent's. A security/compatibility concern on a trust-boundary surface should route to `security-engineer-subagent`, not be authored here.
 
-Do not persist a trust-boundary Working Draft as the authoritative contract unless the user explicitly asks for a draft file. When saving such a draft, include `working-draft` in the filename or first heading and keep the routing warning in the document. Do not label it `Approved` or present it as implementation-ready until the required agent gate has produced or reviewed it.
+Do not persist a trust-boundary Working Draft as the authoritative contract unless the user explicitly asks for a draft file. When saving such a draft, include `working-draft` in the filename or first heading and keep the routing warning in the document. Do not label it `Approved` or present it as implementation-ready until the required security review (and contract gate, when one applies) has run.
 
 **If you're a strategic subagent (Security, UI/UX), defer to your own persistence rule, not this table.** The layout file names each agent's file. Use your agent's convention for path and filename to avoid double-persisting one artifact under two names, and return per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md` (status + evidence path + exit-criteria) — cite the saved path, don't paste the document inline.
 

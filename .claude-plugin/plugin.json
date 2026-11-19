@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "tea-sdlc",
-  "version": "2.8.0",
-  "description": "Comprehensive Software Development Life Cycle (SDLC) framework for Claude Code with specialized multi-tier subagents, skills, commands, rules, quality gates, and automated security reviews.",
+  "version": "2.9.0",
+  "description": "SDLC framework for Claude Code that runs itself: specialist subagents, trust-boundary routing, TDD/contract/verification/secret/pre-PR gates and an autopilot that loads the right skill or command for each prompt, so nobody has to remember slash commands.",
   "author": {
     "name": "Tea Nguyen",
     "email": "nguyenminhtung.developer@gmail.com",
@@ -12,15 +12,17 @@
   "repository": "https://github.com/TeaSui/tea-sdlc",
   "license": "MIT",
   "keywords": [
-    "sdlc",
     "agents",
-    "skills",
-    "commands",
-    "code-review",
-    "security-gate",
     "architecture",
-    "workflow",
-    "devops"
-  ],
-  "hooks": "./hooks/hooks.json"
+    "autopilot",
+    "code-review",
+    "commands",
+    "devops",
+    "hooks",
+    "sdlc",
+    "security-gate",
+    "skills",
+    "tdd",
+    "workflow"
+  ]
 }

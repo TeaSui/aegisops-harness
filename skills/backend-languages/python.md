@@ -1,10 +1,8 @@
 ---
 name: backend-languages-python
 description: >
-  FOR BACKEND-ENGINEER-SUBAGENT USE ONLY.
   Idiomatic Python 3.12+ backend patterns: src layout, pyproject.toml, typing, pytest,
   asyncio, FastAPI/Starlette handlers, exception hierarchies, dependency injection, uv/poetry.
-type: reference
 ---
 
 # Python Backend Patterns
@@ -230,5 +228,5 @@ strict = true
 3. **Missing `await`** — calling an `async def` without `await` returns a coroutine object silently. Enable `asyncio_mode = "auto"` and use `anyio` or `pytest-asyncio`.
 4. **ORM model as response** — SQLAlchemy model leaks lazy-loaded fields. Always `.model_validate(orm_obj)` into a Pydantic schema.
 5. **`from __future__ import annotations` on Pydantic v2** — can break runtime field resolution. Prefer explicit type annotations.
-6. **`settings` as module-level singleton without `lru_cache`** — re-reads env vars on every import. Wrap `get_settings()` with `@lru_cache`.
+6. **`settings = Settings()` at module level** — a module executes once per process, so this reads env once, but at import time: imports fail when env is missing and tests cannot override it. Expose `get_settings()` wrapped in `@lru_cache` and inject it via `Depends` (override with `app.dependency_overrides` or `get_settings.cache_clear()`).
 7. **Catching `Exception` bare** — masks bugs. Catch specific exception types; re-raise or convert to `AppError`.

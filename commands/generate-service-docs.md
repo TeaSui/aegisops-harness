@@ -1,5 +1,5 @@
 ---
-description: Generate production-grade, AI-readable documentation for microservices
+description: Use when a service or system has no living docs (no docs/ folder), when the user asks to document a service or codebase, or when docs are missing sections a task needs. Builds production-grade, AI-readable living reference docs from the source code. Offer it once before running; it reads the whole service.
 argument-hint: "[service-name]"
 ---
 
@@ -15,8 +15,8 @@ The canonical service tree, system tree, file owners and lifecycle are defined i
 
 ## Context
 
-- The current working directory is the **system root** (the parent folder holding the services, often `Sources/`; detection rule in layout §6.1).
-- I will specify one or more child services.
+- Resolve the service root and system root per layout §6.1; in a single-service repository the service is the current directory and Phase 2 runs only if a system root exists.
+- Target services: $ARGUMENTS. When empty, use the current repository as the single service (or every service root under a detected system root) and state the choice.
 - Treat **source code as the single source of truth**. Confluence/Notion documents are secondary evidence only.
 - If a `docs/` folder already exists (in a service or at the system root), **update and enrich** it instead of overwriting blindly.
 
@@ -47,7 +47,7 @@ This command must be **safe to re-run multiple times**.
 
 ## Instructions
 
-### Phase 1: Service-level living docs (inside each specified service)
+### Phase 1: Service-level living docs (inside each target service)
 
 Create or update `<service>/docs/` per layout §2: `README.md`, `architecture.md` (including deployment view, quality requirements, **code conventions** and **test strategy**), `business-logic.md`, `api-contracts.md`, `data-model.md`, `events.md`, `security.md`, `configuration.md`, `troubleshooting.md` (including **known concerns / tech debt**), `diagrams/`, and the **`adr/`** decision-record folder.
 
@@ -66,7 +66,7 @@ Requirements:
 
 ### Phase 2: System-level living docs (at the system root)
 
-After all requested services, create or **update** `<system-root>/docs/` per layout §3. Ensure `<system-root>/docs/adr/` exists (create empty if missing; same rules as service `adr/`). Focus on relationships, end-to-end flows and the master catalogs (APIs, events, topics/queues). `glossary.md` is owned by the main session: add only terms that are missing and clearly evidenced by code, never redefine existing entries.
+Run this phase only when a system root exists (layout §6.1). After all target services, create or **update** `<system-root>/docs/` per layout §3. Ensure `<system-root>/docs/adr/` exists (create empty if missing; same rules as service `adr/`). Focus on relationships, end-to-end flows and the master catalogs (APIs, events, topics/queues). `glossary.md` is owned by the main session: add only terms that are missing and clearly evidenced by code, never redefine existing entries.
 
 ### Phase 3: Quality & consistency rules
 - Source code over any external documentation; state assumptions explicitly when information is missing.
@@ -78,13 +78,13 @@ After all requested services, create or **update** `<system-root>/docs/` per lay
 
 ## Execution
 
-When I specify the services, you will:
+Once the scope is resolved, you will:
 
 1. Read `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`.
-2. Analyze the source code of each mentioned service thoroughly (one by one).
+2. Analyze the source code of each target service thoroughly (one by one).
 3. Generate or update its living docs (update-in-place, no duplicates, protected folders untouched).
-4. Generate or update the system-level living docs, normalizing only the living file set.
-5. Verify every specified service has `docs/adr/` (and the system root has `docs/adr/`).
+4. When a system root exists, generate or update the system-level living docs, normalizing only the living file set.
+5. Verify every target service has `docs/adr/` (and the system root, when one exists, has `docs/adr/`).
 6. Output the final folder tree, a short summary of what was created/updated/renamed, candidate ADRs, and the list of unclassified items.
 
-Begin only after I list the target services.
+Start once the scope is resolved; ask only if no service root can be identified.

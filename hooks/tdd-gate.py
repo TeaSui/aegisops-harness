@@ -20,11 +20,25 @@ CODE_EXT = ('.java', '.kt', '.scala', '.py', '.js', '.jsx', '.ts', '.tsx', '.go'
 TEST_PATH = re.compile(r'(^|/)(tests?|__tests__|specs?|e2e)(/|$)|(^|/)src/test/|(Test|Tests|IT)\.(java|kt|scala|cs)$'
                        r'|\.(test|spec)\.[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.(go|py)$')
 SKIP_DIRS = re.compile(r'(^|/)(node_modules|build|dist|target|\.gradle|\.git|vendor)(/|$)')
-TEST_CMD = re.compile(r'\b(gradle|gradlew|mvn|mvnw)\b.*\btest\b|\bnpm (run )?test\b|\b(npx )?(vitest|jest)\b|\bpytest\b'
-                      r'|\bgo test\b|\bcargo test\b|\bnode --test\b|\bdotnet test\b|\bflutter test\b|\bmake test\b')
 RED = re.compile(r'BUILD FAILED|tests? completed, \d+ failed|\b[1-9]\d* failed\b|AssertionError|# fail [1-9]'
                  r'|--- FAIL|\bFAIL\b|Failures: [1-9]|Tests:\s+\d+ failed|FAILED')
-WRITEISH = re.compile(r'open\([^)]*,\s*[\'"][wa]|write_text|cat\s*>|cat\s*<<|tee\s|sed\s+-i|perl\s+-pi|>>?\s*\S+')
+# A test run is a segment of the command that STARTS with a runner (after env vars and launchers such as npx,
+# `python -m`, `uv run` or a ./ path), so `npm install -D jest` or `cat jest.config.js` is not one.
+SEGMENTS = re.compile(r'&&|\|\||[;|\n]')
+RUNNER = re.compile(
+    r'^(?:\w+=\S*\s+)*(?:time\s+|timeout\s+\d+\S*\s+)?'
+    r'(?:(?:npx|bunx|uvx)\s+|(?:pnpm|yarn)\s+(?:exec\s+|dlx\s+)?|(?:uv|poetry|pipenv|hatch)\s+run\s+'
+    r'|python[\d.]*\s+-m\s+|\S*/)?'
+    r'(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:vitest|jest|mocha|ava|karma|pytest|tox|nox|rspec|phpunit|ctest'
+    r'|unittest)\b|playwright\s+test\b|go\s+test\b|cargo\s+(?:test|nextest)\b|node\s+--test\b'
+    r'|(?:dotnet|flutter|dart|swift|deno|mix|sbt|lein)\s+test\b|xcodebuild\b.*\btest\b|make\s+(?:test|check)\b'
+    r'|(?:gradle|gradlew|mvn|mvnw)\b(?!.*(?:-DskipTests|-Dmaven\.test\.skip|-x\s+test\b)).*\b(?:test|check|verify)\b)')
+# Shell writes: the target of `>`, `>>`, `1>`, `&>`, `&>>`, `>|` (not `2>` or `>&2`), every operand of `tee`, code paths in
+# a segment that edits in place (sed -i / --in-place, perl -i), and code paths anywhere in a command whose inline code
+# writes files (open(..., 'w'), write_text). Paths are found by splitting into tokens: linear on any input.
+REDIRECT = re.compile(r'(?<![0-9>&])[1&]?>>?\|?(?!&)\s*([^\s;&|<>()]+)')
+INPLACE = re.compile(r'\bsed\b.*\s(?:-[a-zA-Z]*i\b|-i\S*|--in-place)|\bperl\b.*\s-[a-zA-Z]*i')
+INLINE_WRITE = re.compile(r'open\([^)]*,\s*[\'"][wax]|write_text|write_bytes')
 INFRA = ('build.gradle', 'build.gradle.kts', 'pom.xml', 'package.json', 'pyproject.toml', 'pytest.ini', 'setup.cfg',
          'tox.ini', 'go.mod', 'Cargo.toml', 'pubspec.yaml')
 STATE_DIR = pathlib.Path.home() / '.claude' / 'state' / 'tdd'
@@ -35,13 +49,32 @@ def is_prod_code(path):
     return path.endswith(CODE_EXT) and not TEST_PATH.search(path) and not SKIP_DIRS.search(path)
 
 
+def segments(command):
+    return [part.strip() for part in SEGMENTS.split(command.replace('>|', '>'))]
+
+
+def is_test_command(command):
+    return any(RUNNER.match(part) for part in segments(command))
+
+
+def _tokens(text):
+    return [t for t in re.split(r'[\s\'"`(),;=\[\]{}<>|&]+', text) if t]
+
+
 def bash_writes_prod(command):
-    if not WRITEISH.search(command):
-        return None
-    for match in re.finditer(r'[\w./~-]+\.(?:java|kt|scala|py|js|jsx|ts|tsx|go|rs|cs|rb|php|swift|dart|c|cc|cpp|h)\b',
-                             command):
-        if is_prod_code(match.group(0)):
-            return match.group(0)
+    candidates = REDIRECT.findall(command)
+    for part in segments(command):
+        words = _tokens(part)
+        if 'tee' in words:
+            candidates += [w for w in words[words.index('tee') + 1:] if not w.startswith('-')]
+        if INPLACE.search(part):
+            candidates += words
+    if INLINE_WRITE.search(command):
+        candidates += _tokens(command)
+    for candidate in candidates:
+        candidate = candidate.strip('\'"')
+        if is_prod_code(candidate):
+            return candidate
     return None
 
 
@@ -69,7 +102,10 @@ def load(session):
 def save(session, state):
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        state_file(session).write_text(json.dumps(state))
+        target = state_file(session)
+        temp = target.with_suffix(f'.{os.getpid()}.tmp')
+        temp.write_text(json.dumps(state))
+        os.replace(temp, target)  # atomic: a concurrent reader never sees a half-written file
     except OSError:
         pass
 
@@ -94,7 +130,7 @@ def main():
     if not session:
         return 0
     if mode == 'record':
-        if tool == 'Bash' and TEST_CMD.search(str(tin.get('command', ''))) and \
+        if tool == 'Bash' and is_test_command(str(tin.get('command', ''))) and \
                 RED.search(result_text(payload)):
             state = load(session)
             state['red'] = True

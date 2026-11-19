@@ -1,4 +1,6 @@
-# Data Privacy Rules (Fintech/TYME Context)
+# Data Privacy Patterns
+
+Defaults for a Singapore fintech context; the project's verified jurisdiction and policies override. Cite the regulation before relying on a deadline or period.
 
 ## PII Classification
 
@@ -34,15 +36,15 @@
 - Level 1 data: encrypted with customer-managed KMS keys (AWS KMS CMK)
 - Level 2 data: encrypted with AWS-managed KMS keys minimum
 - Never store card numbers, CVV, or full PAN — use tokenization (e.g., Stripe tokens)
-- Retention periods must be defined and enforced:
-  - Transaction records: 7 years (regulatory requirement)
+- Retention periods must be defined and enforced (example defaults, set per policy):
+  - Transaction records: 7 years
   - KYC documents: 5 years post-relationship end
   - Session data: 90 days
   - Logs containing user data: 1 year
 
 **Processing:**
 - Never log raw PII — mask or truncate in logs
-  - Email: `user@***.com`
+  - Email: `us***@example.com`
   - Phone: `+65****1234`
   - Account: `****5678`
 - No PII in error messages returned to clients
@@ -95,19 +97,15 @@ const maskAccountNumber = (account: string): string =>
 - Never send raw PII to external LLM APIs (including Anthropic Claude API)
 - Anonymize/pseudonymize before analysis: replace names with `[USER_A]`, etc.
 - Use on-premise or VPC-hosted models for processing PII when required
-- Internal Bedrock endpoint (current setup) is acceptable for PII processing with proper DPA
 
 ## Data Subject Rights
-- Right to access: must return all data held about a user within 30 days
+- Right to access: return all data held about a user within the period the applicable regulation sets
 - Right to deletion: implement hard delete + backup purge for Level 1/2 data
 - Right to portability: data export in standard format (JSON/CSV)
 - Implement a `deleteUser(userId)` function that is tested and documented
 
 ## Breach Response
-- Data breach detection: alert within 1 hour of detection
-- Internal notification: CTO + Legal within 2 hours
-- Regulatory reporting: MAS (Monetary Authority of Singapore) within 30 days
-- Customer notification: within 30 days if high risk to individuals
+- Notification deadlines (internal, regulator, affected individuals) come from the project's incident-response policy and the cited regulation, not from this file
 - Maintain incident log with: detection time, scope, affected records count, remediation
 
 ## Code Review Checklist (Data Privacy)

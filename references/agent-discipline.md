@@ -14,7 +14,7 @@ No fixes without root cause investigation. Read errors → reproduce → check g
 
 No completion claims without running tests and build. Show actual command output: test count, pass/fail, coverage %, build exit code. Forbidden phrases: "should work", "probably passes", "looks good", "I'm confident" — without actual output to back them up.
 
-Write test output to a file (e.g., `test-results.txt`) and confirm with Read tool. A file on disk requires actually running the command.
+Write test output to a file outside the project tree (e.g. `/tmp/<slug>.log`) and confirm with the Read tool. A file on disk requires actually running the command.
 
 Read totals only from the result set produced by the command you ran: clear its result directory before the run, or use the tool's own summary. Never aggregate across result directories (e.g. Gradle's `build/test-results/{test,unitTest,cucumberTest}`); stale files from earlier runs inflate counts and resurrect fixed failures.
 
@@ -28,7 +28,9 @@ When escalating, report: what you tried, errors seen, root cause guess, what wou
 
 ## Project Context
 
-**Path convention:** in tea-sdlc files, paths beginning `rules/`, `references/`, `skills/` or `templates/` are relative to the tea-sdlc plugin root (the parent directory of this `references/` folder), never to the target project or `~/.claude/`. Project paths such as `docs/…` are relative to the target project.
+**Path convention:** in tea-sdlc files, paths beginning `rules/`, `references/`, `skills/` or `scripts/` are relative to the tea-sdlc plugin root (the parent directory of this `references/` folder), never to the target project or `~/.claude/`. Project paths such as `docs/…` are relative to the target project.
+
+Before acting on a spec or living doc, run the staleness check in `rules/strategic-output-persistence.md`.
 
 Follow the target project's documented stack, architecture, environment, security constraints and output locations, within the dispatch's owned scope. Treat personal stack and region choices in agent definitions as defaults only when the project leaves the choice open; do not migrate an established stack as part of unrelated work.
 

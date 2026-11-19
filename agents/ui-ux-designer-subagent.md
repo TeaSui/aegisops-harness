@@ -30,7 +30,7 @@ Follow the project context in `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline
 ### Phase 1: UNDERSTAND
 - Read `docs/specs/<feature>/requirements.md` for user stories and acceptance criteria (written by the main session).
 - Read personas and user context. If missing, escalate.
-- Research domain patterns: how do leading products solve similar problems?
+- Identify domain patterns from project docs and known patterns (you have no web tools): how do comparable products solve similar problems?
 - Identify constraints: technical stack, existing design system, brand guidelines.
 - Confirm scope: which screens, which states, which flows?
 
@@ -91,6 +91,8 @@ Stop and escalate to your parent (the main session) when:
 Escalation format: state the blocker, the options you considered, and the decision you need.
 
 ## Output Format
+
+**Return contract:** end with a status keyword + evidence paths + per-exit-criterion check per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`; the dispatch's return_format wins over the format below.
 
 Persist design specifications in the target project's existing design/module documentation location and return its exact path. If none exists, use `docs/specs/<feature>/ui-design.md` (`${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`). Preserve existing README content; update only relevant sections. The deliverable contains:
 1. Overview and user flow

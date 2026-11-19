@@ -13,6 +13,8 @@ description: |
 
 # API Contract Testing Patterns
 
+Static structure/compatibility of `docs/specs/<f>/contracts/` = `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py <spec-dir>` (the contract gate). This skill covers runtime/consumer contract tests.
+
 ## When to Use What
 
 | Scenario | Approach |
@@ -27,7 +29,7 @@ description: |
 
 ### Select the target and installed validator
 
-The former inline OpenAPI loop is retired: checking a few required keys is not schema validation. Use the repository's installed contract runner, compatible with its OpenAPI version and JSON Schema dialect. Follow [the installed-validator workflow](references/installed-validator-workflow.md) for discovery, explicit target selection, negative fixtures, baseline comparison and result gates.
+The former inline OpenAPI loop is retired: checking a few required keys is not schema validation. Use the repository's installed contract runner, compatible with its OpenAPI version and JSON Schema dialect. Read the installed-validator workflow (`${CLAUDE_PLUGIN_ROOT}/skills/api-contract-testing/references/installed-validator-workflow.md`) for discovery, explicit target selection, negative fixtures, baseline comparison and result gates.
 
 1. Identify the service/module, current working changes, spec path/hash and test environment from the task and project manifests. Use file discovery; do not fetch a guessed localhost endpoint or automatically execute operations found in a spec.
 2. Read the lockfile, existing contract tests and CI command. Inspect the installed validator's version/help and its matching documentation. Spec linting alone does not validate HTTP responses.
@@ -93,14 +95,15 @@ func TestPactProvider(t *testing.T) {
     srv := httptest.NewServer(setupRouter())
     defer srv.Close()
 
-    verifier := native.HTTPVerifier{}
+    // pact-go v2: github.com/pact-foundation/pact-go/v2/{provider,models}
+    verifier := provider.NewVerifier()
 
-    err := verifier.VerifyProvider(t, native.VerifyRequest{
+    err := verifier.VerifyProvider(t, provider.VerifyRequest{
         ProviderBaseURL: srv.URL,
         Provider:        "transaction-service",
-        PactDirs:        []string{"./pacts"}, // or PactBrokerURL
-        StateHandlers: native.StateHandlers{
-            "user has 3 transactions": func(setup bool, s native.ProviderStateV3) (native.ProviderStateV3Response, error) {
+        PactDirs:        []string{"./pacts"}, // or PactFiles / BrokerURL
+        StateHandlers: models.StateHandlers{
+            "user has 3 transactions": func(setup bool, s models.ProviderState) (models.ProviderStateResponse, error) {
                 if setup {
                     seedTestTransactions(3)
                 }
@@ -185,7 +188,7 @@ describe('Account API', () => {
 
 ### Repository-owned baseline comparison
 
-The inline capture/replay/comparison scripts are retired. Use the same deterministic project tests and schema validator as the contract gate, with sanitized version-controlled fixtures or the project's installed snapshot facility. See [the workflow](references/installed-validator-workflow.md#baseline-regression) for required request and comparison fields.
+The inline capture/replay/comparison scripts are retired. Use the same deterministic project tests and installed schema validator as the runtime contract tests above (not `check-contract.py`, which only checks the spec files), with sanitized version-controlled fixtures or the project's installed snapshot facility. See § Baseline regression in `${CLAUDE_PLUGIN_ROOT}/skills/api-contract-testing/references/installed-validator-workflow.md` for required request and comparison fields.
 
 A baseline must retain the scenario's method, resolved path, query, headers excluding secrets, request body/encoding, fixture setup and expected status/content type. Replaying POST with no body is a different test. Compare nested values/arrays according to explicit stable-field rules, and run the complete schema validation again. Never silently replace malformed JSON with null or compare only top-level keys. Treat missing/empty baseline sets as an incomplete gate; update accepted snapshots only after reviewing the behavioral change.
 

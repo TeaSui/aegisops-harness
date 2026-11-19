@@ -1,15 +1,14 @@
 ---
 name: backend-languages
 description: >
-  FOR BACKEND-ENGINEER-SUBAGENT USE ONLY. Do not load in the main session.
-  Routes to the correct language reference based on project triggers.
-  Covers Go, Spring Boot (Java), Python, and Rust backend patterns.
-type: reference
+  Use when writing or reviewing backend service code in Go, Spring Boot (Java), Python/FastAPI
+  or Rust/axum — by the main session on the fast path or by backend-engineer-subagent.
+  Routes to the matching language reference.
 ---
 
 # Backend Language References
 
-This skill is scoped exclusively to `backend-engineer-subagent`. It routes to the appropriate language reference file based on detected triggers. Load only the reference that matches your current task.
+Used by the main session on the fast path and preloaded into `backend-engineer-subagent`. It routes to the language reference file matching the detected triggers. Read only the reference that matches your current task.
 
 ## Language Router
 
@@ -23,7 +22,7 @@ This skill is scoped exclusively to `backend-engineer-subagent`. It routes to th
 ## How to use
 
 1. Detect the language from file extensions, build manifests, or imports.
-2. Invoke `Skill` with the matching reference filename (e.g., `backend-languages/golang`).
+2. Read `${CLAUDE_PLUGIN_ROOT}/skills/backend-languages/<file>.md` for the matching file (e.g. `golang.md`); these files are not skills and cannot be invoked with the Skill tool.
 3. Apply patterns from that reference. Do not load multiple language references unless the project is genuinely polyglot.
 
 ## Shared conventions (all languages)

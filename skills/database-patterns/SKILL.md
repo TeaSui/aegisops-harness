@@ -81,7 +81,7 @@ ORDER BY revenue_date;
 ### Pattern: Recursive CTE (Hierarchies)
 
 ```sql
--- Organization hierarchy (PostgreSQL and MySQL 8+)
+-- Organization hierarchy (PostgreSQL: ARRAY[] and || are PostgreSQL-only)
 WITH RECURSIVE org_tree AS (
     -- Base: top-level managers
     SELECT id, name, manager_id, 1 AS depth, ARRAY[id] AS path
@@ -99,6 +99,10 @@ WITH RECURSIVE org_tree AS (
 SELECT id, name, depth, path
 FROM org_tree
 ORDER BY path;
+
+-- MySQL 8+: build the path as a string instead of an array
+-- base:      CAST(LPAD(id, 10, '0') AS CHAR(1000)) AS path
+-- recursive: CONCAT(ot.path, '/', LPAD(e.id, 10, '0'))
 ```
 
 ### Pattern: CTE for Upsert with Returning
@@ -184,17 +188,16 @@ UPDATE orders SET status_v2 = status WHERE status_v2 IS NULL AND id BETWEEN $1 A
 
 **Phase 3 — Switch:** Deploy code that reads from new column. Verify.
 
-**Phase 4 — Contract:** Drop old column (after all code stops using it).
+**Phase 4 — Contract:** Drop old column (after all code stops using it). Keep `status_v2` as the final name: renaming it back to `status` in place breaks every running instance that reads `status_v2`. If the original name must return, run a second expand/contract cycle.
 ```sql
 ALTER TABLE orders DROP COLUMN status;
-ALTER TABLE orders RENAME COLUMN status_v2 TO status;
 ```
 
 ### Migration Safety Rules
 1. **Never DROP COLUMN in the same deploy as the code change.** Old code instances may still need it.
 2. **Add columns as NULLABLE** or with a server-side DEFAULT. `NOT NULL` without default locks the table for backfill.
 3. **CREATE INDEX CONCURRENTLY** (PostgreSQL) to avoid blocking writes.
-4. **Large table ALTERs** — use `pt-online-schema-change` (MySQL) or `pg_repack` (PostgreSQL) for tables > 1M rows.
+4. **Large table ALTERs** — MySQL: `pt-online-schema-change` or `gh-ost` for tables > 1M rows. PostgreSQL: prefer metadata-only changes (nullable `ADD COLUMN`, constant `DEFAULT` on PG 11+), `ADD CONSTRAINT … NOT VALID` then `VALIDATE CONSTRAINT`, and a `lock_timeout`; table-rewriting changes (type changes) go through expand/contract. `pg_repack` only removes bloat online — it does not apply schema changes.
 5. **Test migrations against a production-size dataset.** A migration that takes 1 second on dev can lock production for minutes.
 
 ### Flyway Naming Convention
@@ -220,7 +223,9 @@ R__refresh_order_summary_view.sql  # repeatable migration
 | Get customer's orders | `CUSTOMER#<custId>` | `ORDER#<timestamp>#<orderId>` | |
 | Get order items | `ORDER#<orderId>` | `ITEM#<itemId>` | |
 | Orders by status | | | GSI1PK: `STATUS#<status>`, GSI1SK: `ORDER#<timestamp>` |
-| Recent orders (global) | | | GSI1PK: `ALL_ORDERS`, GSI1SK: `<timestamp>#<orderId>` |
+| Recent orders (global) | | | GSI2PK: `ORDERS#<yyyy-mm-dd>#<shard 0..N-1>`, GSI2SK: `<timestamp>#<orderId>` |
+
+An item has one value per attribute, so a second access pattern on the same items needs a second GSI (GSI2), not a second GSI1PK value. A single constant key such as `ALL_ORDERS` is a hot partition; bucket by day and shard, then query the shards in parallel and merge. Shard `STATUS#<status>` the same way when one status dominates.
 
 ### Query Patterns (Application Code)
 
@@ -297,14 +302,20 @@ public Order getOrder(String orderId) {
     return order;
 }
 
-// Invalidate on write
+// Invalidate on write — only after the transaction commits. Deleting inside the transaction
+// lets a concurrent reader re-cache the old row before commit (or evicts for a rolled-back write).
 @Transactional
 public Order updateOrder(String orderId, UpdateOrderRequest req) {
     Order order = orderRepository.findById(orderId).orElseThrow(...);
     order.apply(req);
     order = orderRepository.save(order);
-    redis.delete("order:" + orderId); // invalidate cache
+    events.publishEvent(new OrderChanged(orderId)); // ApplicationEventPublisher
     return order;
+}
+
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+public void evictOrder(OrderChanged e) {
+    redis.delete("order:" + e.orderId());
 }
 ```
 
@@ -318,7 +329,7 @@ lock:<resource>                  → lock:order:456
 ```
 
 ### Cache Invalidation Rules
-1. **Write-through invalidation** — delete cache key on every write to the source. Simple and safe.
+1. **Invalidate after commit** — delete the cache key after every committed write to the source (`@TransactionalEventListener(AFTER_COMMIT)` or an outbox/CDC consumer).
 2. **TTL as safety net** — always set TTL even with active invalidation. Prevents stale data if invalidation fails.
 3. **Cache stampede protection** — use distributed locks or probabilistic early expiration for hot keys.
 4. **Never cache errors** — a temporary DB outage should not fill your cache with error responses.

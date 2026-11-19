@@ -4,7 +4,7 @@ Maintainer guide for editing this plugin's instruction artifacts. It is not load
 
 ## Single Source of Truth (No Harmful Duplication)
 
-**Scope:** Authoring or editing any instruction / reference artifact — skills, `docs/`, rule files, `CLAUDE.md`, READMEs, ADRs, agent definitions. Governs when you may restate content that already lives in another file.
+**Scope:** Authoring or editing any instruction / reference artifact — skills, `docs/`, rule files, READMEs, ADRs, agent definitions. Governs when you may restate content that already lives in another file.
 
 ## The litmus test (primary criterion)
 
@@ -30,10 +30,13 @@ This test **outranks the "it's just a curated subset" justification.** A curated
 
 ## When a duplicate is genuinely unavoidable
 
-Rare. If you must restate, add a provenance marker so drift is detectable — `synced from <source> as of <date/SHA>` — and treat it under the staleness checks in `strategic-output-persistence.md`.
+Rare. If you must restate, add a provenance marker so drift is detectable: `synced from <source> as of <SHA>`.
 
 ## Interaction with existing rules
 
 - **`strategic-output-persistence.md`** — its staleness check is the same concern for `docs/`; this rule is the upstream "don't create the duplicate in the first place".
 - **`reduce-hallucinations.md`** — a stale duplicate is a future false claim (it asserts what the source no longer says). Removing the duplicate removes the drift before it can mislead.
-- **`CLAUDE.md`** — already states "Keep it as a pointer index, not a duplication of the rule files." This rule generalizes that to every artifact.
+
+## Reachability
+
+`rules/` and `references/` are never auto-loaded. Every file in them must be named from the session bootstrap, a skill or command, an agent, or a hook message (as `${CLAUDE_PLUGIN_ROOT}/…` in agents, commands and `SKILL.md`; plugin-root-relative inside `rules/` and `references/`). Prefer one hop; a `rules/` stub that only points to a reference is a smell. `python3 scripts/check-setup.py` verifies that every `tea-sdlc:<name>` and bundled path resolves.

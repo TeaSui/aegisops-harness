@@ -1,11 +1,9 @@
 ---
 name: backend-languages-spring-boot
 description: >
-  FOR BACKEND-ENGINEER-SUBAGENT USE ONLY.
   Spring Boot patterns: layered architecture (Controller/Service/Repository), profile management,
   constructor injection, @ControllerAdvice exception handling, test slicing, @ConfigurationProperties,
   Spring Security filter chain.
-type: reference
 ---
 
 # Spring Boot Patterns
@@ -124,7 +122,9 @@ class OrderControllerTest {
 
         mockMvc.perform(post("/api/orders")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"productId": 1, "quantity": 2}"""))
+                .content("""
+                    {"productId": 1, "quantity": 2}
+                    """))  // a text block needs a line break after the opening """
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.data.status").value("CREATED"));
     }
@@ -226,6 +226,9 @@ public class OrderService {
 // @ConfigurationProperties for typed config — not scattered @Value
 @ConfigurationProperties(prefix = "app.payment")
 public record PaymentProperties(String baseUrl, Duration timeout, int maxRetries) {}
+
+// Register it: @ConfigurationPropertiesScan on the @SpringBootApplication class,
+// or @EnableConfigurationProperties(PaymentProperties.class) on a @Configuration class.
 ```
 
 ```yaml

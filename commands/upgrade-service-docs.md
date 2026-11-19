@@ -1,5 +1,5 @@
 ---
-description: Promote an implemented change into the living service and system documentation
+description: Use right after a change is verified (QA GO) or merged, and whenever a spec under docs/specs/ is still `accepted` after its code shipped, or the user says the docs are outdated — promotes the implemented change into the living service and system docs and closes the spec. Run it yourself at the end of the full workflow; the user does not need to type it.
 argument-hint: "[service-name] [feature-slug or short description]"
 ---
 
@@ -17,14 +17,14 @@ Source code is the single source of truth for living docs. Never invent anything
 </task>
 
 <context>
-- Change: $ARGUMENTS (service and feature slug or description; ask if missing)
+- Change: $ARGUMENTS (service and feature slug or description; if missing, infer from the autopilot note, the current branch and the `accepted` specs; ask only if several remain)
 - Canonical tree, owners and lifecycle: the tea-sdlc plugin's `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` (§2, §3, §4, §5 step 5 Promote). Read it first.
-- This command owns the living files (layout §2/§3) and the lifecycle fields of the spec folder's `README.md`. It does not edit `requirements.md`, `security.md`, `design.md`, `ui-design.md`, `measurement.md`, `contracts/` or ADRs inside specs — those are history owned by their agents.
+- This command owns the living files (layout §2/§3) and the lifecycle fields of the spec folder's `README.md`. It does not edit `requirements.md`, `security.md`, `design.md`, `ui-design.md`, `measurement.md`, `contracts/` or ADRs inside specs — those are change history (security.md/ui-design.md belong to their agents, the rest to the integrating session).
 </context>
 
 <instructions>
 1. Read the layout file. Resolve the service root, the system root (layout §6.1) and the change spec folder (`<service>/docs/specs/<feature>/` or `<system-root>/docs/specs/<feature>/`). If no spec exists (fast path), skip steps 2 and 7.
-2. Confirm the change is verified: QA `GO`, or a merge commit on the target branch. If neither is present, stop and report `NEEDS_CONTEXT` — do not promote unverified intent. Promotion runs after `GO` on the branch where the change is merged (or the integration branch), not in an implementation worktree.
+2. Confirm the change is verified: QA `GO`, a merge commit on the target branch, or a squash merge (the change's commits are on the target branch). If none is present, stop and report `NEEDS_CONTEXT` — do not promote unverified intent. Promotion runs after `GO` on the branch where the change is merged (or the integration branch), not in an implementation worktree.
 3. Inspect the actual code changes (new/modified classes, endpoints, events, tables, configs). Compare them with the spec's requirements and contract delta to build the traceability table: each requirement → implemented | pending → evidence (file/test path).
 4. Update **service-level living docs** first, in place, in this priority: `api-contracts.md`, `events.md`, `business-logic.md`, `architecture.md`, `data-model.md`, `security.md`, `configuration.md`, `troubleshooting.md`, `README.md`.
    - `architecture.md`: refresh **Code conventions** and **Test strategy** only when the change introduced or altered a pattern, framework, runner command or test layout.

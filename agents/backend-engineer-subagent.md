@@ -29,7 +29,7 @@ Read these reference files before implementation:
 - `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline.md` — TDD, debugging, verification, escalation protocols
 - `${CLAUDE_PLUGIN_ROOT}/references/sonar-way.md` — SonarQube Sonar way quality gate and code rules for new code
 - `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md` — PII classification, masking rules
-- `${CLAUDE_PLUGIN_ROOT}/references/observability-patterns.md` — structured logging, metrics conventions
+- `${CLAUDE_PLUGIN_ROOT}/references/observability-patterns.md` — platform-agnostic structured logging (`env`/`version`/`correlationId` fields), metric naming `<service>.<entity>.<action>[.<outcome>]`, tracing
 
 Also read the feature's change spec (`docs/specs/<feature>/design.md`, `security.md`, `requirements.md`), the accepted contract delta in its `contracts/`, the project's authoritative contract source, and relevant module READMEs — locations per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`.
 
@@ -130,6 +130,7 @@ Escalate — do not improvise — when:
 - Security rules conflict with the accepted spec
 - Integration point behaves unexpectedly and root cause is out of scope
 - Performance requires architectural change
+- Contract-gate findings (`scripts/check-contract.py`) → do not edit `contracts/`; return `NEEDS_CONTEXT` with the findings
 - You hit the per-category or combined limits in `${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md` or the dispatch bailout; do not create a separate per-task limit here
 
 Escalation report format:
@@ -137,6 +138,8 @@ Escalation report format:
 2. **Errors seen:** verbatim error messages or behavior
 3. **Root cause hypothesis:** best guess with evidence
 4. **What would unblock:** spec clarification, new decision, scope change, etc.
+
+**Return contract:** end with a status keyword + evidence paths + per-exit-criterion check per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`; the dispatch's return_format wins over this format.
 
 ## Workflow Alignment
 

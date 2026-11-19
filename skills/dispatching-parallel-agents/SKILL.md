@@ -1,9 +1,11 @@
 ---
 name: dispatching-parallel-agents
-description: Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies
+description: Use in the full workflow, or when the user asks for parallel investigation, to run 2+ independent investigations or tasks with disjoint files concurrently via subagents. Not for fast-path implementation (no dispatch). For an error crossing services use debug-parallel; to execute a written plan use subagent-driven-development.
 ---
 
 # Dispatching Parallel Agents
+
+**Tier check first.** Dispatch only in the full workflow (`${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`) or when the user asked for parallel investigation. On the fast path, work in this session without subagents. For an error that crosses services, run `debug-parallel`; to execute a written plan, use `tea-sdlc:subagent-driven-development`.
 
 ## Overview
 
@@ -65,15 +67,18 @@ Each agent gets:
 
 ### 3. Dispatch in Parallel
 
-```typescript
-// In Claude Code / AI environment
-Task("Fix agent-tool-abort.test.ts failures")
-Task("Fix batch-completion-behavior.test.ts failures")
-Task("Fix tool-approval-race-conditions.test.ts failures")
-// All three run concurrently
+Send all the Agent tool calls in one message; calls in the same message run concurrently. Each call names the agent (a domain agent from `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`, or `general-purpose` for an investigation), a short description and a self-contained prompt:
+
+```
+Agent(subagent_type: "general-purpose", description: "Fix agent-tool-abort tests",
+      prompt: "<role, context, owned files, task, exit criteria, return format>")
+Agent(subagent_type: "general-purpose", description: "Fix batch-completion tests",
+      prompt: "...")
+Agent(subagent_type: "general-purpose", description: "Fix approval race tests",
+      prompt: "...", model: "sonnet")
 ```
 
-**Per-dispatch model selection:** each `Task` accepts an optional `model` param (`opus`/`sonnet`/`haiku`, plus `fable` where available) to override the target subagent's default. Use it when the specific dispatch is materially lighter or heavier than the agent's typical workload — e.g., a Haiku-tier enumeration task or an Opus-tier greenfield design pass. See `references/model-routing.md` for current four-model/effort guidance and the **Model-Specific Steering** section. State a concise rationale when the dispatch choice is non-obvious.
+**Per-dispatch model selection:** each Agent call accepts an optional `model` param (`opus`/`sonnet`/`haiku`, plus `fable` where available) to override the target subagent's default. Use it when the specific dispatch is materially lighter or heavier than the agent's typical workload — e.g., a Haiku-tier enumeration task or an Opus-tier greenfield design pass. See `${CLAUDE_PLUGIN_ROOT}/skills/dispatching-parallel-agents/references/model-routing.md` for current four-model/effort guidance and the **Model-Specific Steering** section. State a concise rationale when the dispatch choice is non-obvious.
 
 ### 4. Review and Integrate
 
@@ -85,7 +90,7 @@ When agents return:
 
 ## Agent Prompt Structure
 
-Prompt shape is owned by `${CLAUDE_PLUGIN_ROOT}/rules/dispatch-prompt-contract.md`: implementation dispatches carry the nine contract fields (markdown headings or XML — content, not serialization, is the contract); investigation/review dispatches use the lighter role+context+task+return_format minimum. Style the content for the resolved model per `references/model-routing.md` → Model-Specific Steering.
+Prompt shape is owned by `${CLAUDE_PLUGIN_ROOT}/rules/dispatch-prompt-contract.md`: implementation dispatches carry the nine contract fields (markdown headings or XML — content, not serialization, is the contract); investigation/review dispatches use the lighter role+context+task+return_format minimum. Style the content for the resolved model per `${CLAUDE_PLUGIN_ROOT}/skills/dispatching-parallel-agents/references/model-routing.md` → Model-Specific Steering.
 
 Good agent prompts are:
 1. **Focused** - One clear problem domain

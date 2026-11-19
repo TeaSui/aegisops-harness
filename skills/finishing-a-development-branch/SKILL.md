@@ -1,56 +1,41 @@
 ---
 name: finishing-a-development-branch
-description: Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup
+description: Use when implementation is verified and must be delivered (merge, PR, keep, discard), or the user says open a PR / ship it / merge. Runs the pre-PR review record and the delivery the user already chose; asks only when no choice is known.
 ---
 
 # Finishing a Development Branch
 
-Reuse the delivery choice already authorized by the user. Do not ask them to choose an internal workflow again. If no Git branch/worktree is involved, report the verified artifact directly. Native permissions and destructive discard still require their applicable authorization.
+Deliver verified work with the choice the user already gave. Ask only when no delivery choice is known. If no Git branch or worktree is involved, report the verified artifact directly. Native permissions and destructive discard still require their own authorization.
 
-## Overview
+**Core principle:** verify tests → determine base → commit → choose delivery (only if unknown) → pre-PR review record → execute → clean up.
 
-Guide completion of development work by presenting clear options and handling chosen workflow.
+## Step 1: Verify tests
 
-**Core principle:** Verify tests → Present options → Execute choice → Clean up.
+Run the project's test suite (`npm test`, `cargo test`, `pytest`, `go test ./...` or the project's own command) and read the result.
 
-**Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
+If tests fail, report the failures and stop: do not merge or open a PR on failing tests. Fix them first (`tea-sdlc:systematic-debugging` when the cause is unclear).
 
-## The Process
+## Step 2: Determine the base branch
 
-### Step 1: Verify Tests
-
-**Before presenting options, verify tests pass:**
+Find it yourself; do not ask the user:
 
 ```bash
-# Run project's test suite
-npm test / cargo test / pytest / go test ./...
+git symbolic-ref --short refs/remotes/origin/HEAD        # e.g. origin/main
+# or
+gh repo view --json defaultBranchRef -q .defaultBranchRef.name
 ```
 
-**If tests fail:**
-```
-Tests failing (<N> failures). Must fix before completing:
+Without a remote, use the local `main` or `master` that `git merge-base HEAD <branch>` resolves. Ask only when none of these give an answer.
 
-[Show failures]
+## Step 3: Commit pending changes
 
-Cannot proceed with merge/PR until tests pass.
-```
+Run `git status`. Commit the changes this work owns in logical steps; leave other people's unrelated changes unstaged. The gitleaks gate scans on commit and push: if it blocks, remove the secret from the change and retry, never bypass it.
 
-Stop. Don't proceed to Step 2.
+## Step 4: Choose the delivery
 
-**If tests pass:** Continue to Step 2.
+Use the choice already given. "Open a PR", "ship it" or "push it" means Option 2; "merge it" means Option 1; an autopilot or `tea-sdlc:goal` request that delegates delivery uses the project's normal path (Option 2 when a remote exists, else Option 1).
 
-### Step 2: Determine Base Branch
-
-```bash
-# Try common base branches
-git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
-```
-
-Or ask: "This branch split from main - is that correct?"
-
-### Step 3: Present Options
-
-If delivery is unresolved, offer the applicable choices below:
+Only when no choice is known, present the four options once and wait:
 
 ```
 Implementation complete. What would you like to do?
@@ -59,63 +44,61 @@ Implementation complete. What would you like to do?
 2. Push and create a Pull Request
 3. Keep the branch as-is (I'll handle it later)
 4. Discard this work
-
-Which option?
 ```
 
-**Don't add explanation** - keep options concise.
+## Step 5: Pre-PR review record (Options 1 and 2)
 
-### Step 4: Execute Choice
+Run the single pre-PR pass in `${CLAUDE_PLUGIN_ROOT}/rules/pre-pr-review.md`:
 
-#### Option 1: Merge Locally
+- Fast path: run the `code-review` skill once on the diff.
+- Full workflow: dispatch `code-reviewer` on the diff, unless `tea-sdlc:subagent-driven-development` already recorded a pass for the current HEAD.
+
+Fix each finding or clear it with evidence, commit the fixes, then record the pass for the current HEAD:
 
 ```bash
-# Switch to base branch
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/mark-pr-review.py" --reviewer <name> --open-findings <n>
+```
+
+The `gh pr create` gate blocks unless the record matches HEAD with 0 open findings. A new commit needs a new record. Findings still open after one diff-only re-review go into the PR description as open items.
+
+## Step 6: Execute the choice
+
+### Option 1: Merge locally
+
+```bash
 git checkout <base-branch>
-
-# Pull latest
 git pull
-
-# Merge feature branch
 git merge <feature-branch>
-
-# Verify tests on merged result
-<test command>
-
-# If tests pass
-git branch -d <feature-branch>
+<test command>                 # verify the merged result
+git branch -d <feature-branch> # only if tests pass
 ```
 
-Then: Cleanup worktree (Step 5)
+Full workflow: after the merge, run `upgrade-service-docs <service> <feature>` yourself to promote the spec into the living docs. Then clean up the worktree (Step 7).
 
-#### Option 2: Push and Create PR
+### Option 2: Push and create a PR
 
 ```bash
-# Push branch
 git push -u origin <feature-branch>
-
-# Create PR
 gh pr create --title "<title>" --body "$(cat <<'EOF'
 ## Summary
-<2-3 bullets of what changed>
+<2-3 bullets of what changed; link the spec and ADRs>
 
 ## Test Plan
-- [ ] <verification steps>
+- [ ] <verification steps and evidence>
 EOF
 )"
 ```
 
-Then: Cleanup worktree (Step 5)
+With a non-GitHub remote nothing blocks `gh`; still record the pass, push, and give the user the PR description to open the PR. Full workflow: once the PR merges (or QA returns `GO`), run `upgrade-service-docs <service> <feature>` yourself. Keep the worktree: review fixes land there.
 
-#### Option 3: Keep As-Is
+### Option 3: Keep as-is
 
-Report: "Keeping branch <name>. Worktree preserved at <path>."
+Report: "Keeping branch <name>. Worktree preserved at <path>." Do not clean up the worktree.
 
-**Don't cleanup worktree.**
+### Option 4: Discard
 
-#### Option 4: Discard
+Confirm first; this is a decision only the user can make:
 
-**Confirm first:**
 ```
 This will permanently delete:
 - Branch <name>
@@ -125,78 +108,43 @@ This will permanently delete:
 Type 'discard' to confirm.
 ```
 
-Wait for exact confirmation.
+Wait for the exact confirmation, then:
 
-If confirmed:
 ```bash
 git checkout <base-branch>
 git branch -D <feature-branch>
 ```
 
-Then: Cleanup worktree (Step 5)
+Then clean up the worktree (Step 7).
 
-### Step 5: Cleanup Worktree
+## Step 7: Clean up the worktree (Options 1 and 4 only)
 
-**For Options 1, 2, 4:**
+Only when this task created an isolated worktree:
 
-Check if in worktree:
 ```bash
-git worktree list | grep $(git branch --show-current)
-```
-
-If yes:
-```bash
+git worktree list | grep "$(git branch --show-current)"
 git worktree remove <worktree-path>
 ```
 
-**For Option 3:** Keep worktree.
+Options 2 and 3 keep the worktree.
 
-## Quick Reference
+## Quick reference
 
-| Option | Merge | Push | Keep Worktree | Cleanup Branch |
-|--------|-------|------|---------------|----------------|
-| 1. Merge locally | ✓ | - | - | ✓ |
-| 2. Create PR | - | ✓ | ✓ | - |
-| 3. Keep as-is | - | - | ✓ | - |
-| 4. Discard | - | - | - | ✓ (force) |
+| Option | Pre-PR record | Merge | Push | Keep worktree | Delete branch | upgrade-service-docs (Full workflow) |
+|---|---|---|---|---|---|---|
+| 1. Merge locally | yes | yes | - | - | yes | after merge |
+| 2. Create PR | yes | - | yes | yes | - | after PR merge or QA `GO` |
+| 3. Keep as-is | - | - | - | yes | - | - |
+| 4. Discard | - | - | - | - | yes (force) | - |
 
-## Common Mistakes
+## Rules
 
-**Skipping test verification**
-- **Problem:** Merge broken code, create failing PR
-- **Fix:** Always verify tests before offering options
-
-**Open-ended questions**
-- **Problem:** "What should I do next?" → ambiguous
-- **Fix:** Present exactly 4 structured options
-
-**Automatic worktree cleanup**
-- **Problem:** Remove worktree when might need it (Option 2, 3)
-- **Fix:** Only cleanup for Options 1 and 4
-
-**No confirmation for discard**
-- **Problem:** Accidentally delete work
-- **Fix:** Require typed "discard" confirmation
-
-## Red Flags
-
-**Never:**
-- Proceed with failing tests
-- Merge without verifying tests on result
-- Delete work without confirmation
-- Force-push without explicit request
-
-**Always:**
-- Verify tests before offering options
-- Offer the relevant delivery options only when the user has not already selected/authorized one
-- Get typed confirmation for Option 4
-- Clean up worktree for Options 1 & 4 only
+- Never merge or open a PR with failing tests, and verify tests on the merged result.
+- Never open a PR without the pre-PR record for the current HEAD.
+- Never discard work without typed confirmation.
+- Never force-push without an explicit request.
+- Ask for a delivery choice only when none is known; never ask an open-ended "what next?".
 
 ## Integration
 
-**Called by:**
-- **subagent-driven-development** (after integration and required reviews) - After all tasks complete
-- **executing-plans** (after its accepted checkpoints) - After all batches complete
-
-**Pairs with:**
-- Existing worktree management, when this task actually created an isolated checkout; use the active runtime's supported tools and preserve work still needed.
+Called by `tea-sdlc:subagent-driven-development` (after integration and required reviews) and `tea-sdlc:executing-plans` (after all tasks). Uses the worktree management of the runtime only when this task created an isolated checkout.

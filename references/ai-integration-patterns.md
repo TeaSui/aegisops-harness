@@ -1,5 +1,7 @@
 # AI Integration Rules
 
+Fixed numbers in this file (cost thresholds, rate limits, eval sizes and pass marks, iteration caps, alert thresholds) are starting defaults; replace them with project values.
+
 ## Sources of truth (live, never vendored)
 Claude API details change faster than any local copy. Use, in this order:
 1. Claude Code's built-in **`/claude-api`** skill (ships and updates with Claude Code; auto-loads when code imports `anthropic` / `@anthropic-ai/sdk`; subcommands for migration, SDK upgrades, cost and evals).
@@ -45,7 +47,7 @@ Return JSON with fields: category, risk_level, confidence.
 - Set `max_tokens` explicitly on every API call — never rely on model default
 - Implement per-user and per-service token budgets
 - Log token usage with every request (input tokens, output tokens, cost estimate)
-- Alert when daily cost exceeds threshold ($10 dev, $50 staging, $200 prod)
+- Alert when daily cost exceeds a threshold (starting defaults: $10 dev, $50 staging, $200 prod)
 - Use prompt caching for repeated context (system prompts, documents) — up to 90% cost reduction
 - Batch requests where latency allows (Anthropic Batch API)
 
@@ -65,13 +67,13 @@ Return JSON with fields: category, risk_level, confidence.
 - Cache system prompts that are used repeatedly and exceed the model's minimum cacheable length (check the live prompt-caching docs)
 - Cache retrieved documents in RAG pipelines
 - Use `cache_control: {"type": "ephemeral"}` on cacheable blocks
-- Monitor cache hit rate — target >80% for repeated prompts
+- Monitor cache hit rate (starting target: >80% for repeated prompts)
 
 ## Evaluation Requirements
-- Every AI feature must have a golden dataset of ≥20 input/output pairs
+- Every AI feature must have a golden dataset (starting default: ≥20 input/output pairs)
 - Define quality metrics before implementation (accuracy, F1, BLEU, human eval)
 - Run evals in CI on every prompt change
-- Minimum passing thresholds: accuracy ≥85%, no regression vs baseline
+- Minimum passing thresholds: no regression vs baseline; accuracy ≥85% as a starting default
 - Use promptfoo or custom eval harness — no vibes-based quality assessment
 
 ## Security Rules
@@ -80,19 +82,23 @@ Return JSON with fields: category, risk_level, confidence.
 - Use structured outputs (JSON mode, tool use) for action-bearing responses
 - Implement output validation: type checking, range checking, business rule validation
 - Log all LLM interactions for audit (but redact PII before logging)
-- Rate limit LLM endpoints per user: 60 requests/minute default
+- Rate limit LLM endpoints per user (starting default: 60 requests/minute)
 
 ## Error Handling
+Let the SDK retry: the client retries rate-limit, timeout and 5xx errors with backoff up to its max-retries setting. Set that setting on the client (verify the option name and default in the installed SDK) instead of writing a manual retry loop, which can retry without a cap.
+
 ```typescript
 // Required error handling pattern
+const anthropic = new Anthropic({ maxRetries: 3 }); // bounded SDK retries with backoff
+
 try {
   const response = await anthropic.messages.create({ ... });
   return parseAndValidate(response);
 } catch (error) {
   if (error instanceof Anthropic.RateLimitError) {
-    // Exponential backoff with jitter
-    await delay(calculateBackoff(attempt));
-    return retry(attempt + 1);
+    // SDK retries are exhausted — degrade instead of retrying again
+    logger.warn('LLM rate limited after retries', { correlationId });
+    return fallback();
   }
   if (error instanceof Anthropic.APIError && error.status >= 500) {
     // Service error — fail gracefully
@@ -105,7 +111,7 @@ try {
 
 ## Agent Design
 - Define clear tool interfaces — ambiguous tool descriptions cause errors
-- Implement max iteration limits (default: 10 turns)
+- Implement max iteration limits (starting default: 10 turns)
 - Implement token budget limits per agent run
 - Use structured tool outputs (JSON) — never free-form text for actions
 - Log tool names, status, latency and usage; redact sensitive arguments/results before diagnostic capture
@@ -115,4 +121,4 @@ try {
 - Trace every LLM call with correlation ID linking to user request
 - Emit metrics: latency P50/P95/P99, token counts, cost, cache hit rate, error rate
 - Use the project observability stack in `observability-patterns.md`; introduce another vendor only within the approved architecture/security scope
-- Alert on: error rate >5%, latency P99 >10s, daily cost >threshold
+- Alert on error rate, P99 latency and daily cost (starting defaults: >5%, >10s, the cost threshold above)

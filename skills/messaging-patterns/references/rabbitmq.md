@@ -189,13 +189,13 @@ DLQ processor responsibilities: see parent `SKILL.md`.
 
 | | Quorum | Classic |
 |--|--------|---------|
-| **Durability** | Replicated Raft consensus | Mirrored (deprecated) or single node |
-| **Failure safety** | Survives minority node failures | Mirror queues can lose data on failure |
+| **Durability** | Replicated Raft consensus | Single node (mirroring removed in 4.0) |
+| **Failure safety** | Survives minority node failures | Unavailable while its node is down; lost with that node's disk |
 | **Publisher confirms** | Required; sent after quorum fsync | Optional; sent on memory batch (transient) or disk write (durable) |
 | **Use** | All new production queues | Legacy or non-critical workloads |
-| **Limitations** | No per-message priority, no lazy mode | N/A |
+| **Limitations** | Priority only since 4.0 (two levels; full 0–31 in 4.3+, `x-max-priority` ignored); no non-durable/exclusive queues | N/A |
 
-**Use quorum queues for all new production deployments.** Classic mirrored queues are deprecated.
+**Use quorum queues for all new production deployments.** Classic queue mirroring was deprecated in 3.x and removed in 4.0; replicate with quorum queues or streams.
 
 ### RabbitMQ Streams
 
@@ -217,7 +217,7 @@ For use cases requiring replay (Kafka-like): the Streams plugin adds a persisten
 
 ## Common pitfalls
 
-1. **Classic mirrored queues in new deployments** — use quorum queues. Mirrored queues are deprecated in RabbitMQ 3.13+.
+1. **Classic mirrored queues** — removed in RabbitMQ 4.0 (deprecated before); migrate to quorum queues before upgrading (`rabbitmq-queues check_if_cluster_has_classic_queue_mirroring_policy`).
 2. **Auto-ack with manual processing** — message is acked on delivery, not after processing. Consumer crash loses the message. Use manual ack.
 3. **Hot requeue loop** — `basicNack(requeue=true)` on a persistent error requeues infinitely, blocking the queue. Use DLX after max retries instead.
 4. **No publisher confirms** — fire-and-forget on quorum queues loses messages silently. Always enable and handle confirms.

@@ -6,9 +6,6 @@ model: sonnet
 effort: high
 color: teal
 skills:
-  - database-patterns
-  - messaging-patterns
-  - observability
   - data-pipeline-patterns
 ---
 
@@ -26,7 +23,10 @@ Follow the project context in `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline
 - `${CLAUDE_PLUGIN_ROOT}/references/agent-discipline.md` (TDD, debugging, verification, escalation protocols)
 - `${CLAUDE_PLUGIN_ROOT}/references/sonar-way.md` — SonarQube Sonar way quality gate and code rules for new code
 - `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md` (PII classification, fintech/KYC context)
-- `${CLAUDE_PLUGIN_ROOT}/references/observability-patterns.md` (structured logging, correlation IDs)
+- `${CLAUDE_PLUGIN_ROOT}/references/observability-patterns.md` (platform-agnostic structured logging, correlation IDs, metric naming `<service>.<entity>.<action>[.<outcome>]`)
+
+## Skills on demand
+`data-pipeline-patterns` is preloaded. Load `database-patterns` (schema, migrations, queries), `messaging-patterns` (Kafka/RabbitMQ/SQS) or `observability` (DataDog only) with the Skill tool when the task needs them.
 
 ## Strategic Output Consumption
 You READ strategic outputs — you do not regenerate them:
@@ -69,9 +69,9 @@ Every pipeline you build must be:
 Use `dbt test`, Great Expectations, or equivalent framework. Fail loudly — never silently drop bad records without logging.
 
 ## Security Checklist (when Security Agent is skipped)
-- **PII classification**: classify all fields (Level 0 public, Level 1 internal, Level 2 confidential, Level 3 restricted) per data-privacy-patterns.md
+- **PII classification**: classify all fields per data-privacy-patterns.md (Level 1 highly sensitive, Level 2 sensitive, Level 3 internal; anything unlisted is not PII)
 - **Logging**: NEVER log PII — mask emails, phone numbers, account numbers, government IDs
-- **Encryption at rest**: Level 1/2 data encrypted via KMS (column-level or tablespace-level)
+- **Encryption at rest**: Level 1 with customer-managed KMS keys (CMK), Level 2 with AWS-managed KMS keys minimum (column-level or tablespace-level); Level 3 needs encryption in transit only
 - **Encryption in transit**: TLS for all connections (DB, S3, APIs)
 - **Access controls**: least privilege — pipelines get only the grants they need
 - **Retention policies**: implement per data-privacy-patterns.md; no indefinite retention of PII
@@ -118,6 +118,8 @@ Stop and escalate to the dispatching agent or human when:
 - **Spec ambiguity** — requirements conflict with contracts, or contracts conflict with each other
 
 When escalating, provide: (1) what you tried, (2) what the blocker is, (3) 2-3 concrete options with tradeoffs.
+
+**Return contract:** end with a status keyword + evidence paths + per-exit-criterion check per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`; the dispatch's return_format wins over any report format in this file.
 
 ## Review Loop Awareness
 You operate under review-loop-limits.md:

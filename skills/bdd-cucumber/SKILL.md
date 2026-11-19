@@ -124,16 +124,31 @@ Given an order with details:
 ### Setup (build.gradle)
 ```groovy
 dependencies {
-    testImplementation 'io.cucumber:cucumber-java:7.+'
-    testImplementation 'io.cucumber:cucumber-spring:7.+'
-    testImplementation 'io.cucumber:cucumber-junit-platform-engine:7.+'
+    // Pin one version via the BOM (checked on Maven Central 2026-11; verify against the project).
+    // Cucumber 8.x targets JUnit 6 (Spring Boot 4); on JUnit 5 / Spring Boot 3 use 7.34.9.
+    testImplementation platform('io.cucumber:cucumber-bom:8.1.0')
+    testImplementation 'io.cucumber:cucumber-java'
+    testImplementation 'io.cucumber:cucumber-spring'
+    testImplementation 'io.cucumber:cucumber-junit-platform-engine'
+    testImplementation 'org.junit.platform:junit-platform-suite' // version from the JUnit/Spring Boot BOM
 }
 
 tasks.named('test') {
+    useJUnitPlatform()
     systemProperty 'cucumber.plugin', 'pretty,html:build/reports/cucumber.html'
-    systemProperty 'cucumber.glue', 'com.example.steps'
-    systemProperty 'cucumber.features', 'src/test/resources/features'
 }
+```
+
+```java
+// src/test/java/com/example/RunCucumberTest.java — JUnit Platform suite runner
+import org.junit.platform.suite.api.*;
+import static io.cucumber.junit.platform.engine.Constants.GLUE_PROPERTY_NAME;
+
+@Suite
+@IncludeEngines("cucumber")
+@SelectClasspathResource("features") // src/test/resources/features
+@ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.example.steps")
+public class RunCucumberTest {}
 ```
 
 ### Spring Integration
@@ -157,9 +172,10 @@ public class OrderSteps {
     // Shared state within a scenario — use a scenario-scoped holder
     private ResponseEntity<OrderResponse> lastResponse;
 
-    @Given("a product {string} is available at ${double}")
-    public void productAvailable(String name, double price) {
-        productRepository.save(new Product(name, BigDecimal.valueOf(price), 100));
+    // Money: {bigdecimal}, never {double}/{float}
+    @Given("a product {string} is available at ${bigdecimal}")
+    public void productAvailable(String name, BigDecimal price) {
+        productRepository.save(new Product(name, price, 100));
     }
 
     @Given("the product catalog contains:")
@@ -179,11 +195,11 @@ public class OrderSteps {
         lastResponse = restTemplate.postForEntity("/api/orders", request, OrderResponse.class);
     }
 
-    @Then("the order is created with total ${double}")
-    public void orderCreatedWithTotal(double expectedTotal) {
+    @Then("the order is created with total ${bigdecimal}")
+    public void orderCreatedWithTotal(BigDecimal expectedTotal) {
         assertThat(lastResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(lastResponse.getBody().getTotal())
-            .isEqualByComparingTo(BigDecimal.valueOf(expectedTotal));
+            .isEqualByComparingTo(expectedTotal);
     }
 
     @Then("the order is rejected with reason {string}")
@@ -248,9 +264,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
         return ctx, nil
     })
 
-    ctx.Step(`^a product "([^"]*)" is available at \$(\d+\.\d+)$`, steps.productAvailable)
+    ctx.Step(`^a product "([^"]*)" is available at \$(\d+\.\d{2})$`, steps.productAvailable) // amount captured as string
     ctx.Step(`^the customer orders (\d+) units of "([^"]*)"$`, steps.customerOrders)
-    ctx.Step(`^the order is created with total \$(\d+\.\d+)$`, steps.orderCreatedWithTotal)
+    ctx.Step(`^the order is created with total \$(\d+\.\d{2})$`, steps.orderCreatedWithTotal)
 }
 ```
 
@@ -267,9 +283,13 @@ func (s *OrderSteps) reset() {
     s.body = nil
 }
 
-func (s *OrderSteps) productAvailable(name string, price float64) error {
-    // Set up test data
-    _, err := s.db.Exec("INSERT INTO products (name, price, stock) VALUES ($1, $2, 100)", name, price)
+// Money: github.com/shopspring/decimal (or int64 minor units), never float64
+func (s *OrderSteps) productAvailable(name, priceText string) error {
+    price, err := decimal.NewFromString(priceText)
+    if err != nil {
+        return err
+    }
+    _, err = s.db.Exec("INSERT INTO products (name, price, stock) VALUES ($1, $2, 100)", name, price.String())
     return err
 }
 
@@ -284,16 +304,17 @@ func (s *OrderSteps) customerOrders(quantity int, product string) error {
     return nil
 }
 
-func (s *OrderSteps) orderCreatedWithTotal(expectedTotal float64) error {
+func (s *OrderSteps) orderCreatedWithTotal(expectedText string) error {
+    expectedTotal := decimal.RequireFromString(expectedText)
     if s.response.StatusCode != http.StatusCreated {
         return fmt.Errorf("expected 201, got %d: %s", s.response.StatusCode, s.body)
     }
-    var result struct{ Data struct{ Total float64 } }
+    var result struct{ Data struct{ Total decimal.Decimal } } // accepts JSON string or number
     if err := json.Unmarshal(s.body, &result); err != nil {
         return err
     }
-    if result.Data.Total != expectedTotal {
-        return fmt.Errorf("expected total %.2f, got %.2f", expectedTotal, result.Data.Total)
+    if !result.Data.Total.Equal(expectedTotal) {
+        return fmt.Errorf("expected total %s, got %s", expectedTotal, result.Data.Total)
     }
     return nil
 }

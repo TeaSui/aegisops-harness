@@ -1,10 +1,8 @@
 ---
 name: backend-languages-rust
 description: >
-  FOR BACKEND-ENGINEER-SUBAGENT USE ONLY.
-  Idiomatic Rust (stable, 2024 edition) backend patterns: cargo workspaces, Result+thiserror/anyhow,
+  Idiomatic Rust (2024 edition, stable since Rust 1.85) backend patterns: cargo workspaces, Result+thiserror/anyhow,
   trait design, table-driven tests with rstest, tokio async, axum handler patterns, error propagation.
-type: reference
 ---
 
 # Rust Backend Patterns
@@ -117,17 +115,20 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
+    use rust_decimal::Decimal;
+    use rust_decimal_macros::dec;
+
+    // Money is never f32/f64: use rust_decimal::Decimal or integer minor units (i64 cents).
     #[rstest]
-    #[case(vec![LineItem { price: 100, qty: 2 }], 0.0, 200.0)]
-    #[case(vec![LineItem { price: 100, qty: 1 }, LineItem { price: 50, qty: 3 }], 0.1, 225.0)]
-    #[case(vec![], 0.0, 0.0)]  // empty cart
+    #[case(vec![LineItem { unit_price: dec!(1.00), qty: 2 }], dec!(0), dec!(2.00))]
+    #[case(vec![LineItem { unit_price: dec!(1.00), qty: 1 }, LineItem { unit_price: dec!(0.50), qty: 3 }], dec!(0.1), dec!(2.25))]
+    #[case(vec![], dec!(0), dec!(0))]  // empty cart
     fn test_calculate_total(
         #[case] items: Vec<LineItem>,
-        #[case] discount: f64,
-        #[case] expected: f64,
+        #[case] discount: Decimal,
+        #[case] expected: Decimal,
     ) {
-        let result = calculate_total(&items, discount);
-        assert!((result - expected).abs() < f64::EPSILON);
+        assert_eq!(calculate_total(&items, discount), expected); // exact, no epsilon
     }
 
     #[tokio::test]
@@ -215,16 +216,17 @@ pub async fn create_order(
 pub fn build_router(state: AppState) -> axum::Router {
     axum::Router::new()
         .route("/orders", axum::routing::post(create_order))
-        .route("/orders/:id", axum::routing::get(get_order))
+        .route("/orders/{id}", axum::routing::get(get_order)) // axum 0.8 syntax; 0.7 used `/:id`
         .with_state(state)
         .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(tower_http::catch_panic::CatchPanicLayer::new()) // panic → 500 instead of a dropped connection
 }
 ```
 
 **Rules:**
 - Handlers are `async fn`; return `Result<impl IntoResponse, AppError>`.
 - Use `State(state): State<AppState>` for shared application state (DB pool, service handles).
-- `Json(body)` rejects malformed JSON with 422 automatically; for custom rejection handling see `JsonRejection`.
+- `Json(body)` rejects automatically: syntax error → 400, valid JSON of the wrong shape → 422, missing `Content-Type: application/json` → 415. Take `Result<Json<T>, JsonRejection>` to map these into the error envelope.
 - Add middleware via `.layer()` on the `Router`; use `ServiceBuilder` to stack multiple layers.
 
 ## Dependency management
@@ -233,24 +235,26 @@ pub fn build_router(state: AppState) -> axum::Router {
 # Cargo.toml (workspace root)
 [workspace]
 members = ["crates/api", "crates/service", "crates/repository", "crates/domain"]
-resolver = "2"
+resolver = "3"
 
+# Versions checked on crates.io 2026-11 — verify against Cargo.lock before copying.
 [workspace.dependencies]
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 tracing = "1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-rustls", "macros"] }
-tower-http = { version = "0.5", features = ["trace", "cors"] }
-rstest = "0.19"
+sqlx = { version = "0.9", features = ["postgres", "runtime-tokio", "tls-rustls", "macros"] }
+tower-http = { version = "0.7", features = ["trace", "cors", "catch-panic"] }
+rust_decimal = "1"
+rust_decimal_macros = "1"
+rstest = "0.28"
 
-# Edition
 [workspace.package]
-edition = "2021"   # Use 2024 once stable in your toolchain
+edition = "2024"   # stable since Rust 1.85; keep 2021 only if the toolchain is older
 ```
 
 - Define all shared dependency versions in `[workspace.dependencies]`; crates inherit with `dep = { workspace = true }`.
@@ -259,7 +263,7 @@ edition = "2021"   # Use 2024 once stable in your toolchain
 
 ## Common pitfalls
 
-1. **`unwrap()` in request handlers** — panics are caught by axum as 500 but lose context. Use `?` with `From` conversions.
+1. **`unwrap()` in request handlers** — axum does not catch panics: without `tower_http::catch_panic::CatchPanicLayer` the connection is dropped with no response. Use `?` with `From` conversions.
 2. **Holding `std::sync::Mutex` across `.await`** — deadlock risk; use `tokio::sync::Mutex`.
 3. **Cloning large state** — `AppState` should wrap `Arc<Inner>` so `.clone()` is cheap (pointer copy).
 4. **Missing `Send` bound on spawned futures** — `tokio::spawn` requires `Future: Send`. Avoid `Rc`, `RefCell`, non-`Send` guards across `.await`.

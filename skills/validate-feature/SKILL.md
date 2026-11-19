@@ -1,11 +1,9 @@
 ---
 name: validate-feature
-description: Validate the intended pending or committed change with project-supported checks; state scope, applicable tests, service prerequisites and unresolved production placeholders without implicit installs or service writes
+description: Use when asked to validate a whole branch or change set, or to check that the pending change is ready before opening a PR (or headless via scripts/validate.sh) — resolves the exact target, runs every applicable project check including integration/e2e prerequisites and a placeholder scan, and reports VALIDATED/PARTIAL/BLOCKED. For an ordinary completion claim use verification-before-completion.
 ---
 
 # Validate Feature
-
-**Announce at start:** "Using validate-feature to check the requested change and its applicable validation gates."
 
 Follow `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` for required review/QA gates and `verification-before-completion` for evidence. This workflow does not authorize service startup, dependency installation or mutating HTTP requests.
 

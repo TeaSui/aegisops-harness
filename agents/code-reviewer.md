@@ -46,7 +46,7 @@ When reviewing completed work, you will:
    - **Flag unsubstantiated claims in the code/tests/comments:** references to functions, files, flags, or APIs that do not exist; copy-paste comments referencing removed code; claimed behaviors not backed by a test. Unsubstantiated claims are a Critical issue per `${CLAUDE_PLUGIN_ROOT}/rules/reduce-hallucinations.md` — verify any reference you cite via `Read` / `Grep` before including it in the review.
 
 6. **Communication Protocol**:
-   - If you find significant deviations from the plan, ask the coding agent to review and confirm the changes
+   - If you find significant deviations from the plan, report them to the dispatcher
    - If you identify issues with the original plan itself, recommend plan updates
    - For implementation problems, provide clear guidance on fixes needed
    - Always acknowledge what was done well before highlighting issues

@@ -1,225 +1,114 @@
 ---
 name: fintech-security
 description: |
-  Fintech security advisory patterns for Spring Boot, Go, and AWS serverless stacks.
-  MAS TRM compliance controls, payment API security, KYC document handling,
-  authentication/authorization patterns, and secrets detection.
-  Use when: performing threat modeling or security review for fintech services,
-  defining security rules for Spring Boot or Go implementations, reviewing
-  payment flows, KYC processing, or API authentication designs.
-  Triggers on: security review, threat model, auth flow, payment security,
-  KYC, MAS compliance, PDPA, fintech.
+  Reference for drafting or reviewing security rules in fintech code (Spring Boot, Go, AWS serverless):
+  candidate controls for auth, payments, KYC documents, crypto/keys, logging, network, rate limits and secrets,
+  mapped onto the security agent's rule prefixes. Threat models are produced by security-engineer-subagent.
+  Triggers on: payment security, KYC document handling, MAS/PDPA control lookup, fintech security review.
 ---
 
-# Fintech Security Advisory Patterns
+# Fintech Security Control Catalogue
 
-## MAS TRM (Technology Risk Management) Controls
+**Candidate controls — cite only when earned by a STRIDE finding.** This is a lookup list, not a template. The threat model, rule numbering and output format belong to `security-engineer-subagent` (`${CLAUDE_PLUGIN_ROOT}/agents/security-engineer-subagent.md`, Phase 3–4). When a finding needs a control, copy the idea below into a numbered rule under the matching prefix (`AUTH-NN`, `DATA-NN`, …), phrase it as WHAT must be true, and cite the finding.
 
-### Authentication & Access Control (TRM 9)
-Rules to emit for implementation agents:
-- AUTH-01: Multi-factor authentication for all customer-facing financial transactions
-- AUTH-02: Session timeout ≤15 minutes idle for financial operations, ≤30 minutes for non-financial
-- AUTH-03: Device binding — new device requires step-up authentication (OTP + biometric)
-- AUTH-04: Transaction signing — high-value transfers require separate confirmation factor
-- AUTH-05: Failed login lockout after 5 attempts, progressive delays (1min, 5min, 15min, 1hr)
+Numbers marked **(default — project must confirm)** are starting points, not regulatory facts. Confirm them against the project's compliance owner before they become rules. Compliance references name the framework (MAS TRM Guidelines, MAS Notice on Cyber Hygiene, PCI DSS, PDPA) without chapter numbers; cite a section only after checking the current published text.
 
-### Data Protection (TRM 10)
-- DATA-01: Encryption at rest with CMK (AWS KMS) for all Level 1 PII
-- DATA-02: TLS 1.3 for all inter-service communication
-- DATA-03: Database field-level encryption for national ID, account numbers
-- DATA-04: Key rotation every 90 days, automated via AWS Secrets Manager
-- DATA-05: No PII in logs, URLs, error responses, message queue metadata
+Classification levels follow `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md` (Level 1 highly sensitive … Level 3 internal).
 
-### Audit Trail (TRM 11)
-- AUDIT-01: Every financial transaction logged with: who, what, when, from-where, result
-- AUDIT-02: Immutable audit logs — write to append-only store (CloudWatch + S3 with Object Lock)
-- AUDIT-03: Log retention: 7 years for financial transactions, 5 years for access logs
-- AUDIT-04: Tamper detection — hash chain or WORM storage for critical audit logs
-- AUDIT-05: Real-time alerting on: privilege escalation, bulk data export, admin actions outside hours
+## AUTH — authentication & session
 
-### Online Financial Services (TRM 14)
-- OFS-01: Transaction limits — daily and per-transaction configurable limits
-- OFS-02: Velocity checks — flag unusual transaction frequency or amounts
-- OFS-03: Cool-down period for new payee additions (configurable, default 12 hours)
-- OFS-04: SMS/push notification for every financial transaction
-- OFS-05: Kill switch — ability to disable specific transaction types within minutes
+- MFA for customer-facing financial transactions; step-up (separate factor) for high-value transfers and transaction signing.
+- Device binding: a new device requires step-up authentication before financial operations.
+- Idle session timeout: 15 min for financial operations, 30 min otherwise **(default — project must confirm)**.
+- Failed-login lockout after 5 attempts with progressive delays **(default — project must confirm)**; lockout must not enable account-enumeration or targeted lockout DoS.
+- JWT validation checks signature, algorithm (pinned; reject `none` and algorithm confusion), `exp`, `iss`, `aud`. Prefer asymmetric signing (e.g. RS256/ES256) when verifiers are separate services.
+- Spring: `SecurityFilterChain` ends in `.anyRequest().authenticated()`; more specific matchers before generic ones.
+- Go: use a maintained JWT library (e.g. `github.com/golang-jwt/jwt/v5`; `dgrijalva/jwt-go` is abandoned).
 
-## Spring Boot Security Attack Surfaces
+## AUTHZ — authorization
 
-### Common Misconfigurations to Check
-```
-# STRIDE analysis points for Spring Boot services
+- Object-level checks on every resource access (the caller owns or may act on the account/payment ID).
+- Spring: method-level `@PreAuthorize` on sensitive service operations; do not rely on URL matchers alone.
+- No mass assignment: request DTOs never bind role, owner, balance or status fields.
+- Admin actions require a distinct role and are audit-logged (see LOG).
 
-SPOOFING:
-- JWT validation: verify issuer, audience, expiry, signature algorithm (RS256, not HS256 with shared secret)
-- SecurityFilterChain ordering: more specific matchers before generic
-- Missing @PreAuthorize on service methods with sensitive operations
-- Actuator endpoints exposed without authentication (/actuator/env leaks secrets)
+## INPUT — validation & output encoding
 
-TAMPERING:
-- Missing @Valid on request DTOs — allows malformed input to reach service layer
-- CSRF disabled with browser-automatic credentials (JWT cookies, session cookies or HTTP Basic); statelessness alone is not a CSRF defense
-- Missing request size limits — spring.servlet.multipart.max-file-size unbounded
-- Deserialization of untrusted JSON — Jackson polymorphic type handling
+- Validate at the boundary: Spring `@Valid` + Bean Validation on every `@RequestBody`; Go validation in the handler before business logic.
+- Parameterized queries only (`$1`, `?`, JPA parameters); never `fmt.Sprintf`/string concatenation into SQL.
+- Request size limits: 1 MB JSON body, 10 MB per upload **(default — project must confirm)**; Go `http.MaxBytesReader`, Spring multipart limits.
+- Untrusted JSON: no Jackson polymorphic default typing; Go `json.Decoder` with `DisallowUnknownFields` where the contract is closed.
+- Regex in validators must be safe against catastrophic backtracking.
+- Go HTML: `html/template`, never `text/template`; file paths: `filepath.Clean` + base-directory containment check.
+- Payment amounts: positive, within limits, and no more fraction digits than the currency's ISO 4217 exponent (0 for VND/KRW, 2 for SGD/USD, 3 for KWD/BHD).
 
-INFORMATION DISCLOSURE:
-- server.error.include-stacktrace=always in production
-- spring.jpa.show-sql=true in production
-- Actuator /actuator/beans, /actuator/env, /actuator/configprops exposed
-- Exception messages containing table names, query fragments
+## CRYPTO — encryption, hashing, keys
 
-DENIAL OF SERVICE:
-- No rate limiting on authentication endpoints
-- Missing pagination on list endpoints (SELECT * with no LIMIT)
-- File upload without size limit
-- Regex in @Pattern without catastrophic backtracking protection
-```
+- Level 1 data encrypted at rest with customer-managed KMS keys; field-level encryption for national ID and account numbers.
+- Key rotation: KMS keys use **KMS automatic key rotation** (verify the rotation period options in current KMS docs); secrets (DB passwords, API keys) rotate via **Secrets Manager rotation**. Do not describe KMS keys as rotated by Secrets Manager. Rotation interval for secrets: ≤ 90 days **(default — project must confirm)**.
+- Passwords/PINs hashed with a memory-hard algorithm tuned to the target hardware; never reversible encryption.
+- Webhook callbacks from payment providers verified with the provider's signature scheme (typically HMAC-SHA256) using constant-time comparison and a timestamp/replay window.
+- Money arithmetic: integer minor units or a decimal type (`shopspring/decimal`, `math/big`, `BigDecimal`); never floating point. Guard against silent integer overflow in Go.
 
-### Spring Security Rules Template
-```
-# Rules for Backend Engineer (Spring Boot)
-SEC-SPRING-01: Keep CSRF protection for browser-automatic credentials, including JWT cookies and HTTP Basic. Disable only on an explicitly scoped Authorization-header-only resource-server chain accepting no automatic credential alternative; evaluate cookie-based login/refresh/logout separately.
-SEC-SPRING-02: All endpoints authenticated by default (.anyRequest().authenticated())
-SEC-SPRING-03: Actuator endpoints: only /health and /info public, all others require ADMIN
-SEC-SPRING-04: JWT validation must check: signature, expiry, issuer, audience claims
-SEC-SPRING-05: @PreAuthorize for method-level authorization on sensitive operations
-SEC-SPRING-06: Request body size limit: 1MB default, 10MB for file uploads (configurable)
-SEC-SPRING-07: CORS: explicit allowed origins, never "*" in production
-SEC-SPRING-08: No server.error.include-stacktrace in production profiles
-SEC-SPRING-09: Rate limiting on /auth/** endpoints (spring-boot-starter-cache + Bucket4j or API Gateway)
-SEC-SPRING-10: Input validation via @Valid + Bean Validation on all @RequestBody parameters
-```
+## DATA — handling, PII, retention
 
-Credential transport controls CSRF exposure; JWT format and `STATELESS` session policy do not. See [Spring CSRF considerations](https://docs.spring.io/spring-security/reference/features/exploits/csrf.html).
+- No PII in logs, URLs, error responses, metric tags or message-queue metadata/attributes.
+- Error responses to clients are generic; details stay in server logs. Spring: no `server.error.include-stacktrace=always`, no `spring.jpa.show-sql=true` in production.
+- PCI DSS: never store CVV or full PAN; use provider tokenization.
+- KYC documents: separate bucket, SSE-KMS with a customer-managed key, Block Public Access, upload and view via pre-signed URLs with 5-minute expiry **(default — project must confirm)**, MIME type validated server-side, malware scan before processing, no PII in object keys, OCR results processed in memory (no temp files).
+- Retention: financial transaction records 7 years, KYC documents 5 years after relationship end, then hard delete **(defaults from data-privacy-patterns.md — project must confirm with its compliance owner and jurisdiction)**.
+- Payments: idempotency key on every payment-creating endpoint; double-entry ledger; optimistic locking on balances (version column or DynamoDB conditional write); forward-only state machine (`INITIATED → PENDING → COMPLETED|FAILED`); daily reconciliation against the provider; 3DS2 for card payments where applicable.
 
-## Go Security Pitfalls
+## LOG — logging & audit
 
-### Common Vulnerabilities
-```
-# STRIDE analysis points for Go services
+- Every financial transaction records who, what, when, from where, and result.
+- Audit logs are append-only/tamper-evident: S3 Object Lock (WORM) or a hash chain; CloudTrail in all regions with log file validation.
+- Audit retention: 7 years for financial transactions, 5 years for access logs **(default — project must confirm)**.
+- Real-time alerts on privilege escalation, bulk data export, and admin actions outside business hours.
 
-SPOOFING:
-- crypto/tls: must set MinVersion to tls.VersionTLS12
-- JWT libraries: use github.com/golang-jwt/jwt/v5 (not dgrijalva/jwt-go, abandoned)
-- Verify algorithm in JWT header matches expected (prevent algorithm confusion attack)
-- HTTP client: default has no timeout — set explicitly
+## NET — network, TLS, CORS
 
-TAMPERING:
-- sql.DB: always use parameterized queries ($1, $2), never fmt.Sprintf
-- Template injection: use html/template (auto-escapes), never text/template for HTML
-- File path: filepath.Clean() + validate path doesn't escape base directory
-- Integer overflow: Go integers wrap silently — validate before financial calculations
+- **TLS 1.2 minimum, TLS 1.3 preferred** for external and inter-service traffic; raise the floor to 1.3 only where every client supports it. Go: `tls.Config{MinVersion: tls.VersionTLS12}`.
+- Go HTTP clients set an explicit timeout (the default client has none); `http.Server` sets `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, `IdleTimeout`.
+- CORS: explicit allowed origins; never `*` with credentials or in production.
+- CSRF: keep protection whenever the browser sends credentials automatically (session cookies, JWT cookies, HTTP Basic). Disable only on an Authorization-header-only resource-server chain with no cookie alternative; statelessness alone is not a CSRF defense ([Spring CSRF considerations](https://docs.spring.io/spring-security/reference/features/exploits/csrf.html)).
+- S3 bucket policies deny non-TLS requests; Lambda attaches to a VPC only when it needs VPC resources.
+- Spring Actuator: only `/health` and `/info` public; `env`, `beans`, `configprops` require an admin role or stay unexposed. Go `pprof` on a separate, non-public port.
 
-INFORMATION DISCLOSURE:
-- recover() in HTTP handlers: log panic, return generic 500 (never expose panic message)
-- Error wrapping: fmt.Errorf("failed: %w", err) — ensure inner error doesn't contain secrets
-- Debug endpoints: pprof should never be exposed on public port
+## RATE — rate limiting, quotas, DoS
 
-DENIAL OF SERVICE:
-- http.Server: always set ReadTimeout, WriteTimeout, IdleTimeout
-- Request body: use http.MaxBytesReader() to limit request size
-- goroutine leaks: ensure all goroutines have exit conditions
-- JSON decoding: use json.Decoder with DisallowUnknownFields + MaxBytes
-```
+- Rate limits on authentication and OTP endpoints (Bucket4j, API Gateway usage plans or WAF rate rules).
+- Per-transaction and daily limits, configurable; velocity checks flag unusual frequency or amounts.
+- Cool-down before a newly added payee can receive funds: 12 hours **(default — project must confirm)**.
+- Pagination with a max page size on every list endpoint.
+- Kill switch to disable a transaction type within minutes.
+- Go: every goroutine has a context-based exit; no unbounded fan-out.
 
-### Go Security Rules Template
-```
-# Rules for Backend Engineer (Go)
-SEC-GO-01: HTTP server must set ReadTimeout(10s), WriteTimeout(30s), IdleTimeout(120s)
-SEC-GO-02: All SQL queries use parameterized statements, never string concatenation
-SEC-GO-03: TLS MinVersion: tls.VersionTLS12, prefer TLS 1.3 cipher suites
-SEC-GO-04: Request body limited via http.MaxBytesReader (1MB default)
-SEC-GO-05: All goroutines must have context-based cancellation
-SEC-GO-06: Financial calculations use math/big or shopspring/decimal, never float64
-SEC-GO-07: Error responses to clients: generic messages only, detailed errors in logs
-SEC-GO-08: JWT: use golang-jwt/jwt/v5, validate algorithm + claims explicitly
-SEC-GO-09: pprof/debug endpoints on separate port (6060), never on API port
-SEC-GO-10: Input validation at handler level before passing to business logic
-```
+## DEP — dependencies & supply chain
 
-## Payment API Security Patterns
+- Dependency and image scanning in CI (e.g. Trivy, Grype, Snyk); SBOM per build (Syft or Trivy).
+- No abandoned security-critical libraries (see the JWT note under AUTH).
 
-### Transaction Security Rules
-```
-PAY-01: Idempotency keys required on all payment endpoints (client-generated UUID v4)
-PAY-02: Double-entry bookkeeping — every debit has a corresponding credit
-PAY-03: Optimistic locking on account balances (version column or conditional DynamoDB writes)
-PAY-04: Transaction amount validation: positive, max decimal places (2 for SGD), within limits
-PAY-05: Currency handling: store as minor units (cents) to avoid floating-point errors
-PAY-06: Payment state machine: INITIATED → PENDING → COMPLETED/FAILED (no backward transitions)
-PAY-07: Reconciliation: async job compares internal ledger with payment provider daily
-PAY-08: PCI DSS: never store CVV, full PAN; use tokenization (Stripe, Adyen tokens)
-PAY-09: 3DS2 for card payments where applicable
-PAY-10: Webhook signature verification for payment provider callbacks (HMAC-SHA256)
-```
+## SECRET — secrets management
 
-## KYC Document Security
+- No secrets in Lambda environment variables, IaC source, images or committed `.env` files: Secrets Manager or SSM SecureString, retrieved at runtime.
+- Spring `application.yml`: secrets only via `${ENV_VAR}` placeholders or a secrets backend.
+- Review patterns: AWS access keys (`AKIA[0-9A-Z]{16}`), private key headers (`-----BEGIN (RSA |EC )?PRIVATE KEY-----`), JWTs (`eyJ…\.eyJ…\.`), connection strings with passwords, hardcoded OTP seeds/HMAC keys.
+- Tooling: gitleaks pre-commit; trufflehog or detect-secrets (baseline mode) in CI.
 
-### Document Handling Rules
-```
-KYC-01: Document upload: signed S3 URLs with 5-minute expiry, direct browser-to-S3
-KYC-02: Document storage: separate S3 bucket, SSE-KMS with CMK, no public access
-KYC-03: Document access: pre-signed URLs for viewing, 5-minute expiry, audit logged
-KYC-04: Document retention: encrypt, retain 5 years post-relationship, then hard delete
-KYC-05: OCR/verification: process in-memory, never persist extracted PII to temp files
-KYC-06: Document types: validate MIME type server-side (not just extension)
-KYC-07: Document size: max 10MB per document, malware scan before processing
-KYC-08: Metadata: store document type + upload timestamp, never PII in S3 object keys
-```
+## COMPLIANCE — MAS, PCI DSS, PDPA
 
-## Secrets Detection Patterns
+- MAS TRM / Cyber Hygiene: MFA, session controls, audit trail, transaction notifications (SMS/push for every financial transaction), customer-configurable limits. Map each to a specific clause only after checking the current text.
+- PCI DSS: tokenization, no CVV/full PAN storage, scoped cardholder-data environment.
+- PDPA: purpose limitation, consent before Level 1/2 collection, retention and deletion per `data-privacy-patterns.md`.
+- Unclear compliance scope is an escalation for the security agent, not a guess.
 
-### What to Check in Code Review
-```
-# Patterns that indicate leaked secrets
-SECRETS-01: AWS access keys (AKIA[0-9A-Z]{16})
-SECRETS-02: Private keys (-----BEGIN (RSA |EC )?PRIVATE KEY-----)
-SECRETS-03: JWT tokens (eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.)
-SECRETS-04: Database connection strings with passwords
-SECRETS-05: API keys in application.yml/application.properties without ${ENV_VAR} wrapper
-SECRETS-06: Hardcoded OTP seeds, encryption keys, HMAC secrets
-SECRETS-07: .env files committed to repository
+## AWS serverless quick checks
 
-# Recommended CI tools
-Pre-commit: gitleaks (fast, configurable)
-CI pipeline: truffleHog (deep history scan), detect-secrets (baseline mode)
-AWS: aws-vault for local development (never raw AWS credentials in env)
-```
-
-## AWS Serverless Security Rules
-
-```
-AWS-SEC-01: Lambda env vars: no secrets — use SSM Parameter Store (SecureString) or Secrets Manager
-AWS-SEC-02: API Gateway: authorizer on every method, WAF for public APIs
-AWS-SEC-03: DynamoDB: encryption with CMK for tables storing Level 1 PII
-AWS-SEC-04: S3: BlockPublicAccess on all buckets, bucket policy denies non-HTTPS
-AWS-SEC-05: SQS: encrypted at rest (SSE-SQS minimum, SSE-KMS for PII)
-AWS-SEC-06: Lambda: VPC-attached only when accessing VPC resources (RDS, ElastiCache)
-AWS-SEC-07: IAM: no wildcard resources, scope to specific ARNs
-AWS-SEC-08: CloudTrail: enabled in all regions, log file validation on
-AWS-SEC-09: Secrets Manager: automatic rotation enabled, rotation ≤90 days
-AWS-SEC-10: EventBridge: validate event source in Lambda handler, don't trust event schema blindly
-```
-
-## Threat Model Output Format
-
-When defining security rules, emit in this structure:
-```
-## Threat Model: [Feature Name]
-
-### Assets
-- [List data assets and their PII classification level]
-
-### STRIDE Analysis
-- [Each category with specific threats identified]
-
-### Security Rules
-- [Numbered rules per implementation domain: SEC-SPRING-XX, SEC-GO-XX, SEC-AWS-XX, PAY-XX, KYC-XX]
-
-### Compliance
-- MAS TRM: [Applicable controls]
-- PDPA: [Data handling requirements]
-
-### Monitoring Rules
-- [DataDog monitors to create for security events]
-```
+| Check | Prefix |
+|---|---|
+| Authorizer on every API Gateway method; WAF on public APIs | AUTH / RATE |
+| DynamoDB tables with Level 1 data use a customer-managed KMS key | CRYPTO |
+| SQS encrypted at rest (SSE-SQS minimum, SSE-KMS for PII) | CRYPTO |
+| IAM scoped to specific ARNs; wildcards need a written justification | AUTHZ |
+| EventBridge consumers validate `source`/`detail-type` and the payload schema | INPUT |

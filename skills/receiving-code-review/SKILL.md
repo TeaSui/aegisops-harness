@@ -1,6 +1,6 @@
 ---
 name: receiving-code-review
-description: Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation
+description: Use when review feedback arrives (from the code-reviewer subagent, the code-review skill, a PR comment or the user), before changing code for it — verify each finding against the code, fix or clear it with evidence, push back when it is wrong, and skip performative agreement (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
 # Code Review Reception
@@ -27,7 +27,7 @@ WHEN receiving code review feedback:
 ## Forbidden Responses
 
 **NEVER:**
-- "You're absolutely right!" (explicit CLAUDE.md violation)
+- "You're absolutely right!"
 - "Great point!" / "Excellent feedback!" (performative)
 - "Let me implement that now" (before verification)
 
@@ -91,10 +91,13 @@ IF conflicts with your human partner's prior decisions:
 
 ```
 IF reviewer suggests "implementing properly":
-  grep codebase for actual usage
+  grep codebase for actual usage yourself
 
-  IF unused: "This endpoint isn't called. Remove it (YAGNI)?"
+  IF unused: decline it and clear the finding with the search evidence
+             ("nothing calls this endpoint: <search command and result>")
   IF used: Then implement properly
+  Ask the user only when the answer is theirs alone (a planned external consumer,
+  a product commitment the code cannot show)
 ```
 
 **your human partner's rule:** "You and reviewer both report to me. If we don't need this feature, don't add it."
@@ -112,6 +115,8 @@ FOR multi-item feedback:
   4. Verify no regressions
 ```
 
+In the pre-PR pass, run one diff-only re-review of the fixes (`${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`), then commit and record the pass per `requesting-code-review` (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open after that re-review go to the user as explicit open items, not another loop.
+
 ## When To Push Back
 
 Push back when:
@@ -127,8 +132,6 @@ Push back when:
 - Ask specific questions
 - Reference working tests/code
 - Involve your human partner if architectural
-
-**Signal if uncomfortable pushing back out loud:** "Strange things are afoot at the Circle K"
 
 ## Acknowledging Correct Feedback
 
@@ -192,7 +195,7 @@ Reviewer: "Remove legacy code"
 **YAGNI (Good):**
 ```
 Reviewer: "Implement proper metrics tracking with database, date filters, CSV export"
-✅ "Grepped codebase - nothing calls this endpoint. Remove it (YAGNI)? Or is there usage I'm missing?"
+✅ "Grepped the codebase: nothing calls this endpoint, so not adding metrics tracking (YAGNI). Finding cleared with that search."
 ```
 
 **Unclear Item (Good):**

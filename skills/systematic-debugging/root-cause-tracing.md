@@ -101,10 +101,10 @@ If something appears during tests but you don't know which test:
 Use the bisection script `find-polluter.sh` in this directory:
 
 ```bash
-./find-polluter.sh '.git' 'src/**/*.test.ts'
+bash "<plugin root>/skills/systematic-debugging/find-polluter.sh" '.git' './src/**/*.test.ts'
 ```
 
-Runs tests one-by-one, stops at first polluter. See script for usage.
+`<plugin root>` is the folder that holds this skill's `skills/` directory (the path this file was read from, minus `skills/systematic-debugging/root-cause-tracing.md`). Runs tests one-by-one and stops at the first polluter. It assumes `npm test <file>` runs a single test file; adapt that line for other runners. Exit 0 means no polluter among the matched files, 1 means one was found, and 2 means no test files matched or the pollution already existed before the first run.
 
 ## Real Example: Empty projectDir
 

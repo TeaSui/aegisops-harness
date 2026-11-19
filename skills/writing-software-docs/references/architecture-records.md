@@ -60,7 +60,7 @@ Option B — SQS
 
 ## ADR — Architecture Decision Record
 
-Deliberately tiny. One decision, one file, numbered in sequence (`adr-0007-…`). Status moves Proposed → Accepted → (later) Superseded; never edit the decision after Accepted — write a new ADR that supersedes it.
+Deliberately tiny. One decision, one file, numbered in sequence and saved as `docs/adr/NNNN-<decision>.md` (for example `0007-use-kafka-over-sqs.md`). Status moves Proposed → Accepted → (later) Superseded; never edit the decision after Accepted — write a new ADR that supersedes it.
 
 ```
 # ADR-NNNN: <title>

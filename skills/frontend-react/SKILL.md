@@ -1,13 +1,13 @@
 ---
 name: frontend-react
 description: |
-  React/Next.js frontend patterns for fintech applications. Component architecture,
+  Web React/Next.js frontend patterns for fintech browser applications (not React Native or other mobile apps). Component architecture,
   state management, form handling, KYC flows, PII masking, secure data display,
   and testing patterns with Vitest + Testing Library.
   Use when: building React/Next.js frontends, KYC forms, transaction UIs,
   financial dashboards, or any frontend consuming Spring Boot/Go APIs.
-  Triggers on: React, Next.js, frontend, component, form, KYC UI, dashboard,
-  PII masking, transaction display.
+  Triggers on: React web app, Next.js, web frontend, browser component, web form, KYC web UI, dashboard,
+  PII masking in the browser, transaction display.
 ---
 
 # React / Next.js Patterns (Fintech)
@@ -104,6 +104,9 @@ export const transferSchema = z.object({
   recipientAccount: z.string()
     .min(1, 'Account number required')
     .regex(/^\d{10,16}$/, 'Invalid account number'),
+  // HTML inputs yield strings: register with { valueAsNumber: true } (below) or use z.coerce.number().
+  // 0.01 holds because every currency in the enum has ISO 4217 exponent 2; derive the step from
+  // currencyExponent() when adding VND/KRW (0) or KWD/BHD (3).
   amount: z.number()
     .positive('Amount must be positive')
     .multipleOf(0.01, 'Max 2 decimal places')
@@ -142,6 +145,12 @@ export function TransferForm({ onSuccess }: { onSuccess: () => void }) {
         label="Recipient Account"
         error={form.formState.errors.recipientAccount?.message}
         {...form.register('recipientAccount')}
+      />
+      <FormField
+        label="Amount"
+        type="number"
+        error={form.formState.errors.amount?.message}
+        {...form.register('amount', { valueAsNumber: true })}
       />
       {/* ... other fields ... */}
       <Button type="submit" loading={transfer.isPending}>
@@ -193,12 +202,13 @@ export function MaskedText({ value, maskFn, revealable = false }: MaskedTextProp
 
   return (
     <span className="inline-flex items-center gap-1">
-      <span aria-label="masked value">{revealed ? value : maskFn(value)}</span>
+      {/* no aria-label on a generic <span>: it is not announced; the text itself is read */}
+      <span>{revealed ? value : maskFn(value)}</span>
       {revealable && (
         <button
           type="button"
           onClick={() => setRevealed(!revealed)}
-          aria-label={revealed ? 'Hide' : 'Reveal'}
+          aria-pressed={revealed}
           className="text-xs text-blue-600 hover:underline"
         >
           {revealed ? 'Hide' : 'Show'}
@@ -281,16 +291,16 @@ async function uploadDocument(file: File, type: KycDocumentType) {
 // lib/utils/currency.ts
 const formatters: Record<string, Intl.NumberFormat> = {};
 
-export function formatCurrency(amount: number, currency: string = 'SGD'): string {
-  if (!formatters[currency]) {
-    formatters[currency] = new Intl.NumberFormat('en-SG', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-    });
-  }
-  // amount from API is in minor units (cents)
-  return formatters[currency].format(amount / 100);
+/** ISO 4217 exponent: VND/KRW/JPY 0, SGD/USD 2, KWD/BHD 3. If the backend keeps its own table, share it. */
+export function currencyExponent(currency: string): number {
+  return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
+}
+
+export function formatCurrency(amountMinor: number, currency: string = 'SGD', locale = 'en-SG'): string {
+  const key = `${locale}:${currency}`;
+  formatters[key] ??= new Intl.NumberFormat(locale, { style: 'currency', currency });
+  // API amounts are integer minor units; scale by the currency's exponent, never a fixed 100
+  return formatters[key].format(amountMinor / 10 ** currencyExponent(currency));
 }
 ```
 
@@ -324,7 +334,7 @@ class ApiClient {
     this.baseUrl = process.env.NEXT_PUBLIC_API_URL!;
   }
 
-  private async request<T>(path: string, options?: RequestInit): Promise<T> {
+  private async request<T>(path: string, options?: RequestInit, retried = false): Promise<T> {
     const token = getAccessToken(); // from auth context
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...options,
@@ -336,9 +346,8 @@ class ApiClient {
     });
 
     if (response.status === 401) {
-      // Token expired — attempt refresh
-      const refreshed = await refreshToken();
-      if (refreshed) return this.request<T>(path, options);
+      // Token expired — refresh and retry once; a second 401 ends the session
+      if (!retried && (await refreshToken())) return this.request<T>(path, options, true);
       redirectToLogin();
       throw new AuthError('Session expired');
     }
@@ -420,7 +429,7 @@ describe('useTransfer', () => {
 ## Common Mistakes to Avoid
 
 1. **Storing JWT in localStorage** — XSS can steal it. Use httpOnly cookies or in-memory.
-2. **Displaying raw API amounts** — API returns cents (minor units). Always divide by 100.
+2. **Displaying raw API amounts** — API returns minor units. Scale by the currency's ISO 4217 exponent (`currencyExponent`: 0 for VND/KRW, 3 for KWD/BHD), never a hardcoded 100.
 3. **Showing full PII by default** — mask everything, reveal on explicit user action.
 4. **Missing loading/error states** — every data fetch needs loading skeleton and error boundary.
 5. **Client-side-only validation** — always validate server-side too. Client validation is UX, not security.

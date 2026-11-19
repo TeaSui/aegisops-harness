@@ -1,5 +1,5 @@
 ---
-description: Challenge the claims just made — for each one, run a check that would fail if the claim were false, show the decisive output, and narrow or withdraw whatever the evidence does not support
+description: Use when the user doubts or challenges a claim ("are you sure?", "double-check", "prove it") or asks for fresh re-verification — re-runs, for each claim, a check that would fail if it were false and narrows or withdraws what the evidence does not support. Routine completion claims use verification-before-completion.
 argument-hint: "[optional: specific claim or task to verify]"
 ---
 

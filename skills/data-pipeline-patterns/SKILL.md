@@ -57,11 +57,14 @@ class OrdersPipeline:
         self.spark = spark
         self.config = config
 
-    def extract(self) -> DataFrame:
+    def extract(self, watermark) -> DataFrame:
+        # JDBC has no bind parameters in `dbtable`/`query`; filter the DataFrame and let
+        # Spark push the predicate down (or pass `predicates=[...]` to spark.read.jdbc).
         return (self.spark.read.format("jdbc")
             .option("url", self.config["source_jdbc_url"])
-            .option("dbtable", "(SELECT * FROM orders WHERE updated_at > :watermark) AS t")
-            .option("fetchsize", 10000).load())
+            .option("dbtable", "orders")
+            .option("fetchsize", 10000).load()
+            .filter(F.col("updated_at") > F.lit(watermark).cast("timestamp")))
 
     def transform(self, raw: DataFrame) -> DataFrame:
         """Pure function -- no side effects."""
@@ -84,8 +87,8 @@ class OrdersPipeline:
             (transformed.write.format("delta").mode("overwrite")
                 .partitionBy("order_date").save(path))
 
-    def run(self) -> dict:
-        raw = self.extract()
+    def run(self, watermark) -> dict:
+        raw = self.extract(watermark)
         raw_count = raw.count()
         transformed = self.transform(raw)
         self.load(transformed)
@@ -132,7 +135,8 @@ def delta_merge(spark, source_df, target_path, merge_keys, partition_cols=None):
 
 ```python
 # Optimize -- compact small files (run daily/weekly)
-spark.sql(f"OPTIMIZE delta.`{path}` ZORDER BY (customer_id, order_date)")
+# Z-order only non-partition columns: order_date is the partition column, so Z-ordering on it is an error
+spark.sql(f"OPTIMIZE delta.`{path}` ZORDER BY (customer_id)")
 
 # Vacuum -- remove old versions (run weekly)
 spark.sql(f"VACUUM delta.`{path}` RETAIN 168 HOURS")  # 7 days
@@ -276,7 +280,8 @@ CREATE INDEX idx_dim_cust_current ON dim_customers (customer_id) WHERE is_curren
 def scd2_merge(spark, source_df, target_path, bk, tracked_cols):
     """Expire old records, insert new versions for changed attributes."""
     target = DeltaTable.forPath(spark, target_path)
-    change_cond = " OR ".join([f"t.{c} != s.{c}" for c in tracked_cols])
+    # Null-safe: `!=` yields NULL (not true) when either side is NULL, hiding NULL<->value changes
+    change_cond = " OR ".join([f"NOT (t.{c} <=> s.{c})" for c in tracked_cols])
 
     # Find changed records
     staged = (source_df.alias("s")

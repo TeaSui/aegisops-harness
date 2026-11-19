@@ -201,14 +201,14 @@ Schema evolution rules: see parent `SKILL.md`.
 - Adding partitions invalidates key-based ordering for existing data
 
 ### Retention
-- `log.retention.hours` (default 168 = 7 days) — set per-topic for replay window
-- `log.cleanup.policy=compact` for event-sourced state topics (keeps latest value per key)
-- `log.cleanup.policy=delete` (default) for event logs
+- Broker default `log.retention.hours` = 168 (7 days); override per topic with `retention.ms` for the replay window
+- Topic `cleanup.policy=compact` for event-sourced state topics (keeps latest value per key)
+- Topic `cleanup.policy=delete` (default) for event logs
 
 ### KRaft (Kafka 3.3+, ZK removed in 4.0)
 - No ZooKeeper dependency in new clusters
 - Controller quorum handles metadata; `kafka-storage.sh format` replaces ZK init
-- Migration from ZK clusters: use `kafka-metadata-migration` tool
+- Migration from ZK clusters: run the ZK→KRaft migration on 3.x (3.9 is the bridge release) — provision a KRaft controller quorum, enable `zookeeper.metadata.migration.enable=true` on controllers and brokers, roll brokers into KRaft, then finalize. Do this before upgrading to 4.0, which has no ZooKeeper mode.
 
 ### Monitoring
 - `consumer_lag` per group+partition (alert on sustained lag growth)

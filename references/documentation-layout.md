@@ -100,7 +100,7 @@ affects: [<service-or-module>, ...]
 accepted_by: <name/date>            # set only on explicit user/team approval
 source_revision: [<repo>@<sha>, ...] # set on promotion; one entry per affected repo
 superseded_by: <slug>               # when applicable
-contract: none                      # none | external — external = a contract with consumers outside the changed module; contracts/ must then pass scripts/check-contract.py
+contract: external                  # set none only when no consumer outside the changed module; omit to auto-detect from contracts/ (external = contracts/ must pass scripts/check-contract.py)
 contract_source: <path>             # optional: authoritative OpenAPI file for the compatibility check (else auto-detected)
 breaking: approved                  # optional: a breaking change against contract_source was explicitly approved
 updated: YYYY-MM-DD

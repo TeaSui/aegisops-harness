@@ -1,6 +1,6 @@
 ---
 name: test-driven-development
-description: Use before implementing behavior changes or bug fixes; preserve existing work and choose proportionate checks for prose/config changes
+description: Use before writing production code for a new behavior or a bug fix — write the test, run it and show it failing for the expected reason, then make it pass; prose and config changes get proportionate structural checks instead (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
 # Test-Driven Development (TDD)
@@ -334,7 +334,7 @@ If a box is unmet, report the precise gap and address it within the owned scope.
 
 | Problem | Solution |
 |---------|----------|
-| Don't know how to test | Write wished-for API. Write assertion first. Ask your human partner. |
+| Don't know how to test | Write wished-for API. Write assertion first. Ask the user only when the expected behavior is theirs to decide, and list the test approaches you tried in that same message. |
 | Test too complicated | Design too complicated. Simplify interface. |
 | Must mock everything | Code too coupled. Use dependency injection. |
 | Test setup huge | Extract helpers. Still complex? Simplify design. |

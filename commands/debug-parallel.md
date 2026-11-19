@@ -1,11 +1,11 @@
 ---
-description: Debug a multi-service error using useful independent config, diagnostics, code-path and history investigations, then verify a root cause and scoped fix
+description: Use when an error, timeout or wrong result crosses two or more services (or service + infra/config) and the cause is not obvious — runs independent config, diagnostics, code-path and history investigations in parallel, then verifies one root cause and a scoped fix. Run it yourself; the user does not need to type it.
 argument-hint: "<error description>"
 ---
 
 Error: **$ARGUMENTS**
 
-Classify the task using `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`; complete required Security/contract prerequisites before implementing. Follow `${CLAUDE_PLUGIN_ROOT}/rules/dispatch-prompt-contract.md` and `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`. Dispatch only useful independent branches using the available Agent tool (`Task` alias is supported); keep dependent investigation sequential. When agents are unavailable, report the missing independent gate and use an authorized local fallback.
+Classify the task using `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`; complete required Security/contract prerequisites before implementing. The four investigations are read-only and may run as parallel agents in any tier; the fix follows the tier (Fast path: the main session implements it). For a single-service error use systematic-debugging instead. Follow `${CLAUDE_PLUGIN_ROOT}/rules/dispatch-prompt-contract.md` and `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`. Dispatch only useful independent branches using the available Agent tool (`Task` alias is supported); keep dependent investigation sequential. When agents are unavailable, report the missing independent gate and use an authorized local fallback.
 
 All reports disclose presence, counts, safe identifiers, filenames or explicitly redacted metadata only. Never print credentials, environment/config values, raw auth headers, connection strings, PII or request/response bodies. Diagnostics must stay within the authorized safe target; do not start services or replay mutating requests by default.
 
@@ -42,7 +42,7 @@ Report: any commit in the last 20 that could explain this error.
 1. Read all selected reports and their cited evidence
 2. State root cause: one specific, falsifiable sentence
 3. Cross-check the hypothesis against the collected findings; state remaining uncertainty
-4. Implement the fix — cite the specific finding that justifies each change
+4. Write a failing test that reproduces the root cause (test-driven-development), then implement the fix — cite the specific finding that justifies each change
 5. Verify with the `verification-before-completion` skill
 
 **Do not implement a fix before the necessary investigation and routing prerequisites are satisfied.**

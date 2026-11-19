@@ -1,6 +1,6 @@
 ---
 name: find-docs
-description: Retrieve primary or installed documentation for uncertain or version-sensitive library, framework, SDK, CLI and cloud-service details; prefer configured Context7 and disclose missing evidence
+description: Use when an answer or code you are about to write depends on a library, framework, SDK, CLI or cloud-service detail not verified for the project's version (syntax, flags, config keys, support for a feature, migration), or the user asks for the source — looks it up via Context7 or official/installed docs and cites it.
 ---
 
 # Documentation Lookup

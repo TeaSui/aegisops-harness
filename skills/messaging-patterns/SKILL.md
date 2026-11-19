@@ -27,7 +27,7 @@ description: |
 ### Decision Flowchart
 1. Need event replay / audit log? → **Kafka**
 2. Need complex routing (topic, headers, fanout)? → **RabbitMQ**
-3. Simple queue + AWS-native serverless? → **SQS** (see `references/sqs.md`)
+3. Simple queue + AWS-native serverless? → **SQS** (see `${CLAUDE_PLUGIN_ROOT}/skills/messaging-patterns/references/sqs.md`)
 4. Event sourcing / CQRS? → **Kafka**
 5. Task distribution to workers? → **RabbitMQ**
 6. Already using Kafka for other streams? → **Kafka** (avoid running two brokers)
@@ -38,9 +38,9 @@ Load the matching reference for implementation details:
 
 | Broker | Reference | Key triggers |
 |--------|-----------|--------------|
-| Apache Kafka | `references/kafka.md` | `kafka`, `.go` + `segmentio/kafka-go`, `spring-kafka`, `KafkaListener`, `KRaft` |
-| RabbitMQ | `references/rabbitmq.md` | `rabbitmq`, `amqp`, `@RabbitListener`, `quorum queue`, `DLX` |
-| AWS SQS | `references/sqs.md` | `SQS`, `FIFO`, `visibility timeout`, `redrive`, Lambda + SQS |
+| Apache Kafka | `${CLAUDE_PLUGIN_ROOT}/skills/messaging-patterns/references/kafka.md` | `kafka`, `.go` + `segmentio/kafka-go`, `spring-kafka`, `KafkaListener`, `KRaft` |
+| RabbitMQ | `${CLAUDE_PLUGIN_ROOT}/skills/messaging-patterns/references/rabbitmq.md` | `rabbitmq`, `amqp`, `@RabbitListener`, `quorum queue`, `DLX` |
+| AWS SQS | `${CLAUDE_PLUGIN_ROOT}/skills/messaging-patterns/references/sqs.md` | `SQS`, `FIFO`, `visibility timeout`, `redrive`, Lambda + SQS |
 
 ---
 

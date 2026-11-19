@@ -1,6 +1,6 @@
 ---
 name: systematic-debugging
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes
+description: Use when a bug, failing test, error or unexpected behavior appears, before proposing or making a fix — reproduce it, trace the root cause, test one hypothesis at a time, then fix it with a failing test first (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
 # Systematic Debugging
@@ -116,6 +116,8 @@ You MUST complete each phase before proceeding to the next.
 
    **This reveals:** Which layer fails (secrets → workflow ✓, workflow → build ✗)
 
+   **When the failure crosses two or more services** (an error raised in one service caused by a call to or from another), run the `debug-parallel` command yourself with the error text; do not ask the user to run it.
+
 5. **Trace Data Flow**
 
    **WHEN error is deep in call stack:**
@@ -219,9 +221,7 @@ You MUST complete each phase before proceeding to the next.
    - Are we "sticking with it through sheer inertia"?
    - Should we refactor architecture vs. continue fixing symptoms?
 
-   **Discuss with your human partner before attempting more fixes**
-
-   Repeated failures are evidence to reassess the approach, not proof that the architecture is wrong. Report the tested hypotheses and unresolved evidence.
+   Repeated failures are evidence to reassess the approach, not proof that the architecture is wrong. If the next step is a decision only the user can make (change the architecture, accept a workaround, drop the requirement), ask for it and report the tested hypotheses and unresolved evidence in that same message. Otherwise pick the next approach yourself and continue.
 
 ## Red Flags - STOP and Follow Process
 
@@ -293,6 +293,7 @@ These techniques are part of systematic debugging and available in this director
 - **`root-cause-tracing.md`** - Trace bugs backward through call stack to find original trigger
 - **`defense-in-depth.md`** - Add validation at multiple layers after finding root cause
 - **`condition-based-waiting.md`** - Replace arbitrary timeouts with condition polling
+- **`find-polluter.sh`** - Find the test that creates unwanted files or state: `bash "${CLAUDE_PLUGIN_ROOT}/skills/systematic-debugging/find-polluter.sh" '.git' './src/**/*.test.ts'` (assumes `npm test <file>`; exit 2 means no test files matched)
 
 **Related skills:**
 - **test-driven-development** - For creating failing test case (Phase 4, Step 1)
