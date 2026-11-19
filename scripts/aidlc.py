@@ -2,7 +2,7 @@
 """AIDLC lifecycle engine: the stages, artifacts and gates of references/aidlc.md (stdlib only, Python 3.9+).
 
 CLI: python3 scripts/aidlc.py <command> [--json] [--repo DIR]   exit 0 pass, 1 gate findings, 2 usage or input error
-  status                                   every spec: stage, next stage, whether its gate passes, blockers
+  status [--fast]                          every spec: stage, next stage, whether its gate passes, blockers
   check SPEC [--to STAGE]                  run a gate (default: the next stage's), also for a stage already reached
   advance SPEC STAGE [--back] [--reason T] move forward one stage when its gate passes; --back --reason moves back;
                                            abandoned (--reason), superseded (README superseded_by:), partially-implemented
@@ -13,25 +13,34 @@ CLI: python3 scripts/aidlc.py <command> [--json] [--repo DIR]   exit 0 pass, 1 g
   stamp SPEC review                        write the code fingerprint into review.md and log it
   trace SPEC [--write]                     requirement -> tasks -> tests -> result; --write fills README ## Traceability
   init SPEC --key KEY                      create the spec folder with skeletons
-SPEC is a folder path (contains '/') or a slug found under docs/specs/ or */docs/specs/ (init: <repo>/docs/specs/<slug>).
-task-done and verify accept --timeout SECONDS (default 1800).
+SPEC is a folder path (contains '/') or a slug found under any docs/specs/ folder (init: <repo>/docs/specs/<slug>).
+--repo may be any folder of the repository (normalized to the git top level). task-done and verify accept
+--timeout SECONDS (default 1800). JSON: `exit` is always the CLI exit code; `command_exit` is the run command's.
+Writers of plan.md, README.md and ledger.md hold an exclusive flock on the spec folder (no-op without fcntl).
 
-Python API (load with importlib.util.spec_from_file_location; hooks call it):
+Python API (load with importlib.util.spec_from_file_location; hooks call it; names and signatures are stable):
   find_spec(repo, ref) -> Path | None          spec folder for a path or slug; None when missing or ambiguous
   load_spec(path) -> dict                      path, slug, repo, stage, readme (frontmatter), requirements, guesses,
                                                tasks, ledger, review, ship (None when the file is missing),
                                                errors [(level, message)] from parsing
   stage(path) -> str                           README status: (default proposed)
   check(path, target=None) -> [(level, msg)]   level FAIL | WARN | OK; target defaults to the next stage
-  fingerprint(repo) -> str                     SHA-256 hex over code and test files (tracked or untracked, not ignored)
+  fingerprint(repo, rev=None) -> str | None    SHA-256 over sorted (path, git blob ID) of every non-ignored file except
+                                               docs/**, **/docs/specs/**, *.md, CHANGELOG*, LICENSE*; rev = a commit
+                                               (None when unknown or outside git). A clean tree equals 'HEAD'.
+  code_dirty(repo) -> bool                     the working tree's code differs from HEAD
+  evidence_findings(path, rev=None) -> [...]   latest verify green and current; review stamp == verified code;
+                                               with rev, that commit holds the verified code
   active_specs(repo) -> [Path]                 specs whose status is proposed..shipped
-  specs_for_branch(repo, branch) -> [Path]     active specs whose README branch: is `branch`
-  status(repo) -> [dict]                       path (repo-relative), slug, stage, next, passes (None = not evaluated),
-                                               blockers [str], legacy (no key:, not evaluated)
+  specs_for_branch(repo, branch) -> [Path]     specs of ANY status whose README branch: is `branch`
+  status(repo, fast=False) -> [dict]           path (repo-relative), slug, stage, next, passes (None = not evaluated),
+                                               blockers [str], legacy (no key:, not evaluated); fast=True runs no gh
+                                               and no contract gate, only cheap git (session-start snapshot)
   next_batches(path) -> [[task dict]]          the frontier; tasks in one batch share no file
 Environment: AIDLC_GH = the gh executable for the shipped gate's CI check (tests point it at a fake).
 """
 import argparse
+import contextlib
 import datetime
 import glob as globlib
 import hashlib
@@ -45,8 +54,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 from functools import cached_property
+
+try:
+    import fcntl
+except ImportError:  # Windows: spec locking degrades to a no-op
+    fcntl = None
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -61,8 +76,12 @@ def _load(name, path):
 _tdd = _load('aidlc_tdd_gate', HERE.parent / 'hooks' / 'tdd-gate.py')
 _contract = _load('aidlc_check_contract', HERE / 'check-contract.py')
 
-CODE_EXT = tuple(_tdd.CODE_EXT) + ('.feature', '.sql', '.proto', '.graphql')
+CODE_EXT = tuple(_tdd.CODE_EXT) + ('.feature', '.sql', '.proto', '.graphql')  # test files for traceability
 TEST_PATH = _tdd.TEST_PATH
+# The code fingerprint covers every non-ignored file EXCEPT these (docs, specs, changelogs, licences).
+NOT_CODE = re.compile(r'^docs/|(^|/)docs/specs/|\.md$|(^|/)(CHANGELOG|LICENSE)[^/]*$', re.I)
+SPEC_README = re.compile(r'(^|/)docs/specs/([^/]+)/README\.md$')
+FP_MIN = 12  # a recorded fingerprint prefix shorter than this never matches
 STAGES = ('proposed', 'accepted', 'planned', 'building', 'verified', 'reviewed', 'shipped', 'implemented')
 ACTIVE = STAGES[:-1]
 SIDE = ('partially-implemented', 'superseded', 'abandoned')
@@ -83,6 +102,7 @@ JUNIT = re.compile(r'\bjunit=(?:(\d+) passed, (\d+) failed|(unreadable|missing))
 KV = re.compile(r'([\w-]+)=("(?:[^"\\]|\\.)*"|\S+)')
 RULING = re.compile(r'^(?:(T\d+):\s+)?(.*?)\s+—\s+why:\s+(.*?)\s+—\s+if wrong:\s+(.*)$')
 ADVANCE = re.compile(r'^([\w-]+)\s*(?:→|->)\s*([\w-]+)\s*(.*)$')
+PLAIN_FINDING = re.compile(r'^\s*[-*+]\s+(?!\[[ xX]\])[*_`]*([A-Z]+\d+)\b')
 FINDING = re.compile(r'^([A-Z]+\d+)\b\s*(?:\(([^)]*)\))?\s*:?\s*(.*)$')
 GH_STATES = ('pass', 'fail', 'pending', 'skipping', 'cancel')
 TAIL_BYTES = 2048
@@ -124,15 +144,21 @@ def read_text(path, label):
     except OSError as err:
         return None, f'{label}: unreadable ({err.strerror or err})'
     try:
-        return data.decode('utf-8'), None
+        return data.decode('utf-8').replace('\r\n', '\n'), None
     except UnicodeDecodeError as err:
         line = data[:err.start].count(b'\n') + 1
         return None, f'{label}:{line}: not UTF-8 text'
 
 
-def write_atomic(path, text):
+def read_for_edit(path):
+    """(text with \\n line ends, the file's own line end) so a rewrite keeps CRLF files CRLF."""
+    text = path.read_bytes().decode('utf-8')
+    return text.replace('\r\n', '\n'), ('\r\n' if '\r\n' in text else '\n')
+
+
+def write_atomic(path, text, newline='\n'):
     temp = path.with_name(f'.{path.name}.{os.getpid()}.tmp')
-    temp.write_text(text, encoding='utf-8')
+    temp.write_bytes(text.replace('\n', newline).encode('utf-8'))
     os.replace(temp, path)
 
 
@@ -165,7 +191,7 @@ def parse_frontmatter(text):
         if not line.strip() or line[0] in ' \t#' or ':' not in line:
             continue
         key, _, value = line.partition(':')
-        value = re.split(r'(?:^|\s)#', value, 1)[0].strip()
+        value = re.split(r'(?:^|\s)#', value, maxsplit=1)[0].strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
             value = value[1:-1]
         meta[key.strip()] = value
@@ -174,8 +200,8 @@ def parse_frontmatter(text):
 
 def set_frontmatter(path, updates):
     """Set `key: value` lines in a file's frontmatter (created when missing); inline comments are kept."""
-    lines = path.read_text(encoding='utf-8').split('\n')
-    end = None
+    text, newline = read_for_edit(path)
+    lines, end = text.split('\n'), None
     if lines and lines[0].strip() == '---':
         end = next((i for i in range(1, len(lines)) if lines[i].strip() == '---'), None)
     if end is None:
@@ -189,7 +215,7 @@ def set_frontmatter(path, updates):
         else:
             lines.insert(end, f'{key}: {value}'.rstrip())
             end += 1
-    write_atomic(path, '\n'.join(lines))
+    write_atomic(path, '\n'.join(lines), newline)
 
 
 def section_ranges(lines, start=0):
@@ -207,9 +233,12 @@ def section_ranges(lines, start=0):
 
 
 def id_pattern(req_id):
-    """RFD-1 also matches RFD_1 and rfd-1 (test function names), never RFD-10."""
+    """RFD-1 as an exact upper-case token, or rfd_1 / RFD_1 inside an identifier that starts with `test`
+    (test_rfd_1_rejects). Never RFD-10, XRFD-1, rfd-1 in prose, or order_1 for ORDER-1."""
     prefix, number = req_id.rsplit('-', 1)
-    return re.compile(rf'(?<![A-Za-z0-9]){re.escape(prefix)}[-_]{number}(?![0-9])', re.I)
+    token = rf'(?<![A-Za-z0-9_]){re.escape(prefix)}-{number}(?![0-9])'
+    test_identifier = rf'(?<![A-Za-z0-9_])(?i:test[A-Za-z0-9_]*?_{re.escape(prefix)}_{number})(?![0-9])'
+    return re.compile(f'{token}|{test_identifier}')
 
 
 # -------------------------------------------------------------------------------------------------------- parsers
@@ -442,6 +471,7 @@ def _event(kind, rest):
         except (TypeError, ValueError):
             return None, fail(f'{kind} needs exit=<code>')
     if kind == 'verify':
+        event['before'] = str(data.get('before', '')).rstrip('…')
         event.setdefault('junit', None)
         for name in ('req_pass', 'req_fail'):
             event[name] = [x for x in str(data.get(name, '')).split(',') if x]
@@ -453,6 +483,7 @@ def parse_review(text, label):
     lines = strip_noise(text)
     review = {'fingerprint': (meta or {}).get('fingerprint', '').rstrip('…'), 'reviewers': (meta or {}).get('reviewers', ''),
               'axes': {}, 'findings': [], 'qa': None, 'qa_line': None}
+    problems = []
     for name, (head, end) in section_ranges(lines, start).items():
         if name not in ('spec', 'standards', 'qa'):
             continue
@@ -463,6 +494,10 @@ def parse_review(text, label):
                 if verdict and review['qa'] is None:
                     review['qa'], review['qa_line'] = verdict.group(1).strip(), i + 1
                 continue
+            plain = PLAIN_FINDING.match(lines[i])
+            if plain:
+                problems.append(fail(f'{label}:{i + 1}: {plain.group(1)} is a finding but not a checkbox '
+                                     f'("- [ ] {plain.group(1)} (must): …"): an untracked finding counts as open'))
             box = CHECKBOX.match(lines[i].strip())
             if box:
                 match = FINDING.match(box.group(3).strip())
@@ -470,7 +505,7 @@ def parse_review(text, label):
                     'axis': name, 'id': match.group(1) if match else None, 'open': box.group(2) == ' ',
                     'severity': (match.group(2) or '').strip().lower() if match else '', 'text': box.group(3).strip(),
                     'line': i + 1})
-    return review, []
+    return review, problems
 
 
 def review_findings(review, label, qa_waived=False):
@@ -566,7 +601,7 @@ def overlaps(a, b):
         return True
     glob_a, glob_b = ('*' in a or '?' in a), ('*' in b or '?' in b)
     if glob_a and glob_b:
-        pa, pb = re.split(r'[*?]', a, 1)[0], re.split(r'[*?]', b, 1)[0]
+        pa, pb = re.split(r'[*?]', a, maxsplit=1)[0], re.split(r'[*?]', b, maxsplit=1)[0]
         return pa.startswith(pb) or pb.startswith(pa)
     if glob_a or glob_b:
         pattern, path = (a, b) if glob_a else (b, a)
@@ -707,18 +742,49 @@ def repo_root(path):
     return probe
 
 
+def blob_id(path):
+    """The git blob ID of a file (a symlink hashes its target path, as git does), or None when unreadable."""
+    try:
+        data = os.readlink(path).encode('utf-8', 'surrogateescape') if os.path.islink(path) else path.read_bytes()
+    except OSError:
+        return None
+    return hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
+
+
+def _digest(entries):
+    digest = hashlib.sha256()
+    for path in sorted(entries):
+        digest.update(f'{path}\0{entries[path]}\n'.encode('utf-8', 'surrogateescape'))
+    return digest.hexdigest()
+
+
 class Repo:
-    """A repository root with cached file listing, fingerprint and test-file contents."""
+    """A repository root with cached file listing, fingerprint and test-file contents.
 
-    def __init__(self, root):
+    fast=True (status for the session-start snapshot) skips gh and the contract gate; only cheap git runs."""
+
+    def __init__(self, root, fast=False):
         self.root = pathlib.Path(root).resolve()
+        self.fast = fast
 
-    def git(self, *args):
+    def git(self, *args, stdin=None):
         try:
             return subprocess.run(['git', *args], cwd=self.root, capture_output=True, text=True, timeout=30,
-                                  encoding='utf-8', errors='surrogateescape')
+                                  encoding='utf-8', errors='surrogateescape', input=stdin)
         except (OSError, subprocess.SubprocessError):
             return None
+
+    def _z(self, *args):
+        """NUL-separated git output as a list, or None when git fails."""
+        result = self.git(*args)
+        if result is None or result.returncode != 0:
+            return None
+        return [x for x in result.stdout.split('\0') if x]
+
+    @cached_property
+    def is_git(self):
+        result = self.git('rev-parse', '--is-inside-work-tree')
+        return result is not None and result.returncode == 0 and result.stdout.strip() == 'true'
 
     def rel(self, path):
         try:
@@ -728,35 +794,90 @@ class Repo:
 
     @cached_property
     def files(self):
-        listing = self.git('ls-files', '-z', '--cached', '--others', '--exclude-standard')
-        if listing is not None and listing.returncode == 0:
-            return sorted({p for p in listing.stdout.split('\0') if p})
+        """Every tracked or untracked, not ignored file (repo-relative); a folder walk outside git."""
+        listing = self._z('ls-files', '-z', '--cached', '--others', '--exclude-standard') if self.is_git else None
+        if listing is not None:
+            return sorted(set(listing))
         found = []
         for folder, dirs, names in os.walk(self.root):
-            dirs[:] = [d for d in dirs if not d.startswith('.') and not _tdd.SKIP_DIRS.search(d + '/')]
+            dirs[:] = sorted(d for d in dirs if not d.startswith('.') and not _tdd.SKIP_DIRS.search(d + '/'))
             found += [self.rel(os.path.join(folder, name)) for name in names]
         return sorted(found)
 
-    @cached_property
-    def code_files(self):
-        return [f for f in self.files if f.endswith(CODE_EXT)]
+    # -- code fingerprint: sha256 over sorted (path, git blob ID) of every file not matched by NOT_CODE ------------
+    def _hash_paths(self, paths):
+        """{path: blob ID} for files whose content git has not recorded (modified or untracked)."""
+        ids, batch = {}, [p for p in paths if '\n' not in p]
+        result = self.git('hash-object', '--stdin-paths', stdin=''.join(f'{p}\n' for p in batch)) if batch else None
+        hashed = result.stdout.split() if result is not None and result.returncode == 0 else []
+        if len(hashed) == len(batch):
+            ids.update(zip(batch, hashed))
+        for path in paths:
+            if path not in ids:
+                ids[path] = blob_id(self.root / path)
+        return {p: v for p, v in ids.items() if v}
+
+    def _working_entries(self):
+        if not self.is_git:
+            return {rel: blob_id(self.root / rel) for rel in self.files if not NOT_CODE.search(rel)}
+        staged = self._z('ls-files', '-s', '-z') or []
+        entries, todo = {}, set()
+        for line in staged:
+            meta, _, path = line.partition('\t')
+            mode, sha, stage = (meta.split() + ['', '', ''])[:3]
+            if NOT_CODE.search(path):
+                continue
+            entries[path] = sha
+            if stage != '0':  # merge conflict: hash what is on disk
+                todo.add(path)
+        changed = (self._z('ls-files', '-m', '-z') or []) + (self._z('ls-files', '-o', '--exclude-standard', '-z') or [])
+        todo |= {p for p in changed if not NOT_CODE.search(p)}
+        for path in todo:
+            target = self.root / path
+            if os.path.isdir(target) and not os.path.islink(target):
+                continue  # a submodule keeps its recorded commit
+            entries.pop(path, None)  # deleted files leave the fingerprint
+        present = sorted(p for p in todo if os.path.lexists(self.root / p) and not
+                         (os.path.isdir(self.root / p) and not os.path.islink(self.root / p)))
+        entries.update(self._hash_paths(present))
+        return entries
 
     @cached_property
     def fingerprint(self):
-        digest = hashlib.sha256()
-        for rel in self.code_files:
-            try:
-                content = hashlib.sha256((self.root / rel).read_bytes()).hexdigest()
-            except OSError:  # deleted but still in the index, or a directory (submodule)
-                continue
-            digest.update(f'{rel}\0{content}\n'.encode('utf-8', 'surrogateescape'))
-        return digest.hexdigest()
+        return _digest(self._working_entries())
 
+    def fingerprint_at(self, rev):
+        """Fingerprint of a commit (same exclusions); None outside git or for an unknown revision."""
+        if not self.is_git or not rev or str(rev).startswith('-'):
+            return None
+        resolved = self.git('rev-parse', '--verify', '--quiet', f'{rev}^{{commit}}')
+        if resolved is None or resolved.returncode != 0:
+            return None
+        tree = self._z('ls-tree', '-r', '-z', '--full-tree', resolved.stdout.strip())
+        if tree is None:
+            return None
+        entries = {}
+        for line in tree:
+            meta, _, path = line.partition('\t')
+            if not NOT_CODE.search(path):
+                entries[path] = meta.split()[2]
+        return _digest(entries)
+
+    @cached_property
+    def code_dirty(self):
+        """Whether the working tree's code differs from HEAD (staged, unstaged or untracked)."""
+        if not self.is_git:
+            return False
+        head = self.fingerprint_at('HEAD')
+        return self.fingerprint != head if head is not None else bool(self._working_entries())
+
+    # -- tests and specs ---------------------------------------------------------------------------------------
     @cached_property
     def test_texts(self):
         texts = {}
-        for rel in self.code_files:
-            if (TEST_PATH.search(rel) or rel.endswith('.feature')) and not re.search(r'(^|/)docs/specs/', rel):
+        for rel in self.files:
+            if rel.endswith(CODE_EXT) and (TEST_PATH.search(rel) or rel.endswith('.feature')) \
+                    and not re.search(r'(^|/)docs/specs/', rel):
                 try:
                     texts[rel] = (self.root / rel).read_text(encoding='utf-8', errors='replace')
                 except OSError:
@@ -779,11 +900,14 @@ class Repo:
         extra = {configured.stdout.strip()} if configured is not None and configured.stdout.strip() else set()
         return {'main', 'master'} | extra
 
+    @cached_property
+    def spec_dirs_cached(self):
+        dirs = {(self.root / rel).parent for rel in self.files if SPEC_README.search(rel)}
+        return sorted((d for d in dirs if (d / 'README.md').is_file()), key=lambda d: self.rel(d))
+
     def spec_dirs(self):
-        found = []
-        for pattern in ('docs/specs/*/README.md', '*/docs/specs/*/README.md'):
-            found += [p.parent for p in sorted(self.root.glob(pattern))]
-        return found
+        """Spec folders (with a README.md) under any `docs/specs/` in the repository, ignored files excluded."""
+        return list(self.spec_dirs_cached)
 
 
 class Spec:
@@ -876,7 +1000,8 @@ class Spec:
 
 
 def fp_matches(recorded, current):
-    return bool(recorded) and current.startswith(recorded)
+    """A recorded fingerprint (or a prefix of at least FP_MIN hex characters) matches the current one."""
+    return bool(recorded and current) and len(recorded) >= FP_MIN and current.startswith(recorded)
 
 
 def short(fp):
@@ -906,16 +1031,22 @@ def gate_accepted(spec):
             findings.append(fail(f'{spec.label("spec-check.md")}:{guess["line"]}: open guess {guess["id"] or ""}: '
                                  f'{guess["text"][:100]}'))
     findings += _security(spec)
+    if spec.repo.fast:
+        return findings + [warn('contract gate not run (fast status)')] + _accepted_by(spec)
     try:
         for level, message in _contract.run(spec.dir, repo_arg=spec.repo.root):
             if level != 'OK':
                 findings.append((level, 'contract gate: ' + message.replace(str(spec.dir), spec.repo.rel(spec.dir))))
     except Exception as err:
         findings.append(fail(f'contract gate could not run ({err.__class__.__name__}: {err})'))
+    return findings + _accepted_by(spec)
+
+
+def _accepted_by(spec):
     accepted_by = spec.meta.get('accepted_by', '')
     if not accepted_by or re.search(r'<[^>]*>', accepted_by):
-        findings.append(fail(f'{readme}: accepted_by: is not set (record who approved the spec, and when)'))
-    return findings
+        return [fail(f'{spec.label("README.md")}: accepted_by: is not set (record who approved the spec, and when)')]
+    return []
 
 
 def _security(spec):
@@ -972,12 +1103,15 @@ def gate_verified(spec):
 
 
 def _verify_findings(spec):
+    """The latest verify is green and is the current code."""
     event = spec.last('verify')
     if event is None:
         return [fail(f'{spec.label("ledger.md")}: no verify event (run aidlc verify SPEC --cmd <tests>)')]
     where, findings = f'{spec.label("ledger.md")}:{event["line"]}', []
     if event['exit'] != 0:
         findings.append(fail(f'{where}: the latest verify exited {event["exit"]}'))
+    if event.get('before') and event['before'] != event['fingerprint']:
+        findings.append(fail(f'{where}: the test command changed code during the latest verify: re-run it'))
     if not fp_matches(event['fingerprint'], spec.repo.fingerprint):
         findings.append(fail(f'{where}: code changed since the latest verify (fingerprint {short(event["fingerprint"])} '
                              f'≠ current {short(spec.repo.fingerprint)}): run aidlc verify again'))
@@ -985,7 +1119,45 @@ def _verify_findings(spec):
         findings.append(fail(f'{where}: the latest verify has {event["junit"]} JUnit results: fix --junit and re-run'))
     elif event['req_fail']:
         findings.append(fail(f'{where}: requirement tests failed: {", ".join(event["req_fail"])}'))
+    return findings + _junit_coverage(spec, event, where)
+
+
+def _junit_coverage(spec, event, where):
+    tested = [r['id'] for r in spec.requirements[0] or [] if r['verify'] == 'test']
+    if not tested:
+        return []
+    if not isinstance(event['junit'], dict):
+        return [warn(f'{where}: traceability is static (test files reference the IDs; no JUnit results were '
+                     'recorded: aidlc verify --junit <glob>)')]
+    return [fail(f'{where}: {rid} has no passing test in the JUnit results of the latest verify (skipped or absent)')
+            for rid in tested if rid not in event['req_pass'] and rid not in event['req_fail']]
+
+
+def _evidence(spec, rev=None):
+    """One evidence chain: the latest verify is green and current, the review stamp is that same code, and, with
+    rev, the commit holds that code."""
+    findings = _verify_findings(spec)
+    event, review = spec.last('verify'), spec.review[0]
+    verified = event['fingerprint'] if event else ''
+    stamp = review['fingerprint'] if review else ''
+    if event and not fp_matches(stamp, verified):
+        findings.append(fail(f'{spec.label("review.md")}: the review stamp ({short(stamp)}) is not the verified code '
+                             f'({short(verified)}): re-verify, review the change, re-stamp'))
+    if rev is not None:
+        at = spec.repo.fingerprint_at(rev)
+        if at is None:
+            findings.append(fail(f'{rev}: not a commit of {spec.repo.root.name}'))
+        elif event and not fp_matches(verified, at):
+            findings.append(fail(f'{rev} does not contain the verified code (fingerprint {short(at)} ≠ verify '
+                                 f'{short(verified)})'))
     return findings
+
+
+def _clean_code(spec):
+    if spec.repo.code_dirty:
+        return [fail('uncommitted code: the pre-PR record and the PR are for commits; commit the code '
+                     '(the fingerprint ignores docs and specs), then re-run')]
+    return []
 
 
 def gate_reviewed(spec):
@@ -1004,13 +1176,7 @@ def gate_reviewed(spec):
     elif not fp_matches(review['fingerprint'], current):
         findings.append(fail(f'{label}: code changed since the review was stamped (fingerprint '
                              f'{short(review["fingerprint"])} ≠ current {short(current)}): review the change, re-stamp'))
-    event = spec.last('verify')
-    if event is None:
-        findings.append(fail(f'{spec.label("ledger.md")}: no verify event'))
-    elif not fp_matches(event['fingerprint'], current):
-        findings.append(fail(f'{spec.label("ledger.md")}:{event["line"]}: code changed since the latest verify: '
-                             'run aidlc verify again'))
-    return findings
+    return findings + _evidence(spec) + _clean_code(spec)
 
 
 def _stage_at_least(spec, stage):
@@ -1032,16 +1198,17 @@ def gate_shipped(spec):
     if review is None or not fp_matches(review['fingerprint'], spec.repo.fingerprint):
         findings.append(fail(f'code changed since the review (fingerprint {short(spec.repo.fingerprint)} ≠ '
                              f'{spec.label("review.md")} {short(review and review["fingerprint"])})'))
-    return findings
+    return findings + _evidence(spec) + _clean_code(spec)
 
 
 def gh_checks(root, branch):
     """[(name, state)] from `gh pr checks <branch>`, or None when gh is missing, errors or reports nothing."""
     exe = os.environ['AIDLC_GH'] if 'AIDLC_GH' in os.environ else shutil.which('gh')
-    if not exe or not branch or not os.access(exe, os.X_OK):
+    if not exe or not branch or branch.startswith('-') or not os.access(exe, os.X_OK):
         return None
-    try:
-        result = subprocess.run([exe, 'pr', 'checks', branch], cwd=root, capture_output=True, text=True, timeout=20)
+    try:  # `--` ends gh's flags, so a branch name can never be read as an option
+        result = subprocess.run([exe, 'pr', 'checks', '--', branch], cwd=root, capture_output=True, text=True,
+                                timeout=20)
     except (OSError, subprocess.SubprocessError):
         return None
     rows = []
@@ -1054,7 +1221,7 @@ def gh_checks(root, branch):
 
 def _ci_findings(spec, ship, label):
     branch = spec.meta.get('branch') or spec.repo.branch()
-    checks = gh_checks(spec.repo.root, branch)
+    checks = None if spec.repo.fast else gh_checks(spec.repo.root, branch)
     if checks is not None:
         bad = [f'{name} ({state})' for name, state in checks if state not in ('pass', 'skipping')]
         return [fail(f'CI is not green (gh pr checks {branch}): {", ".join(bad[:8])}')] if bad else []
@@ -1133,7 +1300,7 @@ def find_spec(repo, ref):
 
 
 def resolve_spec(repo, ref):
-    """(path, None) or (None, error): a path when ref contains '/', else a slug under docs/specs or */docs/specs."""
+    """(path, None) or (None, error): a path when ref contains '/', else a slug under any docs/specs/ folder."""
     repo = pathlib.Path(repo).resolve()
     ref = str(ref)
     if '/' in ref or os.sep in ref:
@@ -1145,7 +1312,7 @@ def resolve_spec(repo, ref):
     if len(matches) > 1:
         return None, f'{ref} is ambiguous: {", ".join(Repo(repo).rel(m) for m in matches)} (pass the path)'
     if not matches:
-        return None, f'no spec named {ref} under docs/specs/ or */docs/specs/ in {repo}'
+        return None, f'no spec named {ref} under a docs/specs/ folder in {repo}'
     return matches[0], None
 
 
@@ -1171,8 +1338,16 @@ def check(path, target=None):
     return _check(Spec(path), target)
 
 
-def fingerprint(repo):
-    return Repo(repo).fingerprint
+def fingerprint(repo, rev=None):
+    return Repo(repo).fingerprint if rev is None else Repo(repo).fingerprint_at(rev)
+
+
+def code_dirty(repo):
+    return Repo(repo).code_dirty
+
+
+def evidence_findings(path, rev=None):
+    return _evidence(Spec(path), rev)
 
 
 def active_specs(repo):
@@ -1182,11 +1357,11 @@ def active_specs(repo):
 
 def specs_for_branch(repo, branch):
     root = Repo(repo)
-    return [d for d in active_specs(root.root) if Spec(d, root).meta.get('branch') == branch]
+    return [d for d in root.spec_dirs() if branch and Spec(d, root).meta.get('branch') == branch]
 
 
-def status(repo):
-    root, items = Repo(repo), []
+def status(repo, fast=False):
+    root, items = Repo(repo, fast=fast), []
     for folder in root.spec_dirs():
         spec = Spec(folder, root)
         nxt = next_stage(spec.stage)
@@ -1208,13 +1383,37 @@ def next_batches(path):
 
 # -------------------------------------------------------------------------------------------- commands (CLI only)
 
+@contextlib.contextmanager
+def spec_lock(folder):
+    """Exclusive lock on a spec folder for read-modify-write of plan.md, README.md and ledger.md.
+
+    flock on the folder itself (no lock file to commit); a no-op where fcntl is missing (Windows)."""
+    handle = None
+    if fcntl is not None:
+        try:
+            handle = os.open(str(folder), os.O_RDONLY)
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        except OSError:
+            if handle is not None:
+                os.close(handle)
+            handle = None
+    try:
+        yield
+    finally:
+        if handle is not None:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+            os.close(handle)
+
+
 def append_ledger(spec, event):
+    """Append one event (the caller holds spec_lock); keeps the file's line ends."""
     path = spec.dir / 'ledger.md'
     if not path.exists():
         path.write_text(LEDGER_SKELETON.format(slug=spec.slug), encoding='utf-8')
-    existing = path.read_text(encoding='utf-8')
-    with open(path, 'a', encoding='utf-8') as handle:
-        handle.write(('' if existing.endswith('\n') or not existing else '\n') + f'- {utc_now()} {event}\n')
+    text, newline = read_for_edit(path)
+    prefix = '' if text.endswith('\n') or not text else newline
+    with open(path, 'ab') as handle:
+        handle.write(f'{prefix}- {utc_now()} {event}{newline}'.encode('utf-8'))
     return event
 
 
@@ -1228,28 +1427,37 @@ def run_command(cmd, cwd, timeout):
     with tempfile.TemporaryFile() as out:
         try:
             proc = subprocess.Popen(cmd, shell=True, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=out,
-                                    stderr=subprocess.STDOUT, start_new_session=True)
+                                    stderr=subprocess.STDOUT, start_new_session=os.name == 'posix')
         except OSError as err:
             return 127, str(err)
         try:
             code = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             timed_out, code = True, 124
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except OSError:
-                proc.kill()
-            proc.wait()
+            _kill_tree(proc)
         size = out.seek(0, 2)
         out.seek(max(0, size - TAIL_BYTES))
         tail = out.read().decode('utf-8', 'replace')
     return code, tail + (f'\n[aidlc: timed out after {timeout}s]' if timed_out else '')
 
 
+def _kill_tree(proc):
+    """Kill the shell and its children (process group on POSIX; the shell alone elsewhere)."""
+    killpg, sigkill = getattr(os, 'killpg', None), getattr(signal, 'SIGKILL', None)
+    try:
+        if killpg and sigkill:
+            killpg(proc.pid, sigkill)
+        else:
+            proc.kill()
+    except OSError:
+        proc.kill()
+    proc.wait()
+
+
 def parse_junit(paths, req_ids, repo):
     """(summary, findings): summary {passed, failed, req_pass, req_fail, unreadable}."""
     patterns = {rid: id_pattern(rid) for rid in req_ids}
-    summary = {'passed': 0, 'failed': 0, 'req_pass': set(), 'req_fail': set(), 'unreadable': False}
+    summary = {'passed': 0, 'failed': 0, 'cases': 0, 'req_pass': set(), 'req_fail': set(), 'unreadable': False}
     findings = []
     for path in paths:
         try:
@@ -1263,6 +1471,7 @@ def parse_junit(paths, req_ids, repo):
             findings.append(fail(f'{repo.rel(path)}: unreadable ({err.strerror or err})'))
             continue
         for case in root.iter('testcase'):
+            summary['cases'] += 1
             bad = case.find('failure') is not None or case.find('error') is not None
             skipped = case.find('skipped') is not None
             summary['failed' if bad else 'passed'] += 0 if skipped and not bad else 1
@@ -1277,7 +1486,7 @@ def parse_junit(paths, req_ids, repo):
 
 def cmd_status(args):
     root = repo_arg(args)
-    items = status(root)
+    items = status(root, fast=args.fast)
     lines = []
     for item in items:
         state = {True: 'PASS', False: 'BLOCKED', None: ''}[item['passes']]
@@ -1295,7 +1504,12 @@ def cmd_check(args):
 
 
 def cmd_advance(args):
-    spec, target = spec_arg(args), args.stage
+    spec = spec_arg(args)
+    with spec_lock(spec.dir):
+        return _advance(spec, args.stage, args)
+
+
+def _advance(spec, target, args):
     current = spec.stage
     payload = {'spec': spec.repo.rel(spec.dir), 'from': current, 'to': target, 'advanced': False}
     if args.back:
@@ -1352,11 +1566,7 @@ def _record_pre_pr(spec):
     marker = _load('aidlc_mark_pr_review', HERE / 'mark-pr-review.py')
     marker.record(top.stdout.strip(), head.stdout.strip(), f'aidlc ({review.get("reviewers") or "review.md"})', 0,
                   f'aidlc advance reviewed: {spec.repo.rel(spec.dir)} fingerprint={short(spec.repo.fingerprint)}')
-    findings = [('OK', f'pre-PR review recorded for HEAD {head.stdout.strip()[:12]}')]
-    dirty = spec.repo.git('status', '--porcelain', '--untracked-files=all')
-    if dirty is not None and any(line[3:].endswith(CODE_EXT) for line in dirty.stdout.splitlines()):
-        findings.append(warn('uncommitted code: the pre-PR record is bound to HEAD; commit, then re-run the check'))
-    return findings
+    return [('OK', f'pre-PR review recorded for HEAD {head.stdout.strip()[:12]}')]
 
 
 def cmd_next(args):
@@ -1385,50 +1595,74 @@ def cmd_task_done(args):
     done = {t['id'] for t in tasks if t['done']}
     findings = [warn(f'{task["id"]} depends on open {d}') for d in task['depends'] if d not in done]
     code, tail = run_command(cmd, spec.repo.root, args.timeout)
-    payload = {'spec': spec.repo.rel(spec.dir), 'task': task['id'], 'exit': code, 'ticked': False, 'output_tail': tail}
+    payload = {'spec': spec.repo.rel(spec.dir), 'task': task['id'], 'command_exit': code, 'ticked': False,
+               'output_tail': tail}
     if code != 0:
         findings.append(fail(f'{task["id"]}: command exited {code}; plan.md and ledger.md unchanged\n{tail}'))
         return finding_result(findings, payload)
-    plan = spec.dir / 'plan.md'
-    lines = plan.read_text(encoding='utf-8').split('\n')
-    lines[task['line'] - 1] = re.sub(r'\[ \]', '[x]', lines[task['line'] - 1], count=1)
-    write_atomic(plan, '\n'.join(lines))
-    fp = Repo(spec.repo.root).fingerprint
-    payload.update(ticked=True, ledger=append_ledger(spec, f'task-done {task["id"]} exit=0 fingerprint={fp} cmd={quoted(cmd)}'))
+    with spec_lock(spec.dir):  # plan.md may have changed while the command ran: re-read, tick by ID
+        if not _tick(spec.dir / 'plan.md', task['id']):
+            findings.append(fail(f'{task["id"]} is no longer in {spec.label("plan.md")}; nothing ticked'))
+            return finding_result(findings, payload)
+        fp = Repo(spec.repo.root).fingerprint
+        event = append_ledger(spec, f'task-done {task["id"]} exit=0 fingerprint={fp} cmd={quoted(cmd)}')
+    payload.update(ticked=True, ledger=event)
     return finding_result(findings + [('OK', f'{task["id"]} done')], payload)
+
+
+def _tick(plan, task_id):
+    text, newline = read_for_edit(plan)
+    tasks, _ = parse_plan(text, plan.name)
+    task = next((t for t in tasks if t['id'] == task_id), None)
+    if task is None:
+        return False
+    lines = text.split('\n')
+    lines[task['line'] - 1] = re.sub(r'\[ \]', '[x]', lines[task['line'] - 1], count=1)
+    write_atomic(plan, '\n'.join(lines), newline)
+    return True
 
 
 def cmd_verify(args):
     spec = spec_arg(args)
     before = Repo(spec.repo.root).fingerprint
+    started = time.time()
     code, tail = run_command(args.cmd, spec.repo.root, args.timeout)
     repo = Repo(spec.repo.root)
     findings, junit, event = [], None, f'verify exit={code} fingerprint={repo.fingerprint} cmd={quoted(args.cmd)}'
     if code != 0:
         findings.append(fail(f'test command exited {code}\n{tail}'))
-    if before != repo.fingerprint:
-        findings.append(warn('the command changed code files during the run; the fingerprint after the run is logged'))
+    if before != repo.fingerprint:  # the tests did not run against one version of the code: not green
+        findings.append(fail('the test command changed code files during the run; fix that and re-run'))
+        event += f' before={before}'
     if args.junit:
-        paths = sorted(p for p in globlib.glob(os.path.join(str(repo.root), args.junit), recursive=True)
-                       if os.path.isfile(p))
-        if not paths:
-            findings.append(fail(f'--junit {args.junit} matches no file'))
-            event += ' junit=missing'
-        else:
-            junit, problems = parse_junit(paths, [r['id'] for r in spec.requirements[0] or []], repo)
-            findings += problems
-            if junit['unreadable']:
-                event += ' junit=unreadable'
-            else:
-                event += f' junit={junit["passed"]} passed, {junit["failed"]} failed'
-                event += ''.join(f' {k.replace("_", "-")}={",".join(junit[k])}' for k in ('req_pass', 'req_fail')
-                                 if junit[k])
-            if junit['req_fail']:
-                findings.append(fail(f'requirement tests failed: {", ".join(junit["req_fail"])}'))
-    append_ledger(spec, event)
-    payload = {'spec': spec.repo.rel(spec.dir), 'exit': code, 'fingerprint': repo.fingerprint, 'junit': junit,
-               'output_tail': tail, 'ledger': event}
+        junit, problems, marker = _junit_results(args.junit, started, spec, repo)
+        findings += problems
+        event += marker
+    with spec_lock(spec.dir):
+        append_ledger(spec, event)
+    payload = {'spec': spec.repo.rel(spec.dir), 'command_exit': code, 'fingerprint': repo.fingerprint,
+               'junit': junit, 'output_tail': tail, 'ledger': event}
     return finding_result(findings + [('OK', f'verify logged: exit={code}')], payload)
+
+
+def _junit_results(pattern, started, spec, repo):
+    """(summary or None, findings, ledger suffix). Reports older than the run (1 s clock slack) are ignored."""
+    paths = sorted(p for p in globlib.glob(os.path.join(str(repo.root), pattern), recursive=True) if os.path.isfile(p))
+    fresh = [p for p in paths if os.path.getmtime(p) >= started - 1]
+    findings = [warn(f'ignored {len(paths) - len(fresh)} JUnit file(s) older than this run')] if len(fresh) < len(paths) else []
+    if not fresh:
+        return None, findings + [fail(f'--junit {pattern} matches no report written by this run')], ' junit=missing'
+    junit, problems = parse_junit(fresh, [r['id'] for r in spec.requirements[0] or []], repo)
+    findings += problems
+    if junit['unreadable']:
+        return junit, findings, ' junit=unreadable'
+    if not junit['cases']:
+        return junit, findings + [fail(f'--junit {pattern}: the reports hold no test case')], ' junit=missing'
+    marker = f' junit={junit["passed"]} passed, {junit["failed"]} failed'
+    marker += ''.join(f' {k.replace("_", "-")}={",".join(junit[k])}' for k in ('req_pass', 'req_fail') if junit[k])
+    if junit['req_fail']:
+        findings.append(fail(f'requirement tests failed: {", ".join(junit["req_fail"])}'))
+    return junit, findings, marker
 
 
 def cmd_ruling(args):
@@ -1442,7 +1676,8 @@ def cmd_ruling(args):
     clean = [' '.join(str(x).split()) for x in (args.decision, args.why, args.if_wrong)]
     if not all(clean):
         raise UsageError('--decision, --why and --if-wrong must not be empty')
-    event = append_ledger(spec, f'ruling {task}{clean[0]} — why: {clean[1]} — if wrong: {clean[2]}')
+    with spec_lock(spec.dir):
+        event = append_ledger(spec, f'ruling {task}{clean[0]} — why: {clean[1]} — if wrong: {clean[2]}')
     return 0, {'spec': spec.repo.rel(spec.dir), 'ledger': event}, [f'OK {event}']
 
 
@@ -1452,8 +1687,9 @@ def cmd_stamp(args):
     if not review.is_file():
         raise UsageError(f'{spec.label("review.md")} does not exist: write the review first')
     fp = spec.repo.fingerprint
-    set_frontmatter(review, {'fingerprint': fp})
-    event = append_ledger(spec, f'stamp review fingerprint={fp}')
+    with spec_lock(spec.dir):
+        set_frontmatter(review, {'fingerprint': fp})
+        event = append_ledger(spec, f'stamp review fingerprint={fp}')
     return 0, {'spec': spec.repo.rel(spec.dir), 'fingerprint': fp, 'ledger': event}, [f'OK {event}']
 
 
@@ -1499,13 +1735,15 @@ def cmd_trace(args):
     rows = trace_rows(spec)
     table = trace_table(rows)
     if args.write:
-        _write_section(spec.dir / 'README.md', 'Traceability',
-                       [f'Generated by `aidlc trace --write` on {today()}.', ''] + table)
+        with spec_lock(spec.dir):
+            _write_section(spec.dir / 'README.md', 'Traceability',
+                           [f'Generated by `aidlc trace --write` on {today()}.', ''] + table)
     return 0, {'spec': spec.repo.rel(spec.dir), 'rows': rows, 'written': bool(args.write)}, table
 
 
 def _write_section(path, title, body):
-    lines = path.read_text(encoding='utf-8').rstrip('\n').split('\n')
+    text, newline = read_for_edit(path)
+    lines = text.rstrip('\n').split('\n')
     start = next((i for i, x in enumerate(lines) if re.match(rf'^##\s+{title}\s*$', x, re.I)), None)
     block = [f'## {title}', ''] + body + ['']
     if start is None:
@@ -1513,7 +1751,7 @@ def _write_section(path, title, body):
     else:
         end = next((i for i in range(start + 1, len(lines)) if re.match(r'^#{1,2}\s', lines[i])), len(lines))
         lines[start:end] = block
-    write_atomic(path, '\n'.join(lines).rstrip('\n') + '\n')
+    write_atomic(path, '\n'.join(lines).rstrip('\n') + '\n', newline)
 
 
 README_SKELETON = """---
@@ -1606,14 +1844,15 @@ def cmd_init(args):
 # ------------------------------------------------------------------------------------------------------------- CLI
 
 def repo_arg(args):
-    return pathlib.Path(args.repo).resolve() if args.repo else repo_root(pathlib.Path.cwd())
+    """--repo (any folder inside the repository) or the current folder, normalized to the git top level."""
+    return repo_root(pathlib.Path(args.repo) if args.repo else pathlib.Path.cwd())
 
 
 def spec_arg(args):
     path, error = resolve_spec(repo_arg(args), args.spec)
     if error:
         raise UsageError(error)
-    return Spec(path, Repo(args.repo) if args.repo else None)
+    return Spec(path, Repo(repo_arg(args)) if args.repo else None)
 
 
 def finding_result(findings, payload):
@@ -1636,7 +1875,7 @@ def build_parser():
             command.add_argument(arg)
         return command
 
-    add('status', cmd_status)
+    add('status', cmd_status).add_argument('--fast', action='store_true', help='no gh, no contract gate')
     add('check', cmd_check, 'spec').add_argument('--to', choices=list(GATES))
     advance = add('advance', cmd_advance, 'spec')
     advance.add_argument('stage', choices=list(STAGES + SIDE))
@@ -1661,6 +1900,12 @@ def build_parser():
 
 
 def main(argv=None):
+    for stream in (sys.stdout, sys.stderr):  # command output may not be UTF-8; never crash printing it
+        if hasattr(stream, 'reconfigure'):
+            try:
+                stream.reconfigure(errors='replace')
+            except (ValueError, OSError):
+                pass
     try:
         args = build_parser().parse_args(argv)
     except SystemExit as exit_:  # argparse already printed the usage error (or --help)

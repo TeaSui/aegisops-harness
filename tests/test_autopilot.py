@@ -379,6 +379,22 @@ class SessionSnapshotTest(HookCase):
         self.assertIn('docs/specs/refund', ctx)
         self.assertIn('1/3', ctx)
 
+    def test_spec_paths_are_resolved_from_the_repo_root(self):
+        git_env = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1'}
+        subprocess.run(['git', 'init', '-q'], cwd=self.repo, check=True, env=git_env)
+        spec = self.repo / 'docs' / 'specs' / 'refund'
+        spec.mkdir(parents=True)
+        (spec / 'README.md').write_text('---\nstatus: accepted\nkey: RFD\n---\n')
+        (spec / 'plan.md').write_text('- [x] one\n- [ ] two\n')
+        (self.repo / 'src').mkdir()
+        env = self.env()
+        env['PATH'] = '/usr/bin:/bin'
+        result = subprocess.run(['/bin/bash', str(SESSION_START)], input=json.dumps({'cwd': str(self.repo / 'src')}),
+                                env=env, capture_output=True, text=True, timeout=20, cwd=str(self.repo / 'src'))
+        ctx = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
+        self.assertIn('Spec docs/specs/refund at stage `accepted`, plan 1/2 tasks done', ctx)
+        self.assertNotIn('src/docs', ctx)
+
     def test_resumable_goal_state_is_announced(self):
         (self.repo / '.goal').mkdir()
         (self.repo / '.goal' / 'state.md').write_text('goal')

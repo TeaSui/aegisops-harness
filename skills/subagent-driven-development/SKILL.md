@@ -72,7 +72,7 @@ Ask the user only for decisions that are theirs: changing a requirement or accep
 
 ## 4. Verify and advance
 
-When no task is left, run the whole suite through the CLI. Pass `--junit` when the runner can write JUnit XML (it lets the gate see which requirement tests failed); omit it otherwise.
+When no task is left, bump the release version if the project keeps one in a manifest (`package.json`, `pyproject.toml`, `plugin.json`, a `VERSION` file; semver from the change, see tea-sdlc:shipping §3). The version is part of what you test: a manifest change after `verify` invalidates the evidence. Skip it when release tooling owns the version. Then run the whole suite through the CLI. Pass `--junit` when the runner can write JUnit XML (it lets the gate see which requirement tests failed); omit it otherwise.
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full test suite>" --junit "<junit glob>"

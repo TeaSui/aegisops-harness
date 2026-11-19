@@ -20,9 +20,9 @@ Only `aidlc advance` moves a spec forward, and only when the gate of the target 
 | `accepted` | README `key:` set and unique across the repository's specs; `requirements.md` defines ≥1 requirement, every ID is `<KEY>-<n>`, unique, with ≥1 acceptance criterion and a valid `Verify:`; `spec-check.md` records a check (≥1 guess line, or a `Checked:` line when the checker found nothing) and has no open guess; `security.md` exists unless README says `security: not-applicable — <reason>` (a non-trust change the user chose to run through this workflow; the reason is required); the contract gate passes when `contract: external`; `accepted_by:` set |
 | `planned` | `plan.md` parses; task IDs `T<n>` unique; every `depends` target exists; no cycle; every requirement is covered by ≥1 task; every task covers ≥1 requirement or says `covers: none — <reason>`; every task has `owner` and `files`; two tasks that may run at the same time (no dependency path between them) share no file |
 | `building` | README `branch:` is recorded (current branch, which must not be the default branch) |
-| `verified` | the `planned` checks still pass (tasks added later are validated too); every task is `[x]` in `plan.md` **and** has a green `task-done` ledger event; every requirement with `Verify: test` is referenced by ≥1 test file; the latest `verify` ledger event exited 0 and its code fingerprint equals the current one; when that event recorded JUnit results, no test that references a requirement failed |
-| `reviewed` | `review.md` has both axes (`## Spec`, `## Standards`), no open finding, every closed finding says `fixed:` or `cleared:`; its `## QA` section says `Verdict: GO` or `Verdict: CONDITIONAL GO — <conditions>`, unless README says `qa: not-applicable — <reason>`; its `fingerprint:` equals the current code fingerprint, which also still equals the `verify` fingerprint. On pass, the pre-PR record for `HEAD` is written; `hooks/pr-review-gate.py` also accepts any branch-bound spec that passes this gate, so committing the spec files afterwards does not block `gh pr create` |
-| `shipped` | stage `reviewed` or later; `ship.md` says `decision: GO`, has non-empty `## Rollback` and `## Post-release verification`; CI is green (`gh pr checks` for the branch when `gh` and a PR exist, else a `CI:` line in `## Checks` that says green or pass); when `version:` is set and the repository has a `CHANGELOG.md`, that file mentions the version; the code fingerprint still equals the reviewed one |
+| `verified` | the `planned` checks still pass (tasks added later are validated too); every task is `[x]` in `plan.md` **and** has a green `task-done` ledger event; every requirement with `Verify: test` is referenced by ≥1 test file; the latest `verify` is **green**: it exited 0, the code did not change during the run, its fingerprint equals the current one, and, when it recorded JUnit results, every `Verify: test` requirement has a passing test there and none failed (without JUnit results the gate passes with a warning that traceability is static) |
+| `reviewed` | `review.md` has both axes (`## Spec`, `## Standards`), no open finding (a finding bullet that is not a checkbox counts as open), every closed finding says `fixed:` or `cleared:`; its `## QA` section says `Verdict: GO` or `Verdict: CONDITIONAL GO — <conditions>`, unless README says `qa: not-applicable — <reason>`; its `fingerprint:` equals the current code fingerprint; the **evidence chain** holds (the latest `verify` is green and current, and the review stamp is that same verified code); **no uncommitted code** (the record and the PR are for commits). On pass, the pre-PR record for `HEAD` is written; `hooks/pr-review-gate.py` also accepts any branch-bound spec that passes this gate, so committing the spec files afterwards does not block `gh pr create` |
+| `shipped` | stage `reviewed` or later; `ship.md` says `decision: GO`, has non-empty `## Rollback` and `## Post-release verification`; CI is green (`gh pr checks -- <branch>` when `gh` and a PR exist, else a `CI:` line in `## Checks` that says green or pass); when `version:` is set and the repository has a `CHANGELOG.md`, that file mentions the version; the code fingerprint still equals the reviewed one; the evidence chain holds; no uncommitted code |
 | `implemented` | stage `shipped` or later; README has a `## Traceability` table (`aidlc trace --write`); set by `upgrade-service-docs` after the living docs are updated |
 
 The `ship-gate` hook blocks `gh pr merge` for a branch bound to an active spec until that spec passes the `shipped` gate.
@@ -31,7 +31,11 @@ The `ship-gate` hook blocks `gh pr merge` for a branch bound to an active spec u
 
 Specs without `key:` (written before AIDLC) are listed by `status` as legacy and are not gated; moving one to `accepted` or later needs a key.
 
-**Code fingerprint.** SHA-256 over the sorted list of (path, content hash) of every tracked or untracked, not ignored file whose extension is a code or test extension (the `CODE_EXT` list in `hooks/tdd-gate.py`, plus `.feature`, `.sql`, `.proto`, `.graphql`). Docs, specs, manifests and changelogs do not change it, so writing `review.md` or bumping a version does not invalidate a test run; changing code does.
+**Code fingerprint.** SHA-256 over the sorted list of (path, git blob ID) of every tracked or untracked, not ignored file **except** `docs/**`, `**/docs/specs/**`, `*.md`, `CHANGELOG*` and `LICENSE*`. Unmodified tracked files use the blob ID already in the index (no file is read), so it stays fast on large repositories; modified and untracked files are hashed the way git would store them. The same function over a commit (`git ls-tree`) gives the same value for the same code, so a clean working tree's fingerprint equals `HEAD`'s, and "is this commit the verified code?" is one comparison. Writing `review.md`, the ledger, the README or the changelog does not invalidate a test run; changing code, configuration or a manifest does (bump a manifest version **before** `verify`). A recorded fingerprint may be shortened in prose, but only a prefix of ≥12 hex characters ever matches.
+
+**Evidence chain.** `reviewed` and `shipped` require one chain from tests to commit: the latest `verify` is green on fingerprint F, the review was stamped on F, the working tree is F and has no uncommitted code, so `HEAD` is F. Hooks can ask the same for any commit (`evidence_findings(spec, rev)`).
+
+**Traceability.** A file references `RFD-1` when it contains the exact upper-case token `RFD-1` (not `RFD-10`, `XRFD-1` or `rfd-1` in prose), or an identifier that starts with `test` and contains `_rfd_1` in any case (`test_rfd_1_rejects_over_capture`, `test_RFD_1`). Test files are files with a code extension on a test path (the `TEST_PATH` rule of `hooks/tdd-gate.py`) or `.feature` files. JUnit test cases are matched the same way on `classname` and `name`; `verify --junit` ignores report files older than the run and treats reports without any test case as missing.
 
 ## 2. Spec folder
 
@@ -129,13 +133,13 @@ Append-only, written by `aidlc`. One line per event:
 
 ```markdown
 - 2026-11-19T10:02:11Z advance accepted→planned
-- 2026-11-19T10:40:03Z task-done T1 exit=0 fingerprint=3f9c… cmd="npm test -- refunds/model"
+- 2026-11-19T10:40:03Z task-done T1 exit=0 fingerprint=3f9c0b7d21e4… cmd="npm test -- refunds/model"
 - 2026-11-19T10:41:20Z ruling T2: Use the PSP idempotency key as the refund key — why: the PSP rejects duplicates already — if wrong: double refunds on PSP outage; reverse via ledger replay
-- 2026-11-19T11:15:47Z verify exit=0 fingerprint=8a01… cmd="npm test" junit=42 passed, 0 failed req-pass=RFD-1
-- 2026-11-19T11:30:00Z stamp review fingerprint=8a01…
+- 2026-11-19T11:15:47Z verify exit=0 fingerprint=8a01c6e95f3b… cmd="npm test" junit=42 passed, 0 failed req-pass=RFD-1
+- 2026-11-19T11:30:00Z stamp review fingerprint=8a01c6e95f3b…
 ```
 
-`cmd` is JSON-quoted. A `verify` with `--junit` adds `req-pass=` / `req-fail=` (requirement IDs whose referencing tests passed or failed); `junit=missing` or `junit=unreadable` fails the `verified` gate. A backward move is logged as `advance verified→building back reason="…"`, a side state as `advance building→abandoned reason="…"`. An unknown event is a warning; a malformed line is a finding with its line number.
+`aidlc` writes fingerprints in full (shortened here); a prefix shorter than 12 hex characters never matches. `cmd` is JSON-quoted. A `verify` with `--junit` adds `req-pass=` / `req-fail=` (requirement IDs whose referencing tests passed or failed); `junit=missing` (no report written by this run, or no test case) or `junit=unreadable` fails the `verified` gate. When the test command changed code during the run, the event also carries `before=<fingerprint>` and is not green. A backward move is logged as `advance verified→building back reason="…"`, a side state as `advance building→abandoned reason="…"`. An unknown event is a warning; a malformed line is a finding with its line number.
 
 A **ruling** is a decision the session made instead of stopping to ask: what, why, and the cost if it is wrong. Rulings are listed again at the end of the run and kept in the ledger; they are the decision record a reviewer reads.
 
@@ -143,7 +147,7 @@ A **ruling** is a decision the session made instead of stopping to ask: what, wh
 
 ```markdown
 ---
-fingerprint: 8a01…        # written by `aidlc stamp review`
+fingerprint: 8a01c6e95f3b…   # written by `aidlc stamp review` (in full)
 reviewers: spec=code-reviewer standards=code-reviewer
 ---
 ## Spec
@@ -155,7 +159,7 @@ reviewers: spec=code-reviewer standards=code-reviewer
 Verdict: GO
 ```
 
-The **Spec** axis compares the change with `requirements.md`, `design.md` and `contracts/`: missing requirements, scope creep, wrong behavior. The **Standards** axis reviews code quality, security rules and conventions. They are separate reviews and their findings are never merged or re-ranked. Severities: `must`, `should`, `nit`. Finding IDs are any capital letters plus a number; `fixed:` or `cleared:` may follow a location such as `at src/x.ts:4 (confidence: high)`. Every finding stays open until `fixed:` or `cleared:`. The **QA** section holds the qa-subagent verdict.
+The **Spec** axis compares the change with `requirements.md`, `design.md` and `contracts/`: missing requirements, scope creep, wrong behavior. The **Standards** axis reviews code quality, security rules and conventions. They are separate reviews and their findings are never merged or re-ranked. Severities: `must`, `should`, `nit`. Finding IDs are any capital letters plus a number; `fixed:` or `cleared:` may follow a location such as `at src/x.ts:4 (confidence: high)`. Every finding is a checkbox and stays open until `fixed:` or `cleared:`; a bullet in `## Spec` or `## Standards` that starts with a finding ID but is not a checkbox (`- S1 (must): …`, `- **Q1 (must)**: …`) fails the gate, because nothing tracks it. Other prose bullets are allowed. The **QA** section holds the qa-subagent verdict.
 
 ### `ship.md`
 
@@ -175,11 +179,11 @@ Smoke: `curl -fsS $BASE/health`; watch refund error rate for 30 min (alert REFUN
 
 ## 3. CLI
 
-`python3 scripts/aidlc.py <command>` (plugin-relative; skills and agents prefix it with the plugin-root variable). Every command accepts `--json`. Exit codes: `0` pass, `1` gate findings, `2` usage or input error.
+`python3 scripts/aidlc.py <command>` (plugin-relative; skills and agents prefix it with the plugin-root variable). Every command accepts `--json` (one object; `exit` is always the CLI exit code, `command_exit` the exit code of the command that `task-done` or `verify` ran) and `--repo DIR` (any folder of the repository; normalized to its git top level). Exit codes: `0` pass, `1` gate findings, `2` usage or input error. Commands that write `plan.md`, `README.md` or `ledger.md` hold an exclusive lock on the spec folder, so parallel `task-done` runs never lose a tick; `task-done` re-reads `plan.md` after its command and ticks the task by ID. Files keep their line endings (CRLF stays CRLF).
 
 | Command | Does |
 |---|---|
-| `status [--repo DIR]` | Every spec: stage, next stage, whether its gate passes, the first blockers |
+| `status [--fast]` | Every spec: stage, next stage, whether its gate passes, the first blockers. `--fast` (the session-start snapshot) runs no `gh` and no contract gate |
 | `check SPEC [--to STAGE]` | Run the gate of STAGE (default: the next stage) and list findings |
 | `advance SPEC STAGE [--back --reason TEXT]` | Run the gate; on pass, update README and the ledger (and, for `reviewed`, the pre-PR record) |
 | `next SPEC` | The frontier: ready tasks in conflict-free parallel batches |
@@ -190,4 +194,6 @@ Smoke: `curl -fsS $BASE/health`; watch refund error rate for 30 min (alert REFUN
 | `trace SPEC [--write]` | Requirement → tasks → tests → result matrix; `--write` puts it in README `## Traceability` |
 | `init SPEC --key KEY` | Create the folder with README, requirements, spec-check, plan and ledger skeletons |
 
-`SPEC` is the spec folder path (used as given) or its slug (`refunds` finds `docs/specs/refunds` or `*/docs/specs/refunds`; `init` with a slug creates `<repo>/docs/specs/<slug>`; pass a path for a service- or system-scoped spec).
+`SPEC` is the spec folder path (used as given) or its slug (`refunds` finds `<any folder>/docs/specs/refunds`, at any depth, among tracked and untracked non-ignored files; `init` with a slug creates `<repo>/docs/specs/<slug>`; pass a path for a service- or system-scoped spec). Key uniqueness, `status` and the hooks see the same set of specs.
+
+Hooks use the Python API documented at the top of `scripts/aidlc.py` (`check`, `status(repo, fast)`, `specs_for_branch` — any status, the hook decides — `fingerprint(repo, rev)`, `code_dirty`, `evidence_findings(spec, rev)`).

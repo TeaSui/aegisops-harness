@@ -58,9 +58,10 @@ class ShipGateTest(unittest.TestCase):
         self.assertIn('shipped', result.stderr)
         self.assertIn('ship.md', result.stderr)
 
-    def test_shipped_spec_allows_the_merge(self):
+    def test_shipped_status_alone_is_not_enough(self):
+        # The gate re-checks the evidence; a README that only claims `shipped` does not merge.
         self.spec('shipped')
-        self.assertEqual(self.run_hook('gh pr merge --squash').returncode, 0)
+        self.assertEqual(self.run_hook('gh pr merge --squash').returncode, 2)
 
     def test_pr_number_resolves_to_its_head_branch(self):
         self.spec('building')
@@ -86,6 +87,68 @@ class ShipGateTest(unittest.TestCase):
         result = subprocess.run([sys.executable, str(HOOK)], input='nope', capture_output=True, text=True,
                                 env={**os.environ, 'HOME': str(self.home)})
         self.assertEqual(result.returncode, 0)
+
+
+
+# End-to-end cases on a spec that really went through the lifecycle (builders from test_aidlc).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from test_aidlc import Base as LifecycleBase  # noqa: E402
+
+
+class ShipGateLifecycleTest(LifecycleBase):
+    def merge(self, command='gh pr merge --squash', env=None):
+        payload = {'tool_name': 'Bash', 'cwd': str(self.repo), 'tool_input': {'command': command}}
+        return subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), capture_output=True, text=True,
+                              timeout=120, env={**os.environ, **(env or {})})
+
+    def shipped(self):
+        self.shipped_ready()
+        self.git('add', '-A')
+        self.git('commit', '-qm', 'refunds')
+        code, out, err = self.cli('advance', 'refunds', 'shipped')
+        self.assertEqual(code, 0, out + err)
+        self.git('add', '-A')
+        self.git('commit', '-qm', 'ship record')
+
+    def test_shipped_spec_merges(self):
+        self.shipped()
+        result = self.merge()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_code_changed_after_shipping_is_blocked(self):
+        # H2: a shipped spec is re-checked; code edited after the review must not merge.
+        self.shipped()
+        self.write('src/refunds/model.py', 'def refund(amount):\n    return -amount\n')
+        self.git('commit', '-qam', 'sneaky change')
+        result = self.merge()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('docs/specs/refunds', result.stderr)
+
+    def test_abandoned_spec_blocks_the_merge_of_its_branch(self):
+        self.shipped_ready()
+        self.cli('advance', 'refunds', 'abandoned', '--reason', 'superseded by a vendor feature')
+        self.git('add', '-A')
+        self.git('commit', '-qm', 'abandon')
+        result = self.merge()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('abandoned', result.stderr)
+
+    def test_merging_another_branch_checks_that_branch(self):
+        # H3: from main, `gh pr merge feat/refunds` must evaluate the spec on feat/refunds, not main's tree.
+        self.verified_ready()
+        self.git('add', '-A')
+        self.git('commit', '-qm', 'refunds wip')
+        self.git('checkout', '-q', 'main')
+        result = self.merge('gh pr merge feat/refunds --squash')
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('docs/specs/refunds', result.stderr)
+        self.assertEqual(self.git('worktree', 'list').count('\n'), 0)  # the temporary worktree is gone
+
+    def test_non_literal_target_is_blocked(self):
+        self.shipped()
+        result = self.merge('PR=42; gh pr merge "$PR" --squash')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('literal', result.stderr)
 
 
 if __name__ == '__main__':

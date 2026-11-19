@@ -1,9 +1,28 @@
 {
-  "description": "AIDLC lifecycle: one trust-boundary feature asked for end to end without naming a skill; scored by how far the spec folder and ledger got (partial credit per stage) and whether gates were passed through `aidlc advance`.",
+  "description": "AIDLC lifecycle: one trust-boundary feature asked for end to end without naming a skill; scored by how far the spec folder and ledger got (partial credit per stage) and whether gates were passed through `aidlc advance`. The fixture has a local origin and a fake gh whose `pr checks` runs npm test, so the full chain to `shipped` is reachable.",
   "max_turns": 200,
   "timeout_s": 2700,
   "permission_mode": "acceptEdits",
-  "allowed_tools": ["Skill", "Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "Agent", "Task", "TodoWrite",
-                    "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(git *)", "Bash(python3 *)", "Bash(ls *)",
-                    "Bash(cat *)", "Bash(mkdir *)", "Bash(gitleaks *)"]
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "Agent",
+    "Task",
+    "TodoWrite",
+    "Bash(npm *)",
+    "Bash(npx *)",
+    "Bash(node *)",
+    "Bash(git *)",
+    "Bash(python3 *)",
+    "Bash(ls *)",
+    "Bash(cat *)",
+    "Bash(mkdir *)",
+    "Bash(gitleaks *)",
+    "Bash(gh *)"
+  ]
 }

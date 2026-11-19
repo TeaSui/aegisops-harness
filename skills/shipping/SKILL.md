@@ -1,6 +1,6 @@
 ---
 name: shipping
-description: Use when a reviewed full-workflow change is ready to release, merge or deploy, or the user says ship it, release or deploy — opens the PR if none is open, waits for CI, bumps the version and changelog per the project's convention, writes ship.md (GO/NO-GO, rollback, post-release verification), advances the spec to `shipped`, merges through the ship gate, runs the post-release verification and promotes the spec with upgrade-service-docs. Fast-path or non-spec work goes to finishing-a-development-branch.
+description: Use when a reviewed full-workflow change is ready to release, merge or deploy, or the user says ship it, release or deploy — opens the PR if none is open, waits for CI, confirms the version and writes the changelog per the project's convention, writes ship.md (GO/NO-GO, rollback, post-release verification), advances the spec to `shipped`, merges through the ship gate, runs the post-release verification and promotes the spec with upgrade-service-docs. Fast-path or non-spec work goes to finishing-a-development-branch.
 ---
 
 # Ship stage
@@ -40,11 +40,11 @@ Without `gh`, read the pipeline status with the provider's CLI; when no tool can
 Follow the project's own convention; find it, do not ask:
 
 - Release tooling (release-please, semantic-release, changesets, a release workflow) owns the version: do not bump by hand; set `version: n/a — released by <tool>`.
-- Otherwise bump where the project keeps the version (`package.json`, `pyproject.toml`, `plugin.json`, a `VERSION` file, git tags) by semver from the change: a breaking contract change is major, a new capability minor, a fix patch. When the choice is not obvious, decide it and record it with `aidlc ruling <f> --decision … --why … --if-wrong …`.
+- Otherwise the version lives in a manifest (`package.json`, `pyproject.toml`, `plugin.json`, a `VERSION` file) or a git tag, by semver from the change: a breaking contract change is major, a new capability minor, a fix patch. A manifest is code for the fingerprint, so the bump was made at the end of the build stage, before `aidlc verify` (tea-sdlc:subagent-driven-development §4); here, confirm it and put the same version in `ship.md`. If it was missed, bump now, then re-run `aidlc verify`, re-stamp the review (`aidlc stamp <f> review` after a diff-only look) and re-check `reviewed` before continuing. A git tag is created after the merge and changes no file. When the choice is not obvious, decide it and record it with `aidlc ruling <f> --decision … --why … --if-wrong …`.
 - Add the entry to `CHANGELOG.md` in its existing style when the repository has one; the `shipped` gate checks that it mentions the version.
 - A library or service with no versioning: `version: n/a — <reason>`.
 
-Version files and changelogs do not change the code fingerprint, so the review stays valid. Commit and push them.
+The changelog does not change the code fingerprint (Markdown and `CHANGELOG*` are excluded), so writing it here keeps the review valid. Commit and push it.
 
 ## 4. Write `ship.md`
 

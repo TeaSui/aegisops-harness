@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for Bash: `gh pr merge` waits until the branch's active spec has passed the `shipped` gate.
+"""PreToolUse gate for Bash: `gh pr merge` waits until the branch's spec has passed the `shipped` gate.
 
-A full-workflow change is bound to its branch by `aidlc advance <spec> building` (README `branch:`). Merging that
-branch before `aidlc advance <spec> shipped` passes would ship without a GO decision, a rollback plan, green CI or a
-review of the current code (references/aidlc.md). Branches with no bound spec (fast path, chores) are not gated.
-
-Blocks only on real gate findings; an infrastructure error (gh unavailable, engine unreadable) lets the merge through
-with a note, like the contract check in hooks/pr-review-gate.py. Off with TEA_SDLC_SHIP_GATE=off.
+A full-workflow change is bound to its branch by `aidlc advance <spec> building` (README `branch:`). The gate:
+- evaluates the spec as it is on the branch being merged: the current checkout when that branch is checked out,
+  otherwise a temporary detached worktree of the PR head (or the branch);
+- re-checks specs already at `shipped` (code may have changed since), and refuses the branch of an abandoned spec;
+- refuses a PR whose head is not the commit checked locally, and a PR named through a variable.
+Branches with no bound spec (fast path, chores) are not gated. Blocks only on real findings; an infrastructure error
+(gh unavailable, engine unreadable, branch not fetched) lets the merge through with a note. Off with
+TEA_SDLC_SHIP_GATE=off. Spec: references/aidlc.md.
 """
 import importlib.util
 import json
@@ -14,12 +16,14 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 
 MERGE = re.compile(r'(^|[;&|\s])gh\s+pr\s+merge\b')
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parent.parent
-FINISHED = ('shipped', 'implemented', 'partially-implemented', 'superseded', 'abandoned')
+POST_SHIP = ('implemented', 'partially-implemented', 'superseded')
 
 
 def run(args, cwd, timeout=20):
@@ -33,7 +37,7 @@ def run(args, cwd, timeout=20):
 def merge_target(command):
     """The PR argument of the first `gh pr merge` in the command, or None for the current branch."""
     try:
-        words = shlex.split(command[MERGE.search(command).start():])
+        words = shlex.split(command[MERGE.search(command).start():], posix=True)
     except ValueError:
         words = command.split()
     args, skip = [], False
@@ -48,16 +52,64 @@ def merge_target(command):
                             '--match-head-commit', '-R', '--repo')
             continue
         args.append(word)
+    raw = command[MERGE.search(command).end():]
+    if re.search(r'[$`]', raw.split('&&')[0].split(';')[0]):
+        return '$'  # a variable or substitution: the gate cannot know which PR it is
     return args[0] if args else None
 
 
-def head_branch(target, cwd):
-    if target is None:
-        return run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd)
-    if re.fullmatch(r'\d+|https?://\S+/pull/\d+\S*', target):
-        gh = os.environ.get('AIDLC_GH') or 'gh'
-        return run([gh, 'pr', 'view', target, '--json', 'headRefName', '-q', '.headRefName'], cwd)
-    return target
+def pr_head(target, cwd):
+    """(head branch, head commit) for a PR number, URL or branch, via gh; (None, None) when gh cannot tell."""
+    gh = os.environ.get('AIDLC_GH') or 'gh'
+    out = run([gh, 'pr', 'view', target, '--json', 'headRefName,headRefOid'], cwd)
+    try:
+        data = json.loads(out or '')
+        return data.get('headRefName'), data.get('headRefOid')
+    except (ValueError, AttributeError):
+        # Older fakes and gh versions may print the branch name alone.
+        return (out.splitlines()[0].strip() if out else None), None
+
+
+def load_engine():
+    spec = importlib.util.spec_from_file_location('tea_sdlc_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
+    aidlc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(aidlc)
+    return aidlc
+
+
+def problems_in(aidlc, root, branch):
+    """Gate findings for every spec bound to `branch` in the checkout at `root`."""
+    problems = []
+    for path in aidlc.specs_for_branch(str(root), branch):
+        stage = aidlc.stage(path)
+        rel = pathlib.Path(path).resolve().relative_to(pathlib.Path(root).resolve()).as_posix()
+        if stage in POST_SHIP:
+            continue
+        if stage == 'abandoned':
+            problems.append((rel, stage, ['the spec bound to this branch was abandoned; do not merge its work '
+                                          '(remove `branch:` from its README if the branch now carries other work)']))
+            continue
+        failures = [m for level, m in aidlc.check(path, 'shipped') if level == 'FAIL']
+        if failures:
+            problems.append((rel, stage, failures))
+    return problems
+
+
+def in_worktree(top, ref, fn):
+    """Run fn(path) on a temporary detached checkout of `ref`, so the gate sees the branch being merged."""
+    tmp = tempfile.mkdtemp(prefix='tea-sdlc-ship-gate-')
+    try:
+        if run(['git', 'worktree', 'add', '--detach', '--quiet', tmp, ref], top, timeout=120) is None:
+            raise RuntimeError(f'could not check out {ref}')
+        return fn(tmp)
+    finally:
+        run(['git', 'worktree', 'remove', '--force', tmp], top, timeout=60)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def deny(lines):
+    sys.stderr.write('\n'.join(lines) + '\n')
+    return 2
 
 
 def main():
@@ -72,31 +124,51 @@ def main():
         return 0
     cwd = payload.get('cwd') or None
     top = run(['git', 'rev-parse', '--show-toplevel'], cwd)
-    branch = head_branch(merge_target(command), cwd)
-    if not top or not branch:
+    if not top:
         return 0
-    spec = importlib.util.spec_from_file_location('tea_sdlc_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
-    aidlc = importlib.util.module_from_spec(spec)
+    target = merge_target(command)
+    if target == '$':
+        return deny(['ship-gate: `gh pr merge` names its PR through a variable or command substitution, so the gate '
+                     'cannot check which change ships. Run it with a literal PR number or branch.'])
+    current = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], top)
+    oid = None
+    if target is None:
+        branch = current
+        _, oid = pr_head(current, top) if current else (None, None)
+    elif re.fullmatch(r'\d+|https?://\S+/pull/\d+\S*', target):
+        branch, oid = pr_head(target, top)
+    else:
+        branch = target
+        _, oid = pr_head(target, top)
+    if not branch:
+        return 0
     try:
-        spec.loader.exec_module(aidlc)
-        pending = [path for path in aidlc.specs_for_branch(top, branch) if aidlc.stage(path) not in FINISHED]
-        blocked = [(path, [m for level, m in aidlc.check(path, 'shipped') if level == 'FAIL']) for path in pending]
+        aidlc = load_engine()
+        if branch == current:
+            head = run(['git', 'rev-parse', 'HEAD'], top)
+            if oid and head and oid != head and aidlc.specs_for_branch(top, branch):
+                return deny([f'ship-gate: the PR head ({oid[:12]}) is not the commit checked here ({head[:12]}); '
+                             'push or pull so the reviewed and shipped code is what merges, then retry.'])
+            problems = problems_in(aidlc, top, branch)
+        else:
+            ref = oid if oid and run(['git', 'cat-file', '-e', oid + '^{commit}'], top) is not None else branch
+            if run(['git', 'rev-parse', '--verify', '--quiet', ref + '^{commit}'], top) is None:
+                sys.stderr.write(f'ship-gate: {branch} is not available locally; fetch it to let the gate check it.\n')
+                return 0
+            problems = in_worktree(top, ref, lambda path: problems_in(aidlc, path, branch))
     except Exception as error:  # never block a merge on the gate's own failure
         sys.stderr.write(f'ship-gate: skipped ({type(error).__name__}); run `aidlc check <spec> --to shipped` yourself.\n')
         return 0
-    blocked = [(path, findings) for path, findings in blocked if findings]
-    if not blocked:
+    if not problems:
         return 0
     cli = f'python3 "{PLUGIN_ROOT}/scripts/aidlc.py"'
     lines = [f'ship-gate: branch {branch} carries a spec that has not passed the `shipped` gate:']
-    for path, findings in blocked:
-        rel = pathlib.Path(path).resolve().relative_to(pathlib.Path(top).resolve()).as_posix()
-        lines.append(f'  {rel} (stage {aidlc.stage(path)}):')
+    for rel, stage, findings in problems:
+        lines.append(f'  {rel} (stage {stage}):')
         lines.extend(f'    - {finding}' for finding in findings[:8])
     lines.append(f'Finish the ship stage (skill tea-sdlc:shipping): write ship.md (GO, rollback, post-release '
                  f'verification), then `{cli} advance <spec> shipped`, then merge.')
-    sys.stderr.write('\n'.join(lines) + '\n')
-    return 2
+    return deny(lines)
 
 
 if __name__ == '__main__':

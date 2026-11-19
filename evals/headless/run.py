@@ -109,6 +109,8 @@ def execute(suite, case, index, args, claude):
         command = claude_command(claude, case['prompt'], args.plugin_dir, suite['config'], case, args.model,
                                  args.extra_arg)
         env = {k: v for k, v in os.environ.items() if not k.startswith('TEA_SDLC_')}
+        if (run_dir / 'bin').is_dir():  # fixture tools (e.g. a fake gh) shadow the real ones
+            env['PATH'] = str(run_dir / 'bin') + os.pathsep + env.get('PATH', '')
         timeout = case.get('timeout_s', suite['config'].get('timeout_s', 900))
         with open(run_dir / 'out.jsonl', 'w') as out, open(run_dir / 'err.txt', 'w') as err:
             try:
@@ -122,8 +124,9 @@ def execute(suite, case, index, args, claude):
         error = '%s: %s' % (type(exc).__name__, exc)
     _, record = judge_run(suite, case, run_dir, args.plugin_dir)
     record['run'] = index
-    if record['duration_ms'] is None:
-        record['duration_ms'] = int((time.time() - started) * 1000)
+    # Wall clock of the whole session: a session that waits on background agents emits several `result` events,
+    # each with only its own segment's duration, so the last one undercounts badly.
+    record['duration_ms'] = int((time.time() - started) * 1000)
     if error:
         record['error'] = error
     print('%-5s %-10s %-16s r%d  %s  $%.3f %4.0fs' % ('PASS' if record['pass'] else ('ERR' if error else 'FAIL'),

@@ -452,15 +452,21 @@ def spec_lines(root):
     cli = f'python3 "{PLUGIN_ROOT}/scripts/aidlc.py"'
     try:
         aidlc = load_aidlc()
-        rows = [row for row in aidlc.status(str(root)) if row.get('stage') in NEXT_STEP]
+        try:  # fast: no network or slow subprocesses inside the 10 s session-start budget
+            rows = aidlc.status(str(root), fast=True)
+        except TypeError:
+            rows = aidlc.status(str(root))
+        rows = [row for row in rows if row.get('stage') in NEXT_STEP]
     except Exception:  # engine missing or broken: fall back to the README status alone
         aidlc, rows = None, [{'path': str(spec), 'stage': meta.get('status', 'proposed'), 'blockers': []}
                              for spec, meta in active_specs(root)]
     lines = []
     for row in rows[:6]:
-        rel = display_path(str(row['path']), root)
+        path = pathlib.Path(row['path'])
+        path = path if path.is_absolute() else root / path  # status() reports repo-relative paths
+        rel = display_path(str(path), root)
         stage = row['stage']
-        progress = plan_progress(pathlib.Path(row['path']) / 'plan.md')
+        progress = plan_progress(path / 'plan.md')
         detail = f', plan {progress[0]}/{progress[1]} tasks done' if progress else ''
         if row.get('legacy'):
             detail += ' (legacy: no key, not gated)'
@@ -470,7 +476,7 @@ def spec_lines(root):
             detail += f'; the {row.get("next")} gate already passes — advance it'
         if aidlc and stage == 'building':
             try:
-                batch = (aidlc.next_batches(row['path']) or [[]])[0]
+                batch = (aidlc.next_batches(path) or [[]])[0]
                 if batch:
                     detail += f'; next parallel batch: {", ".join(str(task.get("id")) for task in batch)}'
             except Exception:

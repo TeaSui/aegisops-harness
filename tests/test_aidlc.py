@@ -131,6 +131,10 @@ class Base(unittest.TestCase):
     def git(self, *args):
         return subprocess.run(['git', *args], cwd=self.repo, check=True, capture_output=True, text=True).stdout.strip()
 
+    def commit(self, message='work'):
+        self.git('add', '-A')
+        self.git('commit', '-qm', message)
+
     def write(self, rel, text):
         path = self.repo / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,6 +204,7 @@ class Base(unittest.TestCase):
         self.write('src/refunds/model.py', 'def refund(amount):\n    return amount\n')
         self.write('tests/test_refunds.py', '# RFD-1: refund a captured payment\n')
         self.write('load/refund-visibility.js', 'export default function () {}\n')
+        self.commit('code')  # the reviewed gate needs the verified code committed
         self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
         self.assertEqual(self.cli('task-done', 'refunds', 'T2', '--cmd', 'true')[0], 0)
         self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
@@ -218,7 +223,9 @@ class Base(unittest.TestCase):
 
     def fake_gh(self, output, code=0):
         gh = self.base / 'fake-gh'
-        gh.write_text('#!/bin/sh\nprintf \'%s\' "$AIDLC_FAKE_OUT"\nexit ' + str(code) + '\n')
+        gh.write_text('#!/bin/sh\necho "$@" >> "$AIDLC_FAKE_LOG"\nprintf \'%s\' "$AIDLC_FAKE_OUT"\nexit '
+                      + str(code) + '\n')
+        os.environ['AIDLC_FAKE_LOG'] = str(self.base / 'gh-calls.log')
         gh.chmod(0o755)
         os.environ['AIDLC_GH'] = str(gh)
         os.environ['AIDLC_FAKE_OUT'] = output
@@ -272,13 +279,14 @@ class DocContractTest(Base):
         self.assertIn('double refunds', events[2]['if_wrong'])
         self.assertEqual(events[3]['junit'], {'passed': 42, 'failed': 0})
         self.assertEqual(events[3]['cmd'], 'npm test')
-        self.assertEqual(events[4]['fingerprint'], '8a01')
+        self.assertEqual(events[4]['fingerprint'], '8a01c6e95f3b')
+        self.assertEqual(events[1]['fingerprint'], '3f9c0b7d21e4')
 
     def test_review_example(self):
         review, findings = aidlc.parse_review(doc_blocks()['review.md'], 'review.md')
         self.assertPasses(findings)
         self.assertPasses(aidlc.review_findings(review, 'review.md'))
-        self.assertEqual(review['fingerprint'], '8a01')
+        self.assertEqual(review['fingerprint'], '8a01c6e95f3b')
         self.assertEqual(len(review['findings']), 3)
 
     def test_ship_example(self):
@@ -516,35 +524,72 @@ class BuildingGateTest(Base):
 
 
 class FingerprintTest(Base):
-    def test_docs_and_changelog_do_not_change_it_code_does(self):
+    def test_excluded_paths_do_not_change_it_everything_else_does(self):
         before = aidlc.fingerprint(self.repo)
         self.assertRegex(before, r'^[0-9a-f]{64}$')
-        self.write('README.md', '# x\n')
-        self.write('CHANGELOG.md', '## 1.0.0\n')
-        self.write('docs/specs/refunds/review.md', 'x')
-        self.write('package.json', '{"version": "2"}')
-        self.assertEqual(aidlc.fingerprint(self.repo), before)
-        self.write('src/app.py', 'x = 2\n')
-        self.assertNotEqual(aidlc.fingerprint(self.repo), before)
-
-    def test_untracked_code_counts_ignored_code_does_not(self):
-        before = aidlc.fingerprint(self.repo)
-        self.write('ignored/gen.py', 'x')
-        self.write('debug.log', 'x')
-        self.assertEqual(aidlc.fingerprint(self.repo), before)
-        self.write('src/new.py', 'x')
-        after = aidlc.fingerprint(self.repo)
-        self.assertNotEqual(after, before)
-        for name in ('db/1.sql', 'api/a.proto', 'api/s.graphql', 'features/r.feature'):
-            self.write(name, 'x')
-            self.assertNotEqual(aidlc.fingerprint(self.repo), after, name)
+        for rel in ('README.md', 'notes/todo.md', 'CHANGELOG.md', 'CHANGELOG', 'LICENSE', 'LICENSE.txt',
+                    'docs/guide.txt', 'docs/specs/refunds/review.md', 'svc/docs/specs/x/plan.json', 'a/b/docs/specs/y/x.yaml',
+                    'ignored/gen.py', 'debug.log'):
+            self.write(rel, 'x')
+            self.assertEqual(aidlc.fingerprint(self.repo), before, rel)
+        for rel in ('package.json', 'src/new.py', 'db/1.sql', 'config/app.yaml', 'svc/docs/api.yaml', 'Makefile'):
+            self.write(rel, 'x')
             after = aidlc.fingerprint(self.repo)
+            self.assertNotEqual(after, before, rel)
+            before = after
 
-    def test_deleting_code_changes_it_and_it_is_stable(self):
-        before = aidlc.fingerprint(self.repo)
-        self.assertEqual(aidlc.fingerprint(self.repo), before)
-        (self.repo / 'src' / 'app.py').unlink()
-        self.assertNotEqual(aidlc.fingerprint(self.repo), before)
+    def test_clean_tree_equals_head_and_dirty_code_is_detected(self):
+        self.assertEqual(aidlc.fingerprint(self.repo), aidlc.fingerprint(self.repo, 'HEAD'))
+        self.assertFalse(aidlc.code_dirty(self.repo))
+        self.write('docs/x.md', 'x')
+        self.assertFalse(aidlc.code_dirty(self.repo))
+        self.write('src/app.py', 'x = 2\n')
+        self.assertTrue(aidlc.code_dirty(self.repo))
+        working = aidlc.fingerprint(self.repo)
+        self.commit()
+        self.assertEqual(aidlc.fingerprint(self.repo, 'HEAD'), working)
+        self.assertEqual(aidlc.fingerprint(self.repo), working)
+        self.assertFalse(aidlc.code_dirty(self.repo))
+        self.write('src/app.py', 'x = 3\n')
+        self.git('add', '-A')  # staged, not committed
+        self.assertTrue(aidlc.code_dirty(self.repo))
+        self.commit()
+        self.write('src/new.py', 'x')  # untracked
+        self.assertTrue(aidlc.code_dirty(self.repo))
+        (self.repo / 'src' / 'new.py').unlink()
+        (self.repo / 'src' / 'app.py').unlink()  # deleted
+        self.assertTrue(aidlc.code_dirty(self.repo))
+        self.assertNotEqual(aidlc.fingerprint(self.repo), aidlc.fingerprint(self.repo, 'HEAD'))
+
+    def test_rev_of_an_older_commit_and_unknown_rev(self):
+        first = aidlc.fingerprint(self.repo)
+        self.write('src/app.py', 'x = 2\n')
+        self.commit()
+        self.assertEqual(aidlc.fingerprint(self.repo, 'HEAD~1'), first)
+        self.assertIsNone(aidlc.fingerprint(self.repo, 'no-such-rev'))
+
+    def test_only_modified_and_untracked_files_are_hashed(self):
+        for i in range(300):
+            self.write(f'src/gen/m{i}.py', f'x = {i}\n')
+        self.commit()
+        self.write('src/gen/m7.py', 'changed\n')
+        self.write('src/brand_new.py', 'x')
+        hashed = []
+        original = aidlc.Repo._hash_paths
+
+        def spy(repo, paths):
+            hashed.extend(paths)
+            return original(repo, paths)
+
+        with mock.patch.object(aidlc.Repo, '_hash_paths', spy):
+            aidlc.fingerprint(self.repo)
+        self.assertEqual(sorted(hashed), ['src/brand_new.py', 'src/gen/m7.py'])
+
+    def test_symlink_and_crlf_files_match_head_after_commit(self):
+        os.symlink('app.py', self.repo / 'src' / 'link.py')
+        self.write('src/win.py', 'a = 1\r\nb = 2\r\n')
+        self.commit()
+        self.assertEqual(aidlc.fingerprint(self.repo), aidlc.fingerprint(self.repo, 'HEAD'))
 
     def test_works_outside_git(self):
         folder = self.base / 'plain'
@@ -555,6 +600,8 @@ class FingerprintTest(Base):
         self.assertEqual(aidlc.fingerprint(folder), first)
         (folder / 'src' / 'a.py').write_text('y')
         self.assertNotEqual(aidlc.fingerprint(folder), first)
+        self.assertIsNone(aidlc.fingerprint(folder, 'HEAD'))
+        self.assertFalse(aidlc.code_dirty(folder))
 
 
 class TaskDoneTest(Base):
@@ -1261,6 +1308,257 @@ class MarkPrReviewTest(Base):
         self.assertEqual({k: v for k, v in from_cli.items() if k != 'recorded_at'},
                          {k: v for k, v in from_function.items() if k != 'recorded_at'})
         self.assertTrue(target.read_text().endswith('}\n'))
+
+
+
+class EvidenceChainTest(Base):
+    def test_red_latest_verify_blocks_reviewed_and_shipped(self):
+        self.shipped_ready()
+        self.cli('verify', 'refunds', '--cmd', 'exit 1')
+        self.assertFails(aidlc.check(self.spec, 'reviewed'), 'exited 1')
+        self.assertFails(aidlc.check(self.spec, 'shipped'), 'exited 1')
+
+    def test_dirty_code_blocks_reviewed_and_writes_no_record(self):
+        self.reviewed_ready()
+        self.write('src/refunds/extra.py', 'x = 1\n')
+        self.cli('verify', 'refunds', '--cmd', 'true')
+        self.cli('stamp', 'refunds', 'review')
+        findings = aidlc.check(self.spec, 'reviewed')
+        self.assertEqual(len(self.fails(findings)), 1, findings)
+        self.assertFails(findings, 'uncommitted code')
+        self.assertEqual(self.cli('advance', 'refunds', 'reviewed')[0], 1)
+        self.assertFalse((self.home / '.claude' / 'state' / 'pr-review').exists())
+        self.commit()
+        self.assertPasses(aidlc.check(self.spec, 'reviewed'))
+
+    def test_dirty_code_blocks_shipped(self):
+        self.shipped_ready()
+        self.write('src/refunds/extra.py', 'x = 1\n')
+        self.assertFails(aidlc.check(self.spec, 'shipped'), 'uncommitted code')
+
+    def test_evidence_findings_against_a_revision(self):
+        self.reviewed_ready()
+        self.assertPasses(aidlc.evidence_findings(self.spec))
+        self.assertPasses(aidlc.evidence_findings(self.spec, 'HEAD'))
+        self.assertFails(aidlc.evidence_findings(self.spec, 'HEAD~1'), 'HEAD~1')
+        self.assertFails(aidlc.evidence_findings(self.spec, 'nope'), 'nope')
+
+    def test_verify_and_stamp_must_be_the_same_code(self):
+        self.reviewed_ready()
+        self.write('src/refunds/model.py', 'v = 2\n')
+        self.commit()
+        self.cli('verify', 'refunds', '--cmd', 'true')
+        findings = aidlc.evidence_findings(self.spec)
+        self.assertFails(findings, 'review stamp')
+
+    def test_short_fingerprints_never_match(self):
+        self.reviewed_ready()
+        fp = aidlc.fingerprint(self.repo)
+        with open(self.spec / 'ledger.md', 'a') as fh:
+            fh.write(f'- 2026-11-19T12:00:00Z verify exit=0 fingerprint={fp[:8]} cmd="true"\n')
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'code changed since the latest verify')
+        self.assertFalse(aidlc.fp_matches(fp[:11], fp))
+        self.assertTrue(aidlc.fp_matches(fp[:12], fp))
+
+
+class LockAndTickTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.building()
+
+    def test_tick_by_id_after_the_command_edited_plan(self):
+        cmd = ("python3 -c \"p='docs/specs/refunds/plan.md'; s=open(p).read(); "
+               "open(p,'w').write('# Plan\\n\\nIntro added while T1 ran.\\n- [ ] note\\n' + s)\"")
+        self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', cmd)[0], 0)
+        text = (self.spec / 'plan.md').read_text()
+        self.assertIn('- [x] T1: Refund model', text)
+        self.assertIn('- [ ] note', text)
+        self.assertIn('- [ ] T2: Load test', text)
+
+    @unittest.skipIf(aidlc.fcntl is None, 'no fcntl')
+    def test_writers_wait_for_the_spec_lock(self):
+        import threading
+        import time
+        results = []
+        with aidlc.spec_lock(self.spec):
+            worker = threading.Thread(target=lambda: results.append(
+                self.cli('ruling', 'refunds', '--decision', 'a', '--why', 'b', '--if-wrong', 'c')[0]))
+            worker.start()
+            time.sleep(0.4)
+            self.assertNotIn('ruling', self.ledger())
+        worker.join(10)
+        self.assertEqual(results, [0])
+        self.assertIn('ruling a', self.ledger())
+
+    def test_parallel_task_done_keeps_every_tick(self):
+        plan = self.spec / 'plan.md'
+        plan.write_text(plan.read_text().replace('  - depends: T1\n', '  - depends: none\n'))
+        procs = [subprocess.Popen([sys.executable, str(ROOT / 'scripts' / 'aidlc.py'), 'task-done', 'refunds', t,
+                                   '--cmd', 'sleep 0.2'], cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                 for t in ('T1', 'T2')]
+        self.assertEqual([proc.wait(30) for proc in procs], [0, 0])
+        self.assertIn('- [x] T1', plan.read_text())
+        self.assertIn('- [x] T2', plan.read_text())
+        self.assertEqual(self.ledger().count('task-done'), 2)
+
+    def test_crlf_files_keep_their_line_endings(self):
+        for name in ('plan.md', 'README.md', 'ledger.md'):
+            path = self.spec / name
+            path.write_bytes(path.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))
+        self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.cli('advance', 'refunds', 'planned', '--back', '--reason', 'x')[0], 0)
+        for name in ('plan.md', 'README.md', 'ledger.md'):
+            data = (self.spec / name).read_bytes()
+            self.assertEqual(data.count(b'\n'), data.count(b'\r\n'), name)
+        self.assertIn(b'- [x] T1', (self.spec / 'plan.md').read_bytes())
+
+    def test_timeout_without_killpg(self):
+        saved = os.killpg
+        del os.killpg
+        try:
+            code, out, _ = self.cli('task-done', 'refunds', 'T1', '--cmd', 'sleep 5', '--timeout', '1')
+        finally:
+            os.killpg = saved
+        self.assertEqual(code, 1)
+        self.assertIn('timed out', out)
+
+
+class DiscoveryTest(Base):
+    def test_specs_at_any_depth_untracked_included_ignored_excluded(self):
+        deep = self.repo / 'platform' / 'svc' / 'docs' / 'specs' / 'deep-one'
+        self.readme(spec=deep, key='DEP')
+        self.readme(spec=self.repo / 'ignored' / 'docs' / 'specs' / 'hidden', key='HID')
+        self.accepted_ready()
+        self.assertEqual(aidlc.find_spec(self.repo, 'deep-one'), deep)
+        self.assertIsNone(aidlc.find_spec(self.repo, 'hidden'))
+        self.assertEqual({i['slug'] for i in aidlc.status(self.repo)}, {'deep-one', 'refunds'})
+        self.readme(spec=deep, key='RFD')
+        self.assertFails(aidlc.check(self.spec, 'accepted'), 'platform/svc/docs/specs/deep-one')
+
+    def test_filesystem_fallback_outside_git(self):
+        folder = self.base / 'plain'
+        self.readme(spec=folder / 'a' / 'b' / 'docs' / 'specs' / 'x', key='XX')
+        self.readme(spec=folder / 'node_modules' / 'p' / 'docs' / 'specs' / 'y', key='YY')
+        self.assertEqual([i['slug'] for i in aidlc.status(folder)], ['x'])
+
+    def test_specs_for_branch_returns_any_status(self):
+        self.readme(status='implemented', branch='feat/refunds')
+        self.assertEqual(aidlc.specs_for_branch(self.repo, 'feat/refunds'), [self.spec])
+        self.assertEqual(aidlc.active_specs(self.repo), [])
+
+    def test_repo_option_is_normalized_to_the_top_level(self):
+        self.accepted_ready()
+        code, payload = self.cli_json('status', '--repo', self.repo / 'src')
+        self.assertEqual(code, 0)
+        self.assertEqual([i['slug'] for i in payload['specs']], ['refunds'])
+        self.assertEqual(self.cli('check', 'refunds', '--repo', self.repo / 'src')[0], 0)
+
+
+class TraceabilityMatchingTest(Base):
+    def test_reference_forms(self):
+        self.accepted_ready()
+        repo = aidlc.Repo(self.repo)
+        cases = {'# covers RFD-1\n': True, 'def test_rfd_1_rejects(): pass\n': True,
+                 'void test_RFD_1_refund() {}\n': True, 'it("RFD-1: refunds")\n': True,
+                 '# RFD-10 only\n': False, 'rfd-1 in lower case\n': False, 'order_rfd_1 = 1\n': False,
+                 'XRFD-1\n': False, 'RFD_1 = 3\n': False}
+        for text, expected in cases.items():
+            self.write('tests/test_x.py', text)
+            refs = aidlc.Repo(self.repo).tests_referencing('RFD-1')
+            self.assertEqual(bool(refs), expected, text)
+        self.assertIsNotNone(repo)
+
+    def test_order_key_is_not_matched_by_snake_case(self):
+        pattern = aidlc.id_pattern('ORDER-1')
+        self.assertFalse(pattern.search('order_1 = place_order()'))
+        self.assertTrue(pattern.search('def test_order_1_places(): pass'))
+
+    def test_junit_must_pass_every_verify_test_requirement(self):
+        self.verified_ready()
+        skipped = ('<testsuite><testcase classname="t" name="test_RFD_1_refund"><skipped/></testcase>'
+                   '<testcase classname="t" name="test_other"/></testsuite>')
+        self.write('reports/a.xml', skipped)
+        self.cli('verify', 'refunds', '--cmd', 'touch reports/a.xml', '--junit', 'reports/a.xml')
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1 has no passing test')
+        self.write('reports/a.xml', '<testsuite><testcase classname="t" name="test_RFD_1_refund"/></testsuite>')
+        self.cli('verify', 'refunds', '--cmd', 'touch reports/a.xml', '--junit', 'reports/a.xml')
+        findings = aidlc.check(self.spec, 'verified')
+        self.assertPasses(findings)
+        self.assertFalse(any('static' in m for _, m in findings))
+
+    def test_without_junit_traceability_is_static(self):
+        self.verified_ready()
+        findings = aidlc.check(self.spec, 'verified')
+        self.assertPasses(findings)
+        self.assertTrue(any(level == 'WARN' and 'static' in m for level, m in findings))
+
+    def test_stale_or_empty_junit_counts_as_missing(self):
+        self.verified_ready()
+        report = self.write('reports/old.xml', '<testsuite><testcase classname="t" name="test_RFD_1_x"/></testsuite>')
+        os.utime(report, (report.stat().st_atime - 600, report.stat().st_mtime - 600))
+        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/*.xml')[0], 1)
+        self.assertIn('junit=missing', self.ledger().splitlines()[-1])
+        self.write('reports/new.xml', '<testsuites><testsuite name="empty"/></testsuites>')
+        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/new.xml')[0], 1)
+        self.assertIn('junit=missing', self.ledger().splitlines()[-1])
+
+
+class ReviewCheckboxTest(Base):
+    def test_finding_bullets_must_be_checkboxes(self):
+        self.reviewed_ready()
+        text = (self.spec / 'review.md').read_text()
+        for line in ('- S2 (must): refund twice possible', '- **Q3 (must)**: secret in log', '* S4: untracked'):
+            self.spec_file('review.md', text.replace('## Standards\n', '## Standards\n' + line + '\n'))
+            self.assertFails(aidlc.check(self.spec, 'reviewed'), 'not a checkbox')
+        self.spec_file('review.md', text.replace('## Standards\n', '## Standards\n- Overall the code is clean.\n'))
+        self.assertPasses(aidlc.check(self.spec, 'reviewed'))
+
+
+class VerifyHardeningTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.building()
+        self.write('tests/test_refunds.py', '# RFD-1\n')
+
+    def test_json_exit_is_the_cli_exit(self):
+        code, payload = self.cli_json('verify', 'refunds', '--cmd', 'exit 4')
+        self.assertEqual((code, payload['exit'], payload['command_exit']), (1, 1, 4))
+        code, payload = self.cli_json('task-done', 'refunds', 'T1', '--cmd', 'exit 5')
+        self.assertEqual((code, payload['exit'], payload['command_exit']), (1, 1, 5))
+
+    def test_code_changed_during_the_run_is_not_green(self):
+        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'echo "y = 1" >> src/app.py')
+        self.assertEqual(code, 1)
+        self.assertIn('changed code', out)
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'changed code during')
+
+    def test_gh_gets_the_branch_after_a_double_dash(self):
+        self.fake_gh('build\tpass\t1m\thttps://ci/1\n')
+        self.assertEqual(aidlc.gh_checks(self.repo, 'feat/refunds'), [('build', 'pass')])
+        self.assertIn('pr checks -- feat/refunds', (self.base / 'gh-calls.log').read_text())
+        self.assertIsNone(aidlc.gh_checks(self.repo, '-R evil/repo'))
+
+
+class FastStatusTest(Base):
+    def test_fast_status_runs_no_gh_and_no_contract_gate(self):
+        self.shipped_ready()
+        self.readme(spec=self.repo / 'docs' / 'specs' / 'api-change', key='API', contract='external')
+        self.fake_gh('build\tpass\t1m\thttps://ci/1\n')
+        log = self.base / 'gh-calls.log'
+        import time
+        with mock.patch.object(aidlc._contract, 'run', side_effect=AssertionError('contract gate ran')):
+            started = time.time()
+            items = {i['slug']: i for i in aidlc.status(self.repo, fast=True)}
+            self.assertLess(time.time() - started, 1.5)
+        self.assertFalse(log.exists())
+        self.assertEqual(items['refunds']['next'], 'shipped')
+        self.assertIsNotNone(items['refunds']['passes'])
+        self.assertIsNotNone(items['api-change']['passes'])
+        code, payload = self.cli_json('status', '--fast')
+        self.assertEqual((code, len(payload['specs'])), (0, 2))
+        self.assertFalse(log.exists())
+        aidlc.status(self.repo)
+        self.assertTrue(log.exists())
 
 
 if __name__ == '__main__':
