@@ -22,10 +22,13 @@ ARTIFACTS = ('spec', 'spec-check', 'plan', 'build', 'review', 'ship')
 
 
 def read(path):
+    """File text without HTML comments and fenced code: the `init` skeletons keep their examples there."""
     try:
-        return pathlib.Path(path).read_text(errors='replace')
+        text = pathlib.Path(path).read_text(errors='replace')
     except OSError:
         return ''
+    text = re.sub(r'<!--.*?-->', '', text, flags=re.S)
+    return re.sub(r'^```.*?^```', '', text, flags=re.S | re.M)
 
 
 def frontmatter(text):

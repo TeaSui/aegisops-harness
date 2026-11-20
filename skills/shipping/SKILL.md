@@ -23,9 +23,9 @@ git push -u origin <branch>
 gh pr create --title "<title>" --body "<summary; links to the spec, review.md and the traceability (aidlc trace <f>); the rulings from ledger.md>"
 ```
 
-If `HEAD` moved before the PR was opened and only spec files changed, `aidlc check <f> --to reviewed` still passes (the fingerprint ignores docs); record the pass for the new `HEAD` with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/mark-pr-review.py" --reviewer aidlc-review --open-findings 0`. If code changed, the review no longer matches: go back (NO-GO path).
+If `HEAD` moved before the PR was opened and only spec files changed, the gate still allows it: on a branch bound to the spec it decides from `aidlc check <f> --to reviewed`, which ignores docs. If code changed, the review no longer matches: go back (NO-GO path).
 
-With a non-GitHub remote nothing blocks `gh`: push, and give the user the PR description to open it.
+Decide from what `gh` answers, not from the remote URL. A remote that looks unusual (a mirror, an Enterprise host, a local path) may still be served by the `gh` on this machine: run `gh pr view` and `gh pr create` and read their output. Only when `gh` itself fails (not installed, not authenticated, no host for the remote) take the non-GitHub path: push, record the CI result the provider shows, and give the user the PR description to open it.
 
 ## 2. Wait for CI
 

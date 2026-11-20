@@ -309,6 +309,11 @@ class StreamAndJudgeTest(unittest.TestCase):
         self.assertIsNone(harness.infra_error(stream('passive_miss.jsonl')))
         self.assertIsNone(harness.infra_error(stream('passive_hit.jsonl')))
         self.assertIn('no result', harness.infra_error(harness.parse_stream([])))
+        # A final summary that talks about rate limits is the model's own text, not a cutoff.
+        summary = harness.parse_stream([json.dumps({'type': 'result', 'subtype': 'success', 'result':
+                                                    'Refunds are ready. Before exposing them add permission checks, '
+                                                    'logging and rate limits. ' + 'More detail. ' * 40})])
+        self.assertIsNone(harness.infra_error(summary))
         for text in ('API Error: 529 Overloaded', 'Credit balance is too low', 'Rate limit reached for requests'):
             parsed = harness.parse_stream([json.dumps({'type': 'result', 'is_error': True, 'result': text})])
             self.assertIsNotNone(harness.infra_error(parsed), text)
@@ -322,6 +327,18 @@ class StreamAndJudgeTest(unittest.TestCase):
         self.assertEqual(empty['total'], 0)
         verdict = harness.compare({'x': empty}, {'suites': {'x': {'passed': 3, 'total': 3}}})['x']
         self.assertFalse(verdict['regression'])
+
+    def test_lifecycle_judge_ignores_template_comments(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('lifecycle_judge', HEADLESS / 'suites' / 'lifecycle' / 'judge.py')
+        judge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(judge)
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = pathlib.Path(tmp) / 'docs' / 'specs' / 'x'
+            folder.mkdir(parents=True)
+            (folder / 'spec-check.md').write_text('# Spec check\n<!--\n- [ ] G1: <question>\n-->\n'
+                                                  '- [x] G1: real guess — resolved: RFD-1\n')
+            self.assertTrue(judge.score_spec(folder)['artifacts']['spec-check'])
 
     def test_passive_judge(self):
         self.assertTrue(passive_judge.judge({'expect': ['expert-lens']}, stream('passive_hit.jsonl'))['pass'])

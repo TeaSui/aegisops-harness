@@ -76,8 +76,11 @@ def parse_stream(lines):
 
 
 # A session the account or the API cut short says nothing about the plugin: its run is excluded, not failed.
-INFRA = re.compile(r"hit your .{0,40}limit|usage limit|rate limit|overloaded|api error|credit balance|"
-                   r"quota|internal server error|connection error|request timed out", re.I)
+# Only short system notices count: a model's own summary may well talk about "rate limits".
+INFRA = re.compile(r"^\W*(you'?ve hit your .{0,40}limit|claude ai usage limit|usage limit reached|rate limit reached|"
+                   r"api error|overloaded|credit balance is too low|request timed out|internal server error|"
+                   r"connection error)", re.I)
+NOTICE_MAX = 300
 
 
 def infra_error(stream):
@@ -86,10 +89,9 @@ def infra_error(stream):
     if not results:
         return 'no result event (session crashed, was killed or never started)'
     for event in results:
-        text = str(event.get('result') or event.get('error') or '')
-        found = INFRA.search(text)
-        if found:
-            return 'cut off by %s: %s' % (found.group(0).lower(), text.strip()[:120])
+        text = str(event.get('result') or event.get('error') or '').strip()
+        if len(text) <= NOTICE_MAX and INFRA.search(text):
+            return 'cut off: %s' % text[:120]
     return None
 
 
