@@ -1,6 +1,6 @@
 ---
 name: receiving-code-review
-description: Use when review feedback arrives (from the code-reviewer subagent, the code-review skill, a PR comment or the user), before changing code for it — verify each finding against the code, fix or clear it with evidence (in the full workflow, close each line of review.md with `fixed:` or `cleared:` and re-stamp after the re-review), push back when it is wrong, and skip performative agreement (tea-sdlc — follows the routing tiers and hook gates)
+description: Use when review feedback arrives (from the tea-sdlc:code-reviewer subagent, the code-review skill, a PR comment or the user), before changing code for it — verify each finding against the code, fix or clear it with evidence (in the full workflow, close each line of review.md with `fixed:` or `cleared:` and re-stamp after the re-review), push back when it is wrong, and skip performative agreement (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
 # Code Review Reception

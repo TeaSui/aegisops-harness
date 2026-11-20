@@ -7,7 +7,7 @@ Use this template when dispatching a code quality reviewer subagent.
 **Only dispatch after spec compliance review passes.**
 
 ```
-Task tool (code-reviewer):
+Task tool (tea-sdlc:code-reviewer):
   Use template at skills/requesting-code-review/code-reviewer.md
 
   AXIS: task (per-task review in the build stage; the two-axis review of the whole change is

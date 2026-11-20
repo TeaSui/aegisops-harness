@@ -224,9 +224,24 @@ def main():
         referenced |= {(name, 'hooks/autopilot.py SKILL_NAMES') for name in autopilot.SKILL_NAMES}
     except Exception as error:  # a broken hook is reported above or here
         errors.append('hooks/autopilot.py could not be imported: %s' % type(error).__name__)
+    agent_names = {p.stem for p in agents}
     for name, rel in sorted(referenced):
-        if name not in invocable and name != 'tea-sdlc':
-            errors.append('%s: tea-sdlc:%s is not a skill or command of this plugin' % (rel, name))
+        if name not in invocable | agent_names and name != 'tea-sdlc':
+            errors.append('%s: tea-sdlc:%s is not a skill, command or agent of this plugin' % (rel, name))
+
+    # Plugin agents are registered as `tea-sdlc:<name>`: a bare name sent as subagent_type fails with
+    # "Agent type '<name>' not found". Text the model reads must name them with the prefix.
+    if agent_names:
+        bare = re.compile(r'(?<![:\w/.-])(%s)(?![\w-]|\.md)' % '|'.join(map(re.escape, sorted(agent_names))))
+        for path, rel in scanned_files(root):
+            if not (rel.endswith('.md') or rel == 'hooks/autopilot.py'):
+                continue
+            for number, line in enumerate(path.read_text(errors='replace').splitlines(), 1):
+                if rel.startswith('agents/') and line.startswith('name:'):
+                    continue
+                for match in bare.finditer(line):
+                    errors.append('%s:%d: agent %s must be named tea-sdlc:%s (plugin agents are namespaced)'
+                                  % (rel, number, match[1], match[1]))
 
     # SessionStart hook contract
     hook = root / 'hooks/session-start'

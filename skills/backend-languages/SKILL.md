@@ -2,13 +2,13 @@
 name: backend-languages
 description: >
   Use when writing or reviewing backend service code in Go, Spring Boot (Java), Python/FastAPI
-  or Rust/axum — by the main session on the fast path or by backend-engineer-subagent.
+  or Rust/axum — by the main session on the fast path or by tea-sdlc:backend-engineer-subagent.
   Routes to the matching language reference.
 ---
 
 # Backend Language References
 
-Used by the main session on the fast path and preloaded into `backend-engineer-subagent`. It routes to the language reference file matching the detected triggers. Read only the reference that matches your current task.
+Used by the main session on the fast path and preloaded into `tea-sdlc:backend-engineer-subagent`. It routes to the language reference file matching the detected triggers. Read only the reference that matches your current task.
 
 ## Language Router
 

@@ -5,15 +5,15 @@ Tiers are defined in `rules/workflow-routing.md`. The Fast path never dispatches
 ## Agent Registry
 
 - **No spec-authoring agent:** the main session writes `requirements.md`, `design.md`, `contracts/`, ADRs, `glossary.md` and `measurement.md`; the contract gate (`scripts/check-contract.py`) checks contracts.
-- **security-engineer-subagent:** first step of the Full workflow; writes `security.md`. Skip only under the escape hatch in `rules/workflow-routing.md`, which wins over any other skip list.
-- **ui-ux-designer-subagent:** before frontend work when the change needs visual design; writes `ui-design.md`.
-- **backend-engineer-subagent:** APIs, business logic, databases, LLM features (prompts, RAG, agent tools, evals, AI cost controls).
-- **frontend-engineer-subagent:** UI components and user experience.
-- **mobile-engineer-subagent:** Flutter/Dart, iOS, Android, React Native.
-- **platform-engineer-subagent:** AWS CDK/serverless, other IaC, CI/CD, containers, Kubernetes, observability.
-- **data-engineer-subagent:** ETL, data pipelines, warehouses.
-- **code-reviewer:** read-only; the main session dispatches it. In the build stage it reviews each task; in the review stage it runs once per axis (Spec, Standards), as two separate dispatches, and returns findings as `review.md` lines.
-- **qa-subagent:** required in the Full workflow. Runs in the review stage (spec at `verified`), in parallel with the two code reviews; it reads `plan.md` and `aidlc trace` and reports against requirement IDs, and its verdict becomes the QA line of `ship.md`. For a change whose risk is mostly in deployment, run it again before ship against the release candidate. Includes live API validation when an authorized running service is in scope.
+- **tea-sdlc:security-engineer-subagent:** first step of the Full workflow; writes `security.md`. Skip only under the escape hatch in `rules/workflow-routing.md`, which wins over any other skip list.
+- **tea-sdlc:ui-ux-designer-subagent:** before frontend work when the change needs visual design; writes `ui-design.md`.
+- **tea-sdlc:backend-engineer-subagent:** APIs, business logic, databases, LLM features (prompts, RAG, agent tools, evals, AI cost controls).
+- **tea-sdlc:frontend-engineer-subagent:** UI components and user experience.
+- **tea-sdlc:mobile-engineer-subagent:** Flutter/Dart, iOS, Android, React Native.
+- **tea-sdlc:platform-engineer-subagent:** AWS CDK/serverless, other IaC, CI/CD, containers, Kubernetes, observability.
+- **tea-sdlc:data-engineer-subagent:** ETL, data pipelines, warehouses.
+- **tea-sdlc:code-reviewer:** read-only; the main session dispatches it. In the build stage it reviews each task; in the review stage it runs once per axis (Spec, Standards), as two separate dispatches, and returns findings as `review.md` lines.
+- **tea-sdlc:qa-subagent:** required in the Full workflow. Runs in the review stage (spec at `verified`), in parallel with the two code reviews; it reads `plan.md` and `aidlc trace` and reports against requirement IDs, and its verdict becomes the QA line of `ship.md`. For a change whose risk is mostly in deployment, run it again before ship against the release candidate. Includes live API validation when an authorized running service is in scope.
 
 Model and effort per dispatch: `references/model-guide.md`.
 

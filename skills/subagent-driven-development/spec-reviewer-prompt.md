@@ -17,7 +17,7 @@ actual requirements, owned review scope and applicable evidence. Use the availab
 (`Task` alias supported); no model label substitutes for independent inspection.
 
 ```
-Task tool (general-purpose or code-reviewer):
+Task tool (general-purpose or tea-sdlc:code-reviewer):
   description: "Review spec compliance for Task N"
   prompt: |
     You are reviewing whether an implementation matches its specification.

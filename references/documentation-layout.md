@@ -83,8 +83,8 @@ Same owners as §2.
 | `README.md` | integrating session (main session) and `/upgrade-service-docs`; `aidlc advance` edits `status`, `updated`, `branch` | Frontmatter (below), one-paragraph summary, file index, `## Traceability` table (requirement → tasks → tests → result, `aidlc trace --write`) | Always |
 | `requirements.md` | integrating session | One `### <KEY>-<n>:` heading per requirement with `Acceptance:` bullets (Gherkin or EARS) and `Verify:` (`references/aidlc.md` §2); business rules, `New terms` | Full-workflow tier |
 | `spec-check.md` | blind spec checker (skill `spec-check`); the integrating session closes each guess | Guesses a reader of the spec alone would have to make, each resolved or accepted as a risk | Full-workflow tier |
-| `ui-design.md` | ui-ux-designer-subagent | Flows, wireframes, all component states, responsive + accessibility rules | UI needing design |
-| `security.md` | security-engineer-subagent | Threat model (assets, trust boundaries, STRIDE, OWASP) + numbered rules (`AUTH-01`…) with severity and provenance | Trust-boundary work, unless README says `security: not-applicable — <reason>` |
+| `ui-design.md` | tea-sdlc:ui-ux-designer-subagent | Flows, wireframes, all component states, responsive + accessibility rules | UI needing design |
+| `security.md` | tea-sdlc:security-engineer-subagent | Threat model (assets, trust boundaries, STRIDE, OWASP) + numbered rules (`AUTH-01`…) with severity and provenance | Trust-boundary work, unless README says `security: not-applicable — <reason>` |
 | `design.md` | integrating session | Design, contract delta, data-model delta, rollout, links to ADRs; RFC-style while open | New/changed contract or architecture |
 | `contracts/` | integrating session | Proposed machine-readable deltas (OpenAPI, AsyncAPI, JSON Schema, proto) | As above |
 | `measurement.md` | integrating session (`measurement-planning`) | Metrics, funnel, **analytics** event taxonomy (distinct from domain events), experiments, consent gating | Must be measurable |

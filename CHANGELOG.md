@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.1 — 2026-11-20
+
+### Fixed
+- Dispatching a plugin agent failed with `Agent type 'backend-engineer-subagent' not found`: Claude Code registers plugin agents as `tea-sdlc:<name>`, but skills, rules, references, commands and the README named them bare. Every agent reference the model reads now uses the namespaced name (`tea-sdlc:backend-engineer-subagent`, `tea-sdlc:code-reviewer`, …), including plan `owner:` examples in `references/aidlc.md`.
+- `scripts/check-setup.py` fails on a bare agent name in any bundled Markdown file or the autopilot, and accepts `tea-sdlc:<agent>` references, so the regression cannot ship again.
+
 ## 3.0.0 — 2026-11-19
 
 AIDLC: a full-workflow change now moves through **spec → plan → build → test → review → ship → promote** as a stage machine whose gates are code. Each gate checks that the evidence exists and still matches the code; none of them asks a model. No plugin compared (superpowers, addy-osmani/agent-skills, mattpocock-skills, ponytail) enforces its lifecycle in code or traces requirements to tests; this release does both.

@@ -1,6 +1,6 @@
 # Dispatch Prompt Contract
 
-**Scope:** every `Task` dispatch. Only the main session dispatches, and only in the Full workflow (implementer dispatches after the contract gate, per `rules/workflow-routing.md`); the Fast path never dispatches. Leaf subagents (backend, frontend, mobile, platform, data, UI/UX, security, QA, code-reviewer) read this shape on input and return per `rules/subagent-return-format.md`; they do not dispatch.
+**Scope:** every `Task` dispatch. Only the main session dispatches, and only in the Full workflow (implementer dispatches after the contract gate, per `rules/workflow-routing.md`); the Fast path never dispatches. Leaf subagents (backend, frontend, mobile, platform, data, UI/UX, security, QA, tea-sdlc:code-reviewer) read this shape on input and return per `rules/subagent-return-format.md`; they do not dispatch.
 
 **Detection signal:** a subagent knows it received a contract dispatch when its prompt has a return-format section (`<return_format>` tag or heading) referencing `rules/subagent-return-format.md`. Without it, the subagent answers in whatever shape fits the prompt.
 
@@ -16,7 +16,7 @@ Every **implementation dispatch** carries the nine fields below, in this order. 
 
 ```xml
 <role>
-One sentence naming who the subagent is for this task (e.g. "You are the backend-engineer-subagent implementing /login per the accepted contract").
+One sentence naming who the subagent is for this task (e.g. "You are the tea-sdlc:backend-engineer-subagent implementing /login per the accepted contract").
 </role>
 
 <context>
@@ -92,8 +92,8 @@ On `NEEDS_CONTEXT`, `BLOCKED` or a reviewer rejection: read the actual return, d
 ## Example (filled fields only)
 
 ```xml
-<role>You are the backend-engineer-subagent implementing POST /login per the accepted contract and Security rules.</role>
-<context>Security rules AUTH-01..07 (docs/specs/auth-login/security.md); contract passed the contract gate. frontend-engineer-subagent runs in parallel on the same contract.</context>
+<role>You are the tea-sdlc:backend-engineer-subagent implementing POST /login per the accepted contract and Security rules.</role>
+<context>Security rules AUTH-01..07 (docs/specs/auth-login/security.md); contract passed the contract gate. tea-sdlc:frontend-engineer-subagent runs in parallel on the same contract.</context>
 <inputs><file path="pkg/auth/login.go"/><file path="pkg/auth/login_test.go"/><contract ref="docs/specs/auth-login/contracts/auth-login.yaml"/><security_rules ref="docs/specs/auth-login/security.md"/></inputs>
 <task>Implement POST /login per the contract; validate inputs per AUTH-01..04; issue JWT per AUTH-05..07.</task>
 <exit_criteria>- `go test -cover ./pkg/auth/...` passes with ≥80% coverage

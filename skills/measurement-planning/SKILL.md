@@ -16,7 +16,7 @@ Make the feature *measurable* before it is built, and design the next experiment
 4. **Experiment validity.** Each experiment: hypothesis, variants, ONE primary metric, MDE, sample size & duration estimate, guardrail metrics, SRM check, pre-registered analysis, no peeking (sequential testing if early looks are needed), stop/ship criteria, named feature-flag/assignment dependency.
 5. **Honest funnels.** Report drop-offs truthfully; cut vanity metrics.
 
-**Ownership lines:** the requirements' value statement (`requirements.md`) is the metric of record — the North Star refines it, never overrides it. The event taxonomy is proposed here and ratified into the contract (`design.md` / `contracts/`) by the integrating session. data-engineer-subagent owns ingestion/storage of the events. Platform owns system telemetry (APM, latency, errors); this skill covers product analytics (activation, retention, funnel, referral). Analytics events are distinct from domain events in `docs/events.md`.
+**Ownership lines:** the requirements' value statement (`requirements.md`) is the metric of record — the North Star refines it, never overrides it. The event taxonomy is proposed here and ratified into the contract (`design.md` / `contracts/`) by the integrating session. tea-sdlc:data-engineer-subagent owns ingestion/storage of the events. Platform owns system telemetry (APM, latency, errors); this skill covers product analytics (activation, retention, funnel, referral). Analytics events are distinct from domain events in `docs/events.md`.
 
 **`measurement.md` contents:**
 1. North Star & funnel (activation moment, ordered stages, blind stages marked)

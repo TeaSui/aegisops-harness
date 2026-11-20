@@ -3,7 +3,7 @@
 Use this template to dispatch one task from `plan.md` (one batch from `aidlc next` = one message with one dispatch per task).
 
 Dispatch to the task's `owner` from the registry in `rules/agents.md`
-(backend-engineer-subagent, frontend-engineer-subagent, mobile-engineer-subagent, etc.); fall back to
+(tea-sdlc:backend-engineer-subagent, tea-sdlc:frontend-engineer-subagent, tea-sdlc:mobile-engineer-subagent, etc.); fall back to
 `general-purpose` only when no domain agent fits. This template satisfies
 `rules/dispatch-prompt-contract.md` via markdown headings (fields, not tags, are the contract). Adapt it to the
 selected model/effort using `references/model-guide.md`. Keep task, security and contract constraints and the

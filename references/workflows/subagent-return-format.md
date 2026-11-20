@@ -48,7 +48,7 @@ The status keyword MUST appear verbatim somewhere in the return — as a heading
 
 ## Strategic agents: persistence obligation
 
-Strategic agents (`security-engineer-subagent`, `ui-ux-designer-subagent`) MUST persist their canonical artifacts per `rules/strategic-output-persistence.md` and `references/documentation-layout.md` (which owns the per-agent destinations) AND cite those paths in evidence. Do not paste full contracts / threat models / user stories into the return — cite the persisted files.
+Strategic agents (`tea-sdlc:security-engineer-subagent`, `tea-sdlc:ui-ux-designer-subagent`) MUST persist their canonical artifacts per `rules/strategic-output-persistence.md` and `references/documentation-layout.md` (which owns the per-agent destinations) AND cite those paths in evidence. Do not paste full contracts / threat models / user stories into the return — cite the persisted files.
 
 ---
 

@@ -170,6 +170,20 @@ class PluginIntegrityTest(unittest.TestCase):
         self.assertIn('tea-sdlc:missing-command', errors)
         self.assertIn('no-such-skill', errors)
 
+    def test_bare_agent_name_fails(self):
+        # Claude Code registers plugin agents as tea-sdlc:<name>; a bare subagent_type is "not found".
+        rule = self.root / 'rules' / 'agents.md'
+        rule.write_text(rule.read_text() + '\nDispatch `backend-engineer-subagent` for the API.\n')
+        errors = ' '.join(self.check()['errors'])
+        self.assertIn('rules/agents.md', errors)
+        self.assertIn('must be named tea-sdlc:backend-engineer-subagent', errors)
+
+    def test_namespaced_agent_name_and_agent_file_paths_pass(self):
+        rule = self.root / 'rules' / 'agents.md'
+        rule.write_text(rule.read_text() + '\nDispatch `tea-sdlc:qa-subagent`; template '
+                        'skills/requesting-code-review/code-reviewer.md.\n')
+        self.assertEqual(self.check()['errors'], [])
+
     def test_hook_with_syntax_error_fails(self):
         (self.root / 'hooks' / 'broken.py').write_text('def oops(:\n')
         self.assertIn('hooks/broken.py', ' '.join(self.check()['errors']))

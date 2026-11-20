@@ -50,7 +50,7 @@ You describe the work in English; the plugin decides which skill, command and ga
 | When | What fires on its own | Hook |
 |---|---|---|
 | Session start, resume, `/clear`, compaction | Bootstrap plus a project snapshot: active specs with their plan progress and next step, a resumable `.goal/state.md`, open plans, a repository with no `docs/` yet, the superpowers plugin enabled alongside (use the tea-sdlc twin of each shared skill), a missing `gitleaks` (also shown to you, with the install command). Gate state older than 30 days is pruned | `session-start` |
-| Every prompt | Keyword router: code change → `brainstorming` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → Full workflow; domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `security-engineer-subagent`); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
+| Every prompt | Keyword router: code change → `brainstorming` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → Full workflow; domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `tea-sdlc:security-engineer-subagent`); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
 | Before the first production edit | Write a failing test first (once per session) · fix a failing external contract first | `tdd-gate.py`, `contract-gate.py` |
 | After tool calls | Three failing test runs in a row → `systematic-debugging`; `git revert` → `incident-to-eval`; a merge while a spec is `shipped` (or a pre-AIDLC spec is `accepted`) → `upgrade-service-docs` | `autopilot.py post` |
 | Before the session says “done” | Code changed since the last test run → run the tests or say why none applies (once per change set, at most 3 per session) | `autopilot.py stop` |
@@ -118,15 +118,15 @@ Agents use **family aliases**, so they always run on the latest release of that 
 
 | Agent | Responsibility | Model | Effort |
 |---|---|---|---|
-| `security-engineer-subagent` | Threat model (STRIDE, OWASP), numbered security rules before implementation | opus | high |
-| `code-reviewer` | Read-only, independent review against plan, contract and standards | opus | medium |
-| `ui-ux-designer-subagent` | Flows, wireframes, component states, accessibility specs | sonnet | medium |
-| `backend-engineer-subagent` | APIs, business logic, databases, integrations, LLM/RAG/agent features with evals | sonnet | high |
-| `frontend-engineer-subagent` | Web UI, accessibility, client performance | sonnet | high |
-| `mobile-engineer-subagent` | Flutter, iOS, Android, React Native, secure storage, offline | sonnet | high |
-| `platform-engineer-subagent` | AWS CDK/serverless, non-AWS IaC, CI/CD, containers, Kubernetes, observability | sonnet | high |
-| `data-engineer-subagent` | Data models, migrations, ETL/ELT, warehouses, data quality | sonnet | high |
-| `qa-subagent` | Final release gate (GO / NO-GO) plus live API smoke, performance, security-smoke and stress checks | sonnet | medium |
+| `tea-sdlc:security-engineer-subagent` | Threat model (STRIDE, OWASP), numbered security rules before implementation | opus | high |
+| `tea-sdlc:code-reviewer` | Read-only, independent review against plan, contract and standards | opus | medium |
+| `tea-sdlc:ui-ux-designer-subagent` | Flows, wireframes, component states, accessibility specs | sonnet | medium |
+| `tea-sdlc:backend-engineer-subagent` | APIs, business logic, databases, integrations, LLM/RAG/agent features with evals | sonnet | high |
+| `tea-sdlc:frontend-engineer-subagent` | Web UI, accessibility, client performance | sonnet | high |
+| `tea-sdlc:mobile-engineer-subagent` | Flutter, iOS, Android, React Native, secure storage, offline | sonnet | high |
+| `tea-sdlc:platform-engineer-subagent` | AWS CDK/serverless, non-AWS IaC, CI/CD, containers, Kubernetes, observability | sonnet | high |
+| `tea-sdlc:data-engineer-subagent` | Data models, migrations, ETL/ELT, warehouses, data quality | sonnet | high |
+| `tea-sdlc:qa-subagent` | Final release gate (GO / NO-GO) plus live API smoke, performance, security-smoke and stress checks | sonnet | medium |
 
 The main session dispatches every specialist as a first-level dispatch. Every dispatch follows the nine-field contract in `rules/dispatch-prompt-contract.md`, and every return carries a status, evidence paths and an exit-criteria check (`rules/subagent-return-format.md`).
 

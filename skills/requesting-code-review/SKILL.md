@@ -43,10 +43,10 @@ Formats of `review.md` and the gates: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md
 
 | Axis | Reviewer | Inputs | Checks |
 |---|---|---|---|
-| Spec | `code-reviewer` with `AXIS: spec`, or a reviewer using `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/spec-reviewer-prompt.md` in its review-stage mode | `requirements.md`, `design.md`, `contracts/`, the output of `aidlc trace <f>`, the scope | missing requirements or acceptance criteria, scope creep, behavior that contradicts design or contracts, tests that do not prove their requirement |
-| Standards | `code-reviewer` with `AXIS: standards` | `security.md`, the project's `REVIEW.md` and conventions, the scope | code quality, security rules, error handling, tests, conventions, `${CLAUDE_PLUGIN_ROOT}/references/sonar-way.md` |
+| Spec | `tea-sdlc:code-reviewer` with `AXIS: spec`, or a reviewer using `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/spec-reviewer-prompt.md` in its review-stage mode | `requirements.md`, `design.md`, `contracts/`, the output of `aidlc trace <f>`, the scope | missing requirements or acceptance criteria, scope creep, behavior that contradicts design or contracts, tests that do not prove their requirement |
+| Standards | `tea-sdlc:code-reviewer` with `AXIS: standards` | `security.md`, the project's `REVIEW.md` and conventions, the scope | code quality, security rules, error handling, tests, conventions, `${CLAUDE_PLUGIN_ROOT}/references/sonar-way.md` |
 
-Both use the template `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md` (or the spec reviewer template) and return findings as `review.md` lines: `- [ ] S1 (must): …` for Spec, `- [ ] Q1 (should): …` for Standards. In the same message, dispatch `qa-subagent` when `${CLAUDE_PLUGIN_ROOT}/rules/agents.md` places QA in this stage.
+Both use the template `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md` (or the spec reviewer template) and return findings as `review.md` lines: `- [ ] S1 (must): …` for Spec, `- [ ] Q1 (should): …` for Standards. In the same message, dispatch `tea-sdlc:qa-subagent` when `${CLAUDE_PLUGIN_ROOT}/rules/agents.md` places QA in this stage.
 
 **c. Write `review.md`** in the spec folder: frontmatter `reviewers: spec=<agent> standards=<agent>`, then `## Spec` with the Spec reviewer's lines and `## Standards` with the Standards reviewer's lines, copied as returned. Do not merge duplicates across axes, change a severity, reorder or drop a finding; a finding you disagree with is cleared with evidence, not deleted. An axis with no findings keeps its heading.
 
@@ -69,12 +69,12 @@ Then continue with `tea-sdlc:shipping`.
 
 ## 3. Fast path pass (unchanged)
 
-1. Run the built-in `code-review` skill once on the diff (no subagent). If it is unavailable, dispatch `code-reviewer` with the template and `AXIS: both`.
+1. Run the built-in `code-review` skill once on the diff (no subagent). If it is unavailable, dispatch `tea-sdlc:code-reviewer` with the template and `AXIS: both`.
 2. Fix each finding, or clear it with a one-line evidence-backed reason; a note alone does not clear it. Push back with technical reasoning when the reviewer is wrong.
 3. One diff-only re-review of the fixes, then commit and record the pass for the new `HEAD`:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/mark-pr-review.py" --reviewer <code-review|code-reviewer> --open-findings <n>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/mark-pr-review.py" --reviewer <code-review|tea-sdlc:code-reviewer> --open-findings <n>
 ```
 
 `<n>` counts findings neither fixed nor cleared, at any severity. The record is per `HEAD`; a later commit needs a new one. `gh pr create` stays blocked until it shows 0; findings still open after the re-review go to the user as explicit open items rather than another loop.
@@ -90,7 +90,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/mark-pr-review.py" --reviewer <code-revie
 - `{FIRST_ID}` — the first finding number to use (1, or the next free one on a re-review)
 - `{DESCRIPTION}` — brief summary
 
-Choose model and effort from `${CLAUDE_PLUGIN_ROOT}/references/model-guide.md` (`code-reviewer` defaults to `opus`, medium; high for a large or trust-boundary diff).
+Choose model and effort from `${CLAUDE_PLUGIN_ROOT}/references/model-guide.md` (`tea-sdlc:code-reviewer` defaults to `opus`, medium; high for a large or trust-boundary diff).
 
 ## Example (review stage)
 
@@ -98,8 +98,8 @@ Choose model and effort from `${CLAUDE_PLUGIN_ROOT}/references/model-guide.md` (
 [Spec refunds is at verified; code committed]
 
 [One message, two dispatches]
-  code-reviewer  AXIS: spec       inputs: requirements.md, design.md, contracts/, `aidlc trace refunds`
-  code-reviewer  AXIS: standards  inputs: security.md, REVIEW.md
+  tea-sdlc:code-reviewer  AXIS: spec       inputs: requirements.md, design.md, contracts/, `aidlc trace refunds`
+  tea-sdlc:code-reviewer  AXIS: standards  inputs: security.md, REVIEW.md
 
 [Returns]
   Spec:      - [ ] S1 (must): RFD-1 second criterion is not implemented at src/refunds/api.ts:41 (confidence: high)

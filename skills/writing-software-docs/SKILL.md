@@ -36,13 +36,13 @@ If a request spans several types, produce the one that fits the current need and
 
 ## Step 1.5 — Routing check (this skill formats; it does not bypass routing)
 
-This skill is a **structural layer**, not a substitute for the agent-routing model in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` and `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`. Several of these documents are canonical spec artifacts: requirements, user stories, RFC/ADR/Specification and contracts are written by the main session; threat-model analysis (`security.md`) belongs to `security-engineer-subagent` and `ui-design.md` to the UI/UX designer.
+This skill is a **structural layer**, not a substitute for the agent-routing model in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` and `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`. Several of these documents are canonical spec artifacts: requirements, user stories, RFC/ADR/Specification and contracts are written by the main session; threat-model analysis (`security.md`) belongs to `tea-sdlc:security-engineer-subagent` and `ui-design.md` to the UI/UX designer.
 
-Before drafting in the main session, check: does the document describe **trust-boundary** work (auth, payments, PII, a new endpoint/webhook, a new external integration — see the `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` checklist) and `security-engineer-subagent` has not run? If so, flag it: the security review must run before the document can be treated as accepted. You can still draft it, but say plainly that it has not had that review. Formatting a document never converts trust-boundary work into fast-path work.
+Before drafting in the main session, check: does the document describe **trust-boundary** work (auth, payments, PII, a new endpoint/webhook, a new external integration — see the `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` checklist) and `tea-sdlc:security-engineer-subagent` has not run? If so, flag it: the security review must run before the document can be treated as accepted. You can still draft it, but say plainly that it has not had that review. Formatting a document never converts trust-boundary work into fast-path work.
 
 Use artifact status labels so readers do not mistake a formatted draft for an approved contract:
 - **Working Draft** — written in the main session before required Security and contract gates have run.
-- **Security-Reviewed** — the required `security-engineer-subagent` review (and contract gate, when one applies) has run, with evidence paths cited.
+- **Security-Reviewed** — the required `tea-sdlc:security-engineer-subagent` review (and contract gate, when one applies) has run, with evidence paths cited.
 - **Approved** — explicitly accepted by the user/team after the required routing gates.
 
 For trust-boundary RFCs, ADRs, Specifications, or Concern Reports, default to **Working Draft** until the Security review and contract gate are satisfied. Add a short `Routing / Required Review` section near the top naming the missing gate, e.g. `Security review required: new endpoint + PII`.
@@ -84,7 +84,7 @@ When you do save, use `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`
 | ADR | `docs/adr/NNNN-<decision>.md` |
 | Concern Report | `docs/specs/<feature>/concern-report.md` |
 
-Do **not** write `docs/specs/<feature>/security.md` from this skill — that file is the Security agent's. A security/compatibility concern on a trust-boundary surface should route to `security-engineer-subagent`, not be authored here.
+Do **not** write `docs/specs/<feature>/security.md` from this skill — that file is the Security agent's. A security/compatibility concern on a trust-boundary surface should route to `tea-sdlc:security-engineer-subagent`, not be authored here.
 
 Do not persist a trust-boundary Working Draft as the authoritative contract unless the user explicitly asks for a draft file. When saving such a draft, include `working-draft` in the filename or first heading and keep the routing warning in the document. Do not label it `Approved` or present it as implementation-ready until the required security review (and contract gate, when one applies) has run.
 

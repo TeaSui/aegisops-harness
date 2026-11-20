@@ -217,7 +217,7 @@ def route(prompt, rules_dir):
         else:
             lines.append('Routing: no trust-boundary keyword → Fast path, unless the six-item check says otherwise.')
     if any(name == 'fintech-security' for name, _ in domains):
-        lines.append('Threat models are produced by security-engineer-subagent (Full workflow); the skill is its '
+        lines.append('Threat models are produced by tea-sdlc:security-engineer-subagent (Full workflow); the skill is its '
                      'rule catalogue, not a replacement for that dispatch.')
     if 'finishing-a-development-branch' in chain:
         lines.append(f'Before the PR: the single pass in {rules_dir}/pre-pr-review.md, recorded with '

@@ -1,6 +1,6 @@
 # SonarQube "Sonar way" — Implementation Rules
 
-Shared by every implementation agent (`backend`, `frontend`, `mobile`, `data`, `platform`). Write code that passes SonarQube's built-in **Sonar way** quality gate and quality profile on the first scan, so `code-reviewer` and CI do not bounce it.
+Shared by every implementation agent (`backend`, `frontend`, `mobile`, `data`, `platform`). Write code that passes SonarQube's built-in **Sonar way** quality gate and quality profile on the first scan, so `tea-sdlc:code-reviewer` and CI do not bounce it.
 
 **Authority order:** the project's own `sonar-project.properties`, custom quality gate/profile, `// NOSONAR` conventions and CI config override this file. Rule keys and thresholds below are illustrative names, not a complete list — the SonarQube server (or SonarLint) is the source of truth. Do not copy the profile's rule list into project docs.
 

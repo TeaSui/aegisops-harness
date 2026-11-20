@@ -37,7 +37,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" next <f> --json
 When an implementer returns, read its status, evidence and exit checks (`${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`) and confirm with `git status` that it changed only its task's files. Then, per task:
 
 1. **Spec compliance review:** `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/spec-reviewer-prompt.md`, with the task's requirements and acceptance criteria.
-2. **Quality review** once the spec review passes: `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/code-quality-reviewer-prompt.md`, dispatched to `code-reviewer`.
+2. **Quality review** once the spec review passes: `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/code-quality-reviewer-prompt.md`, dispatched to `tea-sdlc:code-reviewer`.
 3. **Fix loop**, bounded by `${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`: send verified findings back to the implementer; the re-review covers the fix diff. If findings remain after two fix rounds, re-dispatch the task fresh with the implementer one model tier up (table below) and the reviewers' findings in its context. If that attempt also fails, stop the task: split it in `plan.md` (then `aidlc check <f> --to planned`) when it is too large, or bring it to the user when the requirement itself is unclear or contradictory.
 4. **Finish the task** only through the CLI. It runs the command, and on exit 0 ticks the task in `plan.md` and logs `task-done`; on failure it changes nothing. Never tick `plan.md` by hand.
 
@@ -55,9 +55,9 @@ Defaults come from each agent's frontmatter (`${CLAUDE_PLUGIN_ROOT}/references/m
 |---|---|---|
 | Implementer (domain engineer) | `sonnet`, effort high | `opus` |
 | Implementer already on `opus` | `opus` | `fable` |
-| Spec compliance reviewer | `code-reviewer` (`opus`, medium) | effort high |
-| Quality reviewer | `code-reviewer` (`opus`, medium) | effort high |
-| QA (`qa-subagent`, review stage) | `sonnet`, medium | effort high |
+| Spec compliance reviewer | `tea-sdlc:code-reviewer` (`opus`, medium) | effort high |
+| Quality reviewer | `tea-sdlc:code-reviewer` (`opus`, medium) | effort high |
+| QA (`tea-sdlc:qa-subagent`, review stage) | `sonnet`, medium | effort high |
 
 ## 3. Decide routine questions yourself
 

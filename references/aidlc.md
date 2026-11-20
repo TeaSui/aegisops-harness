@@ -46,7 +46,7 @@ Specs without `key:` (written before AIDLC) are listed by `status` as legacy and
 | `README.md` | main session; `aidlc advance` edits `status`, `updated`, `branch` | all |
 | `requirements.md` | main session | proposed |
 | `spec-check.md` | blind spec checker (skill `spec-check`), then the main session closes each guess | proposed |
-| `security.md` | security-engineer-subagent | proposed |
+| `security.md` | tea-sdlc:security-engineer-subagent | proposed |
 | `design.md`, `contracts/` | main session | proposed |
 | `plan.md` | main session (`writing-plans`); `[x]` set only by `aidlc task-done` | planned |
 | `ledger.md` | `aidlc` only (append-only) | from accepted |
@@ -107,20 +107,20 @@ One checkbox line per task, its fields as indented bullets. Any prose may surrou
 - [ ] T1: Refund domain model and repository
   - covers: RFD-1
   - depends: none
-  - owner: backend-engineer-subagent
+  - owner: tea-sdlc:backend-engineer-subagent
   - files: src/refunds/model.ts (new), src/refunds/repo.ts (new)
   - exit: refund model tests green
   - test: npm test -- refunds/model
 - [ ] T2: POST /payments/{id}/refunds endpoint
   - covers: RFD-1
   - depends: T1
-  - owner: backend-engineer-subagent
+  - owner: tea-sdlc:backend-engineer-subagent
   - files: src/refunds/api.ts (new), src/routes.ts
   - exit: endpoint tests green; contract gate passes
 - [ ] T3: Load test for support visibility
   - covers: RFD-2
   - depends: T2
-  - owner: platform-engineer-subagent
+  - owner: tea-sdlc:platform-engineer-subagent
   - files: load/refund-visibility.js (new)
   - exit: k6 threshold passes
 ```
@@ -148,7 +148,7 @@ A **ruling** is a decision the session made instead of stopping to ask: what, wh
 ```markdown
 ---
 fingerprint: 8a01c6e95f3b…   # written by `aidlc stamp review` (in full)
-reviewers: spec=code-reviewer standards=code-reviewer
+reviewers: spec=tea-sdlc:code-reviewer standards=tea-sdlc:code-reviewer
 ---
 ## Spec
 - [x] S1 (must): RFD-1 second criterion is not implemented — fixed: src/refunds/api.ts:41, test RFD-1 "rejects over-capture"
@@ -159,7 +159,7 @@ reviewers: spec=code-reviewer standards=code-reviewer
 Verdict: GO
 ```
 
-The **Spec** axis compares the change with `requirements.md`, `design.md` and `contracts/`: missing requirements, scope creep, wrong behavior. The **Standards** axis reviews code quality, security rules and conventions. They are separate reviews and their findings are never merged or re-ranked. Severities: `must`, `should`, `nit`. Finding IDs are any capital letters plus a number; `fixed:` or `cleared:` may follow a location such as `at src/x.ts:4 (confidence: high)`. Every finding is a checkbox and stays open until `fixed:` or `cleared:`; a bullet in `## Spec` or `## Standards` that starts with a finding ID but is not a checkbox (`- S1 (must): …`, `- **Q1 (must)**: …`) fails the gate, because nothing tracks it. Other prose bullets are allowed. The **QA** section holds the qa-subagent verdict.
+The **Spec** axis compares the change with `requirements.md`, `design.md` and `contracts/`: missing requirements, scope creep, wrong behavior. The **Standards** axis reviews code quality, security rules and conventions. They are separate reviews and their findings are never merged or re-ranked. Severities: `must`, `should`, `nit`. Finding IDs are any capital letters plus a number; `fixed:` or `cleared:` may follow a location such as `at src/x.ts:4 (confidence: high)`. Every finding is a checkbox and stays open until `fixed:` or `cleared:`; a bullet in `## Spec` or `## Standards` that starts with a finding ID but is not a checkbox (`- S1 (must): …`, `- **Q1 (must)**: …`) fails the gate, because nothing tracks it. Other prose bullets are allowed. The **QA** section holds the tea-sdlc:qa-subagent verdict.
 
 ### `ship.md`
 

@@ -29,11 +29,11 @@ Frontmatter sets the normal job; a dispatcher overrides `model` only when a task
 
 | Agent | Model | Effort | Rationale | Override up when |
 |---|---|---|---|---|
-| security-engineer-subagent | opus | high | Threat modeling is a judgment call where misses are expensive and hard to spot | `fable` for novel auth/crypto/payment designs |
-| code-reviewer | opus | medium | Independent gate; review findings are judgment, not checkable output | `high` for large or trust-boundary diffs |
-| ui-ux-designer-subagent | sonnet | medium | Spec documents with explicit states and rules | — |
+| tea-sdlc:security-engineer-subagent | opus | high | Threat modeling is a judgment call where misses are expensive and hard to spot | `fable` for novel auth/crypto/payment designs |
+| tea-sdlc:code-reviewer | opus | medium | Independent gate; review findings are judgment, not checkable output | `high` for large or trust-boundary diffs |
+| tea-sdlc:ui-ux-designer-subagent | sonnet | medium | Spec documents with explicit states and rules | — |
 | backend / frontend / mobile / platform / data engineers | sonnet | high | Spec-driven coding against accepted contracts with tests to self-verify; `high` because these run in gated tiers where rework costs more than effort | `opus` for ambiguous bugs, cross-cutting refactors or when `high` still fails |
-| qa-subagent | sonnet | medium | Runs tests and checks evidence; outputs are checkable | `high` for large release scopes |
+| tea-sdlc:qa-subagent | sonnet | medium | Runs tests and checks evidence; outputs are checkable | `high` for large release scopes |
 
 ## Use in Claude Code
 
