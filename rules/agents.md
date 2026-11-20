@@ -1,33 +1,24 @@
-# Agent Delegation Rules
+# Agent delegation (full workflow only)
 
-Tiers are defined in `rules/workflow-routing.md`. The Fast path never dispatches a subagent; only the Full workflow does, and only the main session dispatches. The Full workflow follows the AIDLC stages in `references/aidlc.md`.
+Only the main session dispatches, and only in the full workflow; the fast path never dispatches.
 
-## Agent Registry
-
-- **No spec-authoring agent:** the main session writes `requirements.md`, `design.md`, `contracts/`, ADRs, `glossary.md` and `measurement.md`; the contract gate (`scripts/check-contract.py`) checks contracts.
-- **tea-sdlc:security-engineer-subagent:** first step of the Full workflow; writes `security.md`. Skip only under the escape hatch in `rules/workflow-routing.md`, which wins over any other skip list.
-- **tea-sdlc:ui-ux-designer-subagent:** before frontend work when the change needs visual design; writes `ui-design.md`.
+## Registry
+- **No spec-authoring agent:** the main session writes `requirements.md`, `design.md`, `contracts/`, ADRs, `glossary.md`, `measurement.md`; `scripts/check-contract.py` checks contracts.
+- **tea-sdlc:security-engineer-subagent:** first step; writes `security.md`. Skipped only under the full-mode escape hatch.
+- **tea-sdlc:ui-ux-designer-subagent:** before frontend work that needs visual design; writes `ui-design.md`.
 - **tea-sdlc:backend-engineer-subagent:** APIs, business logic, databases, LLM features (prompts, RAG, agent tools, evals, AI cost controls).
-- **tea-sdlc:frontend-engineer-subagent:** UI components and user experience.
-- **tea-sdlc:mobile-engineer-subagent:** Flutter/Dart, iOS, Android, React Native.
+- **tea-sdlc:frontend-engineer-subagent:** UI. **tea-sdlc:mobile-engineer-subagent:** Flutter/Dart, iOS, Android, React Native. **tea-sdlc:data-engineer-subagent:** ETL, pipelines, warehouses.
 - **tea-sdlc:platform-engineer-subagent:** AWS CDK/serverless, other IaC, CI/CD, containers, Kubernetes, observability.
-- **tea-sdlc:data-engineer-subagent:** ETL, data pipelines, warehouses.
-- **tea-sdlc:code-reviewer:** read-only; the main session dispatches it. In the build stage it reviews each task; in the review stage it runs once per axis (Spec, Standards), as two separate dispatches, and returns findings as `review.md` lines.
-- **tea-sdlc:qa-subagent:** required in the Full workflow. Runs in the review stage (spec at `verified`), in parallel with the two code reviews; it reads `plan.md` and `aidlc trace` and reports against requirement IDs, and its verdict becomes the QA line of `ship.md`. For a change whose risk is mostly in deployment, run it again before ship against the release candidate. Includes live API validation when an authorized running service is in scope.
+- **tea-sdlc:code-reviewer:** read-only. Build stage: reviews each task. Review stage: one dispatch per axis (Spec, Standards); returns `review.md` finding lines.
+- **tea-sdlc:qa-subagent:** required; review stage, parallel to the reviews; reads `plan.md` and `aidlc trace`, reports per requirement ID; verdict → `## QA`. Live API validation when an authorized service runs. Deployment-heavy risk → run again on the release candidate.
 
-Model and effort per dispatch: `references/model-guide.md`.
+## Implementer dispatch
+- One task from `plan.md`: its block, the requirement IDs it covers with their acceptance criteria, and its `files` as the only paths it may change.
+- Implementers never edit `docs/specs/**` (contracts, plan, ledger, review); a contract that looks wrong comes back as `NEEDS_CONTEXT`.
 
-## Dispatch and return
+## Planning skills order
+1. `writing-plans` writes `plan.md` after Security rules and gated contracts (tasks cite contract paths).
+2. `subagent-driven-development` runs the build stage in this session (`aidlc next` batches, `aidlc task-done`).
+3. `executing-plans` resumes a saved plan in a new session or after `/clear`/compaction, still dispatching through `subagent-driven-development`.
 
-- Prompt shape: `rules/dispatch-prompt-contract.md`. Implementers get one task from `plan.md`: its block, the requirement IDs it covers with their acceptance criteria, and its `files` as the only paths they may change.
-- Return shape and dispatcher checks: `rules/subagent-return-format.md`. Implementers also return the requirement IDs they covered and the names of the tests that prove each one; tests carry the requirement ID in their name (for example `RFD-1 rejects over-capture`) so the trace gate finds them.
-- Implementers do not edit `docs/specs/**` (contracts, plan, ledger, review): a contract that looks wrong comes back as `NEEDS_CONTEXT`.
-- Factual grounding: `rules/reduce-hallucinations.md`.
-
-## Planning Skills Ordering
-
-1. `writing-plans` writes `plan.md` (the task graph in `references/aidlc.md`), after Security rules and (for an external contract change) contracts that pass the contract gate, so tasks can cite concrete contract paths.
-2. `subagent-driven-development` runs the build stage in the current session: it dispatches each batch that `aidlc next` returns and finishes tasks with `aidlc task-done`.
-3. `executing-plans` resumes a saved plan in a new session or after `/clear` or compaction; in the Full workflow it still dispatches through `subagent-driven-development`.
-
-Do not start Full-workflow execution without a plan that passes the `planned` gate. The Fast path writes no plan.
+No full-workflow execution without a plan that passes the `planned` gate. The fast path writes no plan.

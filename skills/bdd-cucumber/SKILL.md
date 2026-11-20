@@ -8,347 +8,44 @@ description: |
   Triggers on: Cucumber, Gherkin, BDD, feature file, .feature, step definitions, scenario outline, godog.
 ---
 
-# BDD Cucumber Patterns
+# BDD Cucumber
 
-## Gherkin Writing Rules
+## Gherkin rules
 
-### 1. Business language, not implementation details
+- Business language and declarative steps: no endpoints, status codes, JSON, DB ids or UI clicks in steps.
+- One behaviour per scenario: exactly one When; at most two `And` under Then; split scenarios over ~10 steps.
+- Background when 3+ scenarios share Givens. Scenario Outline only with 2+ example rows.
+- Scenarios are independent: reset state in a `Before` hook.
+- Feature header names the spec: `# See: docs/specs/<feature>/requirements.md`.
 
-```gherkin
-# WRONG — implementation details
-Scenario: Create order via POST endpoint
-  Given the database has a product with id 1 and price 100.00
-  When I send a POST request to /api/orders with JSON body {"productId": 1, "quantity": 2}
-  Then the response status code is 201
-  And the response body contains "orderId"
+## Tags
 
-# RIGHT — business behavior
-Scenario: Customer places an order
-  Given a product "Widget" is available at $100.00
-  When the customer orders 2 units of "Widget"
-  Then the order is created with total $200.00
-  And the customer receives an order confirmation
-```
+| Tag | Meaning |
+|---|---|
+| `@P0` | Critical path; must pass before any deployment |
+| `@P1` | Must pass before release |
+| `@P2` | Edge cases; non-blocking |
+| `@wip` | Excluded from CI |
+| `@slow` | Nightly only |
+| `@<domain>` | Feature filter |
+| `@<KEY>-<n>` | Requirement this scenario covers, from `docs/specs/<feature>/requirements.md` (e.g. `@RFD-1`); the exact upper-case token counts as spec traceability |
 
-### 2. One behavior per scenario
-Each scenario tests ONE business rule. If you need "And" more than twice in Then, you're testing multiple things.
+Tag from the first commit.
 
-### 3. Given-When-Then structure
-- **Given** = precondition (system state before action)
-- **When** = action (exactly ONE action per scenario)
-- **Then** = observable outcome (verify from user's perspective)
+## Java (Cucumber-JVM)
 
-### 4. Declarative over imperative
-```gherkin
-# WRONG — imperative (how)
-Given I navigate to the login page
-And I enter "user@test.com" in the email field
-And I enter "password123" in the password field
-And I click the login button
+- Versions via `io.cucumber:cucumber-bom` (checked 2026-11; verify against the project): 8.x targets JUnit 6 / Spring Boot 4; on JUnit 5 / Spring Boot 3 use 7.34.9. Modules: `cucumber-java`, `cucumber-spring`, `cucumber-junit-platform-engine`, plus `junit-platform-suite` from the JUnit/Spring BOM.
+- Runner: JUnit Platform `@Suite @IncludeEngines("cucumber") @SelectClasspathResource("features")` with `GLUE_PROPERTY_NAME`; report plugin `pretty,html:build/reports/cucumber.html`.
+- One `@CucumberContextConfiguration` + `@SpringBootTest(RANDOM_PORT)` + `@ActiveProfiles("test")` class for all glue.
+- Money parameters `{bigdecimal}`, compared with `isEqualByComparingTo`; never `{double}`/`{float}`.
+- `@Before` truncates test tables (`TRUNCATE … RESTART IDENTITY CASCADE`); `@After` attaches the last response on failure.
 
-# RIGHT — declarative (what)
-Given I am logged in as "user@test.com"
-```
+## Go (godog)
 
-## Feature File Structure
+- `godog.TestSuite` with `TestingT: t`, `Paths: ["features"]`; fail the test on non-zero status. `ctx.Before` resets per-scenario state.
+- Money: capture as string, parse with `shopspring/decimal` (or int64 minor units), compare with `.Equal`; never `float64`.
+- Steps return wrapped errors including status and body on mismatch.
 
-```gherkin
-@orders @regression
-Feature: Order Management
-  As a customer
-  I want to place orders for products
-  So that I can purchase items I need
+## Step definitions
 
-  # Link to acceptance criteria from the spec
-  # See: docs/specs/order-management/requirements.md
-
-  Background:
-    Given the product catalog contains:
-      | name   | price  | stock |
-      | Widget | 100.00 | 50    |
-      | Gadget | 250.00 | 10    |
-
-  @happy-path @P0
-  Scenario: Customer places a simple order
-    When the customer orders 2 units of "Widget"
-    Then the order is created with total $200.00
-    And the product "Widget" stock is reduced to 48
-
-  @validation @P1
-  Scenario: Order rejected when product out of stock
-    Given the product "Gadget" has 0 stock
-    When the customer orders 1 unit of "Gadget"
-    Then the order is rejected with reason "insufficient stock"
-
-  @P1
-  Scenario Outline: Order total calculated with quantity
-    When the customer orders <quantity> units of "<product>"
-    Then the order is created with total $<total>
-
-    Examples:
-      | product | quantity | total  |
-      | Widget  | 1        | 100.00 |
-      | Widget  | 5        | 500.00 |
-      | Gadget  | 2        | 500.00 |
-```
-
-### Tagging Strategy
-| Tag | Purpose |
-|-----|---------|
-| `@P0` | Critical path — must pass before any deployment |
-| `@P1` | Important — must pass before release |
-| `@P2` | Edge cases — should pass, non-blocking |
-| `@wip` | Work in progress — excluded from CI |
-| `@slow` | Long-running — may run only nightly |
-| Feature tags (`@orders`) | Filter by domain |
-
-## Data Tables
-
-```gherkin
-# List of items
-Given the following products exist:
-  | name   | price  | category    |
-  | Widget | 100.00 | electronics |
-  | Gadget | 250.00 | electronics |
-
-# Key-value pairs (single column = field/value)
-Given an order with details:
-  | field    | value      |
-  | customer | John Doe   |
-  | product  | Widget     |
-  | quantity | 3          |
-```
-
-## Step Definitions — Java (Cucumber-JVM)
-
-### Setup (build.gradle)
-```groovy
-dependencies {
-    // Pin one version via the BOM (checked on Maven Central 2026-11; verify against the project).
-    // Cucumber 8.x targets JUnit 6 (Spring Boot 4); on JUnit 5 / Spring Boot 3 use 7.34.9.
-    testImplementation platform('io.cucumber:cucumber-bom:8.1.0')
-    testImplementation 'io.cucumber:cucumber-java'
-    testImplementation 'io.cucumber:cucumber-spring'
-    testImplementation 'io.cucumber:cucumber-junit-platform-engine'
-    testImplementation 'org.junit.platform:junit-platform-suite' // version from the JUnit/Spring Boot BOM
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
-    systemProperty 'cucumber.plugin', 'pretty,html:build/reports/cucumber.html'
-}
-```
-
-```java
-// src/test/java/com/example/RunCucumberTest.java — JUnit Platform suite runner (works on any
-// Gradle/Maven; recent Gradle can also run features directly via testDefinitionDirs)
-import org.junit.platform.suite.api.*;
-import static io.cucumber.junit.platform.engine.Constants.GLUE_PROPERTY_NAME;
-
-@Suite
-@IncludeEngines("cucumber")
-@SelectClasspathResource("features") // src/test/resources/features
-@ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.example.steps")
-public class RunCucumberTest {}
-```
-
-### Spring Integration
-```java
-// CucumberSpringConfig.java — one config class, shared across all step defs
-@CucumberContextConfiguration
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
-public class CucumberSpringConfig {
-    // Spring context boots once, reused across all scenarios
-}
-```
-
-### Step Definition Patterns
-```java
-public class OrderSteps {
-
-    @Autowired private TestRestTemplate restTemplate;
-    @Autowired private ProductRepository productRepository;
-
-    // Shared state within a scenario — use a scenario-scoped holder
-    private ResponseEntity<OrderResponse> lastResponse;
-
-    // Money: {bigdecimal}, never {double}/{float}
-    @Given("a product {string} is available at ${bigdecimal}")
-    public void productAvailable(String name, BigDecimal price) {
-        productRepository.save(new Product(name, price, 100));
-    }
-
-    @Given("the product catalog contains:")
-    public void productCatalogContains(DataTable table) {
-        table.asMaps().forEach(row -> {
-            productRepository.save(new Product(
-                row.get("name"),
-                new BigDecimal(row.get("price")),
-                Integer.parseInt(row.get("stock"))
-            ));
-        });
-    }
-
-    @When("the customer orders {int} units of {string}")
-    public void customerOrders(int quantity, String productName) {
-        var request = new CreateOrderRequest(productName, quantity);
-        lastResponse = restTemplate.postForEntity("/api/orders", request, OrderResponse.class);
-    }
-
-    @Then("the order is created with total ${bigdecimal}")
-    public void orderCreatedWithTotal(BigDecimal expectedTotal) {
-        assertThat(lastResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(lastResponse.getBody().getTotal())
-            .isEqualByComparingTo(expectedTotal);
-    }
-
-    @Then("the order is rejected with reason {string}")
-    public void orderRejectedWithReason(String reason) {
-        assertThat(lastResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(lastResponse.getBody().getError().getMessage()).contains(reason);
-    }
-}
-```
-
-### Hooks (Java)
-```java
-public class ScenarioHooks {
-
-    @Autowired private JdbcTemplate jdbcTemplate;
-
-    @Before
-    public void cleanDatabase() {
-        // Clean test data before each scenario — use TRUNCATE for speed
-        jdbcTemplate.execute("TRUNCATE TABLE orders, products RESTART IDENTITY CASCADE");
-    }
-
-    @After
-    public void captureFailure(Scenario scenario) {
-        if (scenario.isFailed()) {
-            // Attach diagnostic info to report
-            scenario.attach(getLastResponseBody(), "application/json", "API Response");
-        }
-    }
-
-    @Before("@slow")
-    public void setExtendedTimeout() {
-        // Tag-specific hooks
-    }
-}
-```
-
-## Step Definitions — Go (godog)
-
-### Setup
-```go
-// features/order_test.go
-func TestFeatures(t *testing.T) {
-    suite := godog.TestSuite{
-        ScenarioInitializer: InitializeScenario,
-        Options: &godog.Options{
-            Format:   "pretty",
-            Paths:    []string{"features"},
-            TestingT: t,
-        },
-    }
-    if suite.Run() != 0 {
-        t.Fatal("non-zero status returned")
-    }
-}
-
-func InitializeScenario(ctx *godog.ScenarioContext) {
-    steps := &OrderSteps{}
-
-    ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
-        steps.reset()
-        return ctx, nil
-    })
-
-    ctx.Step(`^a product "([^"]*)" is available at \$(\d+\.\d{2})$`, steps.productAvailable) // amount captured as string
-    ctx.Step(`^the customer orders (\d+) units of "([^"]*)"$`, steps.customerOrders)
-    ctx.Step(`^the order is created with total \$(\d+\.\d{2})$`, steps.orderCreatedWithTotal)
-}
-```
-
-### Step Definition Pattern (Go)
-```go
-type OrderSteps struct {
-    server   *httptest.Server
-    response *http.Response
-    body     []byte
-}
-
-func (s *OrderSteps) reset() {
-    s.response = nil
-    s.body = nil
-}
-
-// Money: github.com/shopspring/decimal (or int64 minor units), never float64
-func (s *OrderSteps) productAvailable(name, priceText string) error {
-    price, err := decimal.NewFromString(priceText)
-    if err != nil {
-        return err
-    }
-    _, err = s.db.Exec("INSERT INTO products (name, price, stock) VALUES ($1, $2, 100)", name, price.String())
-    return err
-}
-
-func (s *OrderSteps) customerOrders(quantity int, product string) error {
-    reqBody, _ := json.Marshal(map[string]any{"product": product, "quantity": quantity})
-    resp, err := http.Post(s.server.URL+"/api/orders", "application/json", bytes.NewReader(reqBody))
-    if err != nil {
-        return fmt.Errorf("POST /api/orders: %w", err)
-    }
-    s.response = resp
-    s.body, _ = io.ReadAll(resp.Body)
-    return nil
-}
-
-func (s *OrderSteps) orderCreatedWithTotal(expectedText string) error {
-    expectedTotal := decimal.RequireFromString(expectedText)
-    if s.response.StatusCode != http.StatusCreated {
-        return fmt.Errorf("expected 201, got %d: %s", s.response.StatusCode, s.body)
-    }
-    var result struct{ Data struct{ Total decimal.Decimal } } // accepts JSON string or number
-    if err := json.Unmarshal(s.body, &result); err != nil {
-        return err
-    }
-    if !result.Data.Total.Equal(expectedTotal) {
-        return fmt.Errorf("expected total %s, got %s", expectedTotal, result.Data.Total)
-    }
-    return nil
-}
-```
-
-## Linking to Acceptance Criteria
-
-When specs exist in `docs/specs/<feature>/requirements.md`, map scenarios directly:
-
-```gherkin
-# AC-1: Customer can place an order for available products
-# AC-2: Order is rejected when product is out of stock
-# AC-3: Order total is calculated as sum of (price x quantity) per line item
-
-@AC-1
-Scenario: Customer places an order for available product
-  ...
-
-@AC-2
-Scenario: Order rejected for out-of-stock product
-  ...
-
-@AC-3
-Scenario Outline: Order total calculation
-  ...
-```
-
-## Common Mistakes
-
-1. **Testing implementation, not behavior** — "When I call POST /api/orders" vs "When the customer places an order."
-2. **Too many steps per scenario** — if a scenario has 10+ steps, it's testing too many things. Split it.
-3. **Shared mutable state across scenarios** — each scenario must be independent. Use `@Before` hooks to reset state.
-4. **Step definitions with logic** — steps should delegate to helper methods or service calls. The step is glue, not implementation.
-5. **Missing Background** — if 3+ scenarios share the same Given steps, use Background to reduce duplication.
-6. **No tags** — without tags you can't run subsets (P0 only, by domain, skip @wip). Tag from day one.
-7. **Scenario Outline with one example** — if there's only one example, use a plain Scenario. Outlines are for parameterized cases.
+Glue only: delegate to helpers/clients, no business logic. Scenario state lives in a per-scenario holder, never shared statics.

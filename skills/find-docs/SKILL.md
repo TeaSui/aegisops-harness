@@ -3,58 +3,12 @@ name: find-docs
 description: Use when an answer or code you are about to write depends on a library, framework, SDK, CLI or cloud-service detail not verified for the project's version (syntax, flags, config keys, support for a feature, migration), or the user asks for the source — looks it up via Context7 or official/installed docs and cites it.
 ---
 
-# Documentation Lookup
+# Documentation lookup
 
-Follow `${CLAUDE_PLUGIN_ROOT}/rules/context7.md` and `${CLAUDE_PLUGIN_ROOT}/rules/reduce-hallucinations.md`. Verify load-bearing syntax, flags, configuration and version-specific behavior against applicable primary sources. Ordinary code reading/refactoring does not require a network lookup when the relevant behavior is established by local source.
+Ordinary code reading needs no lookup when local source settles the behaviour.
 
-## 1. Identify the question and version
-
-- Read manifests, lockfiles, installed help or project constraints to identify the version actually in use. Do not silently substitute the latest release for the project's version.
-- Form a specific query for one concept. Split unrelated concepts; combine them when the interaction is the actual question.
-- Keep external queries generic. Never send credentials, API keys, PII, proprietary code or request/message payloads.
-- Reuse already inspected documentation while it remains applicable to the same version and question. Recheck after relevant version changes or when uncertainty arises.
-
-## 2. Choose an available source
-
-Prefer configured Context7 tools when available. Current official documentation, installed CLI help and local package/source code are valid alternatives when they answer the question or Context7 is unavailable. Do not invent a tool call, returned ID or documentation result.
-
-A Context7 CLI is an optional fallback only when already installed/configured and suitable. Inspect that installed version's help for its actual commands/flags. Do not invoke a package downloader, use `@latest`, install globally or run a login flow merely for a routine lookup. Dependency/auth changes require their own authorized scope; they are not prerequisites to consulting official docs.
-
-## 3. Resolve the library (Context7 route)
-
-Use the available resolver (`resolve-library-id` when exposed by the configured tool) before querying unless a valid, applicable ID is already known from inspected evidence or supplied by the user. Provide the library name and a focused query.
-
-Select a result using:
-
-- Exact package/product identity and description relevance
-- Primary/official source rather than a similarly named fork
-- Documentation coverage and source reputation
-- Available versions matching the required project version
-
-An ID has a form such as `/org/project` or a version-specific identifier returned by the resolver. Never invent a version suffix. If the exact version is not indexed, use version-matched official docs or local source; label any compatibility inference explicitly.
-
-If results are ambiguous, inspect the project context first. Ask only when the ambiguity materially changes the answer; continue independent work while clarification is pending.
-
-## 4. Query and inspect
-
-Use the available documentation query tool (`query-docs` when exposed), passing the resolved ID and focused question. One resolution can support several related queries.
-
-| Useful query | Too vague/broad |
-|---|---|
-| React effect cleanup for an asynchronous operation | hooks |
-| The installed CLI's file-selection flag | test |
-| Transaction isolation options for the project's database adapter version | database and auth and caching |
-
-Limit repeated attempts: after about three unproductive queries, change source or refine the question rather than repeating the same lookup. Read the relevant result in context; snippets can omit version constraints or prerequisites.
-
-## 5. Answer with evidence
-
-- Cite the official source link or installed help/source location and relevant version.
-- Distinguish documented facts, local behavior and compatibility inferences.
-- Use examples only for the applicable version; state any unexecuted example's validation limits.
-- If Context7 is unavailable, quota-limited or missing the package, use official docs, installed help or local source. Briefly disclose the substitution when it matters to confidence.
-- If no adequate source can establish a load-bearing fact, say what is unknown and what would resolve it. Training recollection may help form a search query; it must not masquerade as verified current documentation.
-
-## Authentication and errors
-
-Use the existing configured connection. Do not request or print API keys, dump environment/config values or initiate login automatically. A quota error does not require a new account or payment: choose an available primary/local source first. Report a source failure accurately without exposing confidential response content.
+1. **Version.** Read manifests, lockfiles or installed help for the version in use; never substitute the latest.
+2. **Query.** One concept per query (combine only when the interaction is the question). Never send credentials, PII, proprietary code or payloads.
+3. **Source.** Configured Context7 tools first: `resolve-library-id` (skip if an ID is already known), pick the official, version-matching library, then `query-docs` with the ID. Never invent an ID or version suffix. Alternatives: official docs, installed CLI help, local package source. An installed Context7 CLI is usable only after reading its `--help`; never `npx`/`@latest`, global installs or login flows for a lookup. Quota or missing package → switch source, do not create accounts.
+4. **Limit.** After ~3 unproductive queries change source or question.
+5. **Answer.** Cite the link or local path and version; separate documented fact, local behaviour and inference. No adequate source → say what is unknown and what would settle it. Recall may shape a query, never stand in for a citation. Never print keys or config values.

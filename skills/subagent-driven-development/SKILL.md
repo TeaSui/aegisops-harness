@@ -5,86 +5,67 @@ description: Use in the full workflow once the spec is `planned` (plan.md passes
 
 # Build stage: execute the plan with specialists
 
-Stage machine, gates and artifact formats: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`. Below, `aidlc <command>` is short for `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" <command>`, and `<f>` is the spec folder or its slug. You run every command yourself; the user never types one.
+`aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`, `<f>` = spec folder or slug; you run every command. Formats: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 `plan.md` and §2 `ledger.md`. Never claim a dispatch or review that did not happen. Templates in this folder use plugin-relative paths; expand them to absolute paths in each dispatch.
 
-Use the Agent tool the runtime provides; never claim a dispatch or an independent review happened when it did not. The templates' `rules/…`, `references/…` and `skills/…` paths are relative to `${CLAUDE_PLUGIN_ROOT}`; expand them to absolute paths in each dispatch.
+## 1. Enter
 
-## 1. Enter the build stage
+1. `aidlc status`: spec at `planned`, `building` gate passing; otherwise run the missing stage first (`tea-sdlc:writing-plans`).
+2. On a feature branch, not the default (`git switch -c feat/<slug>` if needed; no need to ask).
+3. `aidlc advance <f> building`.
 
-1. `aidlc status` shows the spec at `planned` with its `building` gate passing. If not, run the stage that is missing first (`tea-sdlc:writing-plans` for the plan).
-2. Be on a feature branch, not the default branch (`git switch -c feat/<slug>` when needed; a routine choice, no need to ask).
-3. Advance:
+## 2. Batch loop
 
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> building
-```
+Until `aidlc next <f> --json` returns no task, dispatch the whole batch in ONE message, one Agent call per task (tasks in a batch share no file):
 
-## 2. The batch loop
+- **Agent:** the task's `owner` (`tea-sdlc:<agent>`); `owner: main` → do it yourself.
+- **Prompt:** `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/implementer-prompt.md` with the task block verbatim, the covered requirement IDs with their acceptance criteria copied from `requirements.md`, paths of `design.md`, `contracts/`, `security.md`, the matching rulings from `ledger.md`, and the exit test command (the task's `exit:` turned into a command, e.g. `npm test -- refunds/model`).
+- Owned paths = the task's `files`. Tests are named with the requirement ID they prove (`RFD-1 rejects over-capture`) so the gate and `aidlc trace` find them.
 
-Repeat until `aidlc next <f>` returns no task:
+When an implementer returns, read its status, evidence and exit checks, and confirm with `git status` it changed only its files. Then per task:
 
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" next <f> --json
-```
-
-**Dispatch the whole batch in one message**, one Agent call per task (`tea-sdlc:dispatching-parallel-agents` for the mechanics). Tasks in one batch share no file, so they run concurrently. Per task:
-
-- **Agent:** the task's `owner` from `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`; `owner: main` means you do the task yourself in this session.
-- **Prompt:** `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/implementer-prompt.md`, filled with the task block from `plan.md` verbatim, the requirement IDs it covers with their acceptance criteria copied from `requirements.md`, the paths of `design.md`, `contracts/` and `security.md`, and the exit test command (translate the task's `exit:` into the command that proves it, for example `npm test -- refunds/model`).
-- **Ownership:** the task's `files` are the only paths it may change. Tell the implementer others work in the same checkout at the same time.
-- **Test names:** each test carries the requirement ID it proves, for example `RFD-1 rejects over-capture`, so the `verified` gate and `aidlc trace` find it.
-
-When an implementer returns, read its status, evidence and exit checks (`${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`) and confirm with `git status` that it changed only its task's files. Then, per task:
-
-1. **Spec compliance review:** `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/spec-reviewer-prompt.md`, with the task's requirements and acceptance criteria.
-2. **Quality review** once the spec review passes: `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/code-quality-reviewer-prompt.md`, dispatched to `tea-sdlc:code-reviewer`.
-3. **Fix loop**, bounded by `${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`: send verified findings back to the implementer; the re-review covers the fix diff. If findings remain after two fix rounds, re-dispatch the task fresh with the implementer one model tier up (table below) and the reviewers' findings in its context. If that attempt also fails, stop the task: split it in `plan.md` (then `aidlc check <f> --to planned`) when it is too large, or bring it to the user when the requirement itself is unclear or contradictory.
-4. **Finish the task** only through the CLI. It runs the command, and on exit 0 ticks the task in `plan.md` and logs `task-done`; on failure it changes nothing. Never tick `plan.md` by hand.
+1. **Spec compliance:** `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/spec-reviewer-prompt.md` with the task's requirements.
+2. **Quality**, after spec passes: `${CLAUDE_PLUGIN_ROOT}/skills/subagent-driven-development/code-quality-reviewer-prompt.md` to `tea-sdlc:code-reviewer`.
+3. **Fix loop:** verified findings go back to the implementer; each re-review covers only the fix diff. Max 2 fix rounds per review, max 4 review iterations per task in total. Still failing after 2 rounds → re-dispatch the task once, fresh, one model tier up (table), with the findings and failed approaches. That fails too → stop the task: split it in `plan.md` and rerun `aidlc check <f> --to planned` when it is too big, or take it to the user when the requirement is unclear or contradictory.
+4. **Finish only through the CLI** (runs the command; on exit 0 ticks `plan.md` and logs `task-done`; on failure changes nothing). Never tick by hand:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" task-done <f> T<n> --cmd "<the task's exit test command>"
 ```
 
-Commit after each batch converges (implementers do not commit; parallel commits race on the index). Then ask `aidlc next` for the following batch.
+Commit after each batch converges (implementers never commit; parallel commits race on the index), then the next `aidlc next`.
 
-### Models per role
-
-Defaults come from each agent's frontmatter (`${CLAUDE_PLUGIN_ROOT}/references/model-guide.md`). Override with the Agent call's `model` only when the task differs from the normal job.
-
-| Role | Default | Third attempt (after two failed fix rounds) |
+| Role | Default | After 2 failed fix rounds |
 |---|---|---|
-| Implementer (domain engineer) | `sonnet`, effort high | `opus` |
+| Implementer (domain engineer) | `sonnet`, high | `opus` |
 | Implementer already on `opus` | `opus` | `fable` |
-| Spec compliance reviewer | `tea-sdlc:code-reviewer` (`opus`, medium) | effort high |
-| Quality reviewer | `tea-sdlc:code-reviewer` (`opus`, medium) | effort high |
-| QA (`tea-sdlc:qa-subagent`, review stage) | `sonnet`, medium | effort high |
+| Spec and quality reviewer (`tea-sdlc:code-reviewer`) | `sonnet`, medium | effort high |
+| `tea-sdlc:qa-subagent` (review stage) | `sonnet`, medium | effort high |
+
+Override with the Agent call's `model` only when the task differs from the agent's normal job.
 
 ## 3. Decide routine questions yourself
 
-When an implementer returns `NEEDS_CONTEXT`, or you meet an ambiguity, answer it from the spec, design, contracts and existing code. When they leave a routine choice open (naming, which existing pattern or library to follow, an error message, test data, an order of operations that no requirement fixes), decide it, record it and continue:
+`NEEDS_CONTEXT` or an ambiguity → answer from spec, design, contracts and code. A routine choice no requirement fixes (naming, which pattern or library, an error message, test data, an order of operations) → decide, record, continue:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" ruling <f> --task T<n> \
-  --decision "<what you decided>" --why "<the evidence>" --if-wrong "<the cost and how to reverse it>"
+  --decision "<what>" --why "<evidence>" --if-wrong "<cost and how to reverse>"
 ```
 
-Ask the user only for decisions that are theirs: changing a requirement or acceptance criterion, accepting a security risk, a new vendor or paid dependency, a scope change, or anything irreversible in production. List every ruling of the run in your final report.
+Ask the user only for: changing a requirement or acceptance criterion, accepting a security risk, a new vendor or paid dependency, a scope change, anything irreversible in production. List every ruling in the final report.
 
 ## 4. Verify and advance
 
-When no task is left, bump the release version if the project keeps one in a manifest (`package.json`, `pyproject.toml`, `plugin.json`, a `VERSION` file; semver from the change, see tea-sdlc:shipping §3). The version is part of what you test: a manifest change after `verify` invalidates the evidence. Skip it when release tooling owns the version. Then run the whole suite through the CLI. Pass `--junit` when the runner can write JUnit XML (it lets the gate see which requirement tests failed); omit it otherwise.
+1. No task left → bump the release version if a manifest holds it (`package.json`, `pyproject.toml`, `plugin.json`, `VERSION`; semver from the change; skip when release tooling owns it). Do it now: a manifest change after `verify` invalidates the evidence.
+2. Run the full suite through the CLI (`--junit` when the runner writes JUnit XML, so the gate sees failing requirement tests), then advance:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full test suite>" --junit "<junit glob>"
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> verified
 ```
 
-If the gate fails, `aidlc check <f> --to verified` lists why: an unticked task, a `Verify: test` requirement no test references, a failing requirement test, or code changed after the `verify` run (the fingerprint differs; run `verify` again). Fix it, dispatching to the owning agent when the fix is code, and retry.
+3. Gate fails → `aidlc check <f> --to verified` names it (unticked task, `Verify: test` requirement no test references, failing requirement test, code changed after `verify`). Fix (code fixes go to the owning agent) and retry.
 
-Then continue with the review stage yourself: `tea-sdlc:requesting-code-review`, then `tea-sdlc:shipping`.
+Then the review stage: `tea-sdlc:requesting-code-review`, then `tea-sdlc:shipping`.
 
-## Boundaries
-
-- Use an isolated checkout only when needed and supported. Preserve user changes; do not initialize a repository or commit generated files the user did not authorize.
-- Missing runtime or independent gates are reported as concerns or blockers; static inspection does not replace them.
-- Report the outcome, evidence (gate output, ledger events), the rulings made and the next stage.
+Use an isolated checkout only when needed and supported; preserve user changes; never init a repository or commit generated files unasked. Missing runtime or gates are reported as concerns or blockers, not replaced by static inspection. Report outcome, gate output and ledger events, rulings, next stage.

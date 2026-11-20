@@ -10,429 +10,61 @@ description: |
   PII masking in the browser, transaction display.
 ---
 
-# React / Next.js Patterns (Fintech)
+# React / Next.js (Fintech)
 
-## Assumed Stack
-- **Framework:** Next.js 14+ (App Router) or React 18+ SPA
-- **State:** TanStack Query (server state) + Zustand (client state)
-- **Forms:** React Hook Form + Zod validation
-- **Styling:** Tailwind CSS (or CSS Modules)
-- **Testing:** Vitest + Testing Library
-- **HTTP:** fetch (Next.js) or Axios with interceptors
+## Stack (adapt if the project differs; fintech rules still apply)
 
-If project uses a different framework (Vue, Angular), adapt patterns — the fintech domain patterns still apply.
+Next.js 14+ App Router or React 18+ SPA · TanStack Query (server state) · Zustand (UI state only) · React Hook Form + Zod · Tailwind or CSS Modules · Vitest + Testing Library + MSW · fetch or Axios with interceptors.
 
-## Project Structure (Next.js App Router)
+Layout: `app/(auth)/…` and `app/(public)/…` route groups; `components/{ui,forms,data-display,layout}`; `lib/{api,auth,validation,utils}`; `stores/`; `hooks/`; `types/`.
 
-```
-src/
-├── app/                          # Next.js App Router pages
-│   ├── (auth)/                   # Auth-required layout group
-│   │   ├── dashboard/
-│   │   ├── transactions/
-│   │   └── kyc/
-│   ├── (public)/                 # Public layout group
-│   │   ├── login/
-│   │   └── register/
-│   └── layout.tsx
-├── components/
-│   ├── ui/                       # Primitive UI components (Button, Input, Card)
-│   ├── forms/                    # Form components (KycForm, TransferForm)
-│   ├── data-display/             # Tables, charts, account cards
-│   └── layout/                   # Header, Sidebar, Navigation
-├── hooks/                        # Custom hooks
-├── lib/
-│   ├── api/                      # API client, interceptors, types
-│   ├── auth/                     # Auth context, token management
-│   ├── validation/               # Zod schemas (shared with forms)
-│   └── utils/                    # Formatters, masking, helpers
-├── stores/                       # Zustand stores
-└── types/                        # Shared TypeScript types
-```
+## State
 
-## State Management
+- Server data only in TanStack Query; never mirrored in Zustand. Transactions `staleTime` 30 s, `placeholderData: keepPreviousData` for pagination.
+- Transfer mutation: on success invalidate `['transactions']` and `['balance']`.
+- Every fetch has a loading skeleton and an error boundary. Paginate lists (cursor or offset); never fetch all transactions.
 
-### Server State (TanStack Query)
-```typescript
-// hooks/useTransactions.ts
-export function useTransactions(accountId: string, page: number) {
-  return useQuery({
-    queryKey: ['transactions', accountId, page],
-    queryFn: () => api.getTransactions(accountId, page),
-    staleTime: 30_000,        // 30s — transactions update frequently
-    placeholderData: keepPreviousData, // smooth pagination
-  });
-}
+## Forms
 
-// Mutation with optimistic update
-export function useTransfer() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: api.createTransfer,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['balance'] });
-    },
-  });
-}
-```
+- Zod schema in `lib/validation`, shared with the form via `zodResolver`. Numeric inputs register with `valueAsNumber` (or `z.coerce.number()`).
+- Transfer: account `^\d{10,16}$`; amount positive, max 50,000 single-transfer limit, decimal step derived from the currency's ISO 4217 exponent (not a fixed 0.01); currency `SGD | USD | MYR` (default SGD); reference ≤ 140 chars.
+- Map API error codes to field errors (`INSUFFICIENT_FUNDS` → `amount`). Client validation is UX only; the server validates too.
 
-### Client State (Zustand) — only for UI state
-```typescript
-// stores/useAppStore.ts
-interface AppState {
-  sidebarOpen: boolean;
-  toggleSidebar: () => void;
-}
+## Money display
 
-export const useAppStore = create<AppState>((set) => ({
-  sidebarOpen: true,
-  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-}));
-```
+API amounts are integer minor units. Scale by the ISO 4217 exponent (`Intl.NumberFormat(...).resolvedOptions().maximumFractionDigits`: VND/KRW 0, SGD/USD 2, KWD/BHD 3), never a fixed 100. Cache `Intl.NumberFormat` per locale+currency. Default locale `en-SG`.
 
-**Rule:** Server data in TanStack Query, UI-only state in Zustand. Never duplicate server state in Zustand.
+## PII
 
-## Form Handling (React Hook Form + Zod)
+- Masked by default; reveal only on explicit user action (button with `aria-pressed`); log reveal events for audit.
+- Masks: account `****5678` (all but last 4), email `us***@domain`, phone `+65****1234`, NRIC/FIN `****567A`.
 
-### Validation Schema Pattern
-```typescript
-// lib/validation/transfer.ts
-import { z } from 'zod';
+## KYC
 
-export const transferSchema = z.object({
-  recipientAccount: z.string()
-    .min(1, 'Account number required')
-    .regex(/^\d{10,16}$/, 'Invalid account number'),
-  // HTML inputs yield strings: register with { valueAsNumber: true } (below) or use z.coerce.number().
-  // 0.01 holds because every currency in the enum has ISO 4217 exponent 2; derive the step from
-  // currencyExponent() when adding VND/KRW (0) or KWD/BHD (3).
-  amount: z.number()
-    .positive('Amount must be positive')
-    .multipleOf(0.01, 'Max 2 decimal places')
-    .max(50000, 'Exceeds single transfer limit'),
-  currency: z.enum(['SGD', 'USD', 'MYR']),
-  reference: z.string().max(140).optional(),
-});
+- Multi-step wizard (personal → identity → document → review); short-circuit when status is `APPROVED`.
+- Documents upload directly to S3 via pre-signed URL from the backend, then confirm to the backend; no document bytes through our servers.
+- Client-side: ≤ 10 MB, JPEG/PNG/PDF only (MIME check), no client OCR, `URL.revokeObjectURL` after upload.
 
-export type TransferInput = z.infer<typeof transferSchema>;
-```
+## API client
 
-### Form Component Pattern
-```typescript
-// components/forms/TransferForm.tsx
-export function TransferForm({ onSuccess }: { onSuccess: () => void }) {
-  const form = useForm<TransferInput>({
-    resolver: zodResolver(transferSchema),
-    defaultValues: { currency: 'SGD' },
-  });
-  const transfer = useTransfer();
+- Base URL from env; unwrap the `{ data, meta }` envelope; errors as `ApiError(code, message, status)` from `{ error: { code, message } }`.
+- 401 → refresh once and retry; a second 401 ends the session (redirect to login).
 
-  const onSubmit = form.handleSubmit(async (data) => {
-    try {
-      await transfer.mutateAsync(data);
-      onSuccess();
-    } catch (error) {
-      if (isApiError(error) && error.code === 'INSUFFICIENT_FUNDS') {
-        form.setError('amount', { message: 'Insufficient funds' });
-      }
-    }
-  });
+## Security rules
 
-  return (
-    <form onSubmit={onSubmit} noValidate>
-      <FormField
-        label="Recipient Account"
-        error={form.formState.errors.recipientAccount?.message}
-        {...form.register('recipientAccount')}
-      />
-      <FormField
-        label="Amount"
-        type="number"
-        error={form.formState.errors.amount?.message}
-        {...form.register('amount', { valueAsNumber: true })}
-      />
-      {/* ... other fields ... */}
-      <Button type="submit" loading={transfer.isPending}>
-        Transfer
-      </Button>
-    </form>
-  );
-}
-```
+| Rule | |
+|---|---|
+| FE-SEC-01 | No tokens in localStorage: httpOnly cookies, or in-memory with refresh. |
+| FE-SEC-02 | Sanitize user-generated HTML (DOMPurify) before rendering. |
+| FE-SEC-03 | CSP configured: report-only first, then enforce. |
+| FE-SEC-04 | No PII in URL parameters. |
+| FE-SEC-05 | Idle auto-logout: 15 min on financial pages, 30 min otherwise. |
+| FE-SEC-06 | Clear clipboard 60 s after copying sensitive data. |
+| FE-SEC-07 | `autocomplete="off"` on sensitive financial fields. |
+| FE-SEC-08 | No `console.log` of PII; strip console calls in production builds. |
 
-## PII Masking Utilities
+All interactive elements keyboard-accessible.
 
-```typescript
-// lib/utils/masking.ts
+## Tests
 
-/** Mask account number: ****5678 */
-export function maskAccount(account: string): string {
-  return account.replace(/.(?=.{4})/g, '*');
-}
-
-/** Mask email: us***@domain.com */
-export function maskEmail(email: string): string {
-  const [local, domain] = email.split('@');
-  return `${local.slice(0, 2)}***@${domain}`;
-}
-
-/** Mask phone: +65****1234 */
-export function maskPhone(phone: string): string {
-  return phone.replace(/(\+\d{2})\d+(\d{4})$/, '$1****$2');
-}
-
-/** Mask NRIC/FIN: ****567A */
-export function maskNric(nric: string): string {
-  return '****' + nric.slice(-4);
-}
-```
-
-### Masked Display Component
-```typescript
-// components/ui/MaskedText.tsx
-interface MaskedTextProps {
-  value: string;
-  maskFn: (v: string) => string;
-  revealable?: boolean;      // allow user to toggle visibility
-}
-
-export function MaskedText({ value, maskFn, revealable = false }: MaskedTextProps) {
-  const [revealed, setRevealed] = useState(false);
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      {/* no aria-label on a generic <span>: it is not announced; the text itself is read */}
-      <span>{revealed ? value : maskFn(value)}</span>
-      {revealable && (
-        <button
-          type="button"
-          onClick={() => setRevealed(!revealed)}
-          aria-pressed={revealed}
-          className="text-xs text-blue-600 hover:underline"
-        >
-          {revealed ? 'Hide' : 'Show'}
-        </button>
-      )}
-    </span>
-  );
-}
-```
-
-**Rule:** PII is masked by default. Reveal requires explicit user action. Log reveal events for audit.
-
-## KYC Flow Pattern
-
-```typescript
-// app/(auth)/kyc/page.tsx — multi-step KYC wizard
-const KYC_STEPS = ['personal', 'identity', 'document', 'review'] as const;
-
-export default function KycPage() {
-  const [step, setStep] = useState<number>(0);
-  const [data, setData] = useState<Partial<KycData>>({});
-  const kycStatus = useKycStatus(); // TanStack Query
-
-  if (kycStatus.data?.status === 'APPROVED') {
-    return <KycApproved />;
-  }
-
-  const StepComponent = {
-    personal: PersonalInfoStep,
-    identity: IdentityVerificationStep,
-    document: DocumentUploadStep,
-    review: ReviewStep,
-  }[KYC_STEPS[step]];
-
-  return (
-    <KycLayout currentStep={step} totalSteps={KYC_STEPS.length}>
-      <StepComponent
-        data={data}
-        onNext={(stepData) => {
-          setData(prev => ({ ...prev, ...stepData }));
-          setStep(s => s + 1);
-        }}
-        onBack={() => setStep(s => s - 1)}
-      />
-    </KycLayout>
-  );
-}
-```
-
-### Document Upload (Direct to S3)
-```typescript
-// components/forms/DocumentUpload.tsx
-async function uploadDocument(file: File, type: KycDocumentType) {
-  // 1. Get pre-signed URL from backend
-  const { uploadUrl, documentId } = await api.getDocumentUploadUrl(type, file.type);
-
-  // 2. Upload directly to S3 (no PII through our servers)
-  await fetch(uploadUrl, {
-    method: 'PUT',
-    body: file,
-    headers: { 'Content-Type': file.type },
-  });
-
-  // 3. Notify backend that upload is complete
-  await api.confirmDocumentUpload(documentId);
-  return documentId;
-}
-```
-
-**Rules:**
-- Max file size: 10MB (validate client-side before upload)
-- Accepted types: JPEG, PNG, PDF only (validate MIME type)
-- No OCR client-side — server handles extraction
-- Clear file from memory after upload (URL.revokeObjectURL)
-
-## Financial Data Display
-
-### Currency Formatting
-```typescript
-// lib/utils/currency.ts
-const formatters: Record<string, Intl.NumberFormat> = {};
-
-/** ISO 4217 exponent: VND/KRW/JPY 0, SGD/USD 2, KWD/BHD 3. If the backend keeps its own table, share it. */
-export function currencyExponent(currency: string): number {
-  return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
-}
-
-export function formatCurrency(amountMinor: number, currency: string = 'SGD', locale = 'en-SG'): string {
-  const key = `${locale}:${currency}`;
-  formatters[key] ??= new Intl.NumberFormat(locale, { style: 'currency', currency });
-  // API amounts are integer minor units; scale by the currency's exponent, never a fixed 100
-  return formatters[key].format(amountMinor / 10 ** currencyExponent(currency));
-}
-```
-
-### Transaction List
-```typescript
-// components/data-display/TransactionList.tsx
-function TransactionRow({ tx }: { tx: Transaction }) {
-  return (
-    <tr>
-      <td>{format(tx.createdAt, 'dd MMM yyyy, HH:mm')}</td>
-      <td>{tx.description}</td>
-      <td className={tx.amount < 0 ? 'text-red-600' : 'text-green-600'}>
-        {formatCurrency(tx.amount, tx.currency)}
-      </td>
-      <td>
-        <TransactionStatusBadge status={tx.status} />
-      </td>
-    </tr>
-  );
-}
-```
-
-## API Client Pattern
-
-```typescript
-// lib/api/client.ts
-class ApiClient {
-  private baseUrl: string;
-
-  constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL!;
-  }
-
-  private async request<T>(path: string, options?: RequestInit, retried = false): Promise<T> {
-    const token = getAccessToken(); // from auth context
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...options?.headers,
-      },
-    });
-
-    if (response.status === 401) {
-      // Token expired — refresh and retry once; a second 401 ends the session
-      if (!retried && (await refreshToken())) return this.request<T>(path, options, true);
-      redirectToLogin();
-      throw new AuthError('Session expired');
-    }
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new ApiError(error.error.code, error.error.message, response.status);
-    }
-
-    const json = await response.json();
-    return json.data as T; // unwrap standard { data, meta } envelope
-  }
-
-  // Type-safe methods
-  getTransactions(accountId: string, page: number) {
-    return this.request<PaginatedResponse<Transaction>>(
-      `/api/accounts/${accountId}/transactions?page=${page}`
-    );
-  }
-}
-
-export const api = new ApiClient();
-```
-
-## Security Rules for Frontend
-
-```
-FE-SEC-01: Never store tokens in localStorage — use httpOnly cookies or in-memory with refresh
-FE-SEC-02: Sanitize all user-generated content before rendering (DOMPurify for HTML content)
-FE-SEC-03: CSP header must be configured (report-only first, then enforce)
-FE-SEC-04: No PII in URL parameters — use POST or encrypted state
-FE-SEC-05: Auto-logout on idle: 15 minutes for financial pages, 30 minutes for non-financial
-FE-SEC-06: Clipboard copy of sensitive data: clear clipboard after 60 seconds
-FE-SEC-07: Form autocomplete="off" for sensitive financial fields
-FE-SEC-08: No console.log of PII in production (strip via build config)
-```
-
-## Testing Patterns
-
-```typescript
-// Test: form validation
-describe('TransferForm', () => {
-  it('shows error for amount exceeding limit', async () => {
-    render(<TransferForm onSuccess={vi.fn()} />);
-    await userEvent.type(screen.getByLabelText('Amount'), '60000');
-    await userEvent.click(screen.getByRole('button', { name: /transfer/i }));
-    expect(screen.getByText('Exceeds single transfer limit')).toBeInTheDocument();
-  });
-
-  it('masks account number in confirmation', async () => {
-    // ... fill form ...
-    expect(screen.getByText('****5678')).toBeInTheDocument();
-  });
-});
-
-// Test: PII masking
-describe('maskAccount', () => {
-  it('masks all but last 4 digits', () => {
-    expect(maskAccount('1234567890')).toBe('******7890');
-  });
-});
-
-// Test: API error handling
-describe('useTransfer', () => {
-  it('sets form error on insufficient funds', async () => {
-    server.use(
-      http.post('/api/transfers', () =>
-        HttpResponse.json(
-          { error: { code: 'INSUFFICIENT_FUNDS', message: 'Insufficient funds' } },
-          { status: 422 }
-        )
-      )
-    );
-    // ... assert form error appears ...
-  });
-});
-```
-
-## Common Mistakes to Avoid
-
-1. **Storing JWT in localStorage** — XSS can steal it. Use httpOnly cookies or in-memory.
-2. **Displaying raw API amounts** — API returns minor units. Scale by the currency's ISO 4217 exponent (`currencyExponent`: 0 for VND/KRW, 3 for KWD/BHD), never a hardcoded 100.
-3. **Showing full PII by default** — mask everything, reveal on explicit user action.
-4. **Missing loading/error states** — every data fetch needs loading skeleton and error boundary.
-5. **Client-side-only validation** — always validate server-side too. Client validation is UX, not security.
-6. **Forgetting keyboard navigation** — all interactive elements must be keyboard accessible.
-7. **Fetching all transactions at once** — paginate with cursor-based or offset pagination.
-8. **Console.log with PII** — strip all console.log in production builds.
+Form validation messages (e.g. limit exceeded), masking utilities, masked values in confirmation views, API error → form error via MSW handlers, currency formatting per exponent.

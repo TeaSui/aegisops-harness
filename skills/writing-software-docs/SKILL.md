@@ -3,95 +3,52 @@ name: writing-software-docs
 description: Use when the user asks to write, draft or spec out a BRD, PRD, FRD, user stories with acceptance criteria, RFC, ADR, specification or concern report ("write a PRD for…", "spec out this feature", "write up the decision to use X", "do a compatibility analysis"), including when the user describes the artifact without naming the type. This skill is the structure authority for these documents even when the result is published through a document connector (Docs, Notion, Confluence, Google Drive) — load it first for the sections, then publish. Not for code comments, docstrings, READMEs, commit messages, changelogs, chat answers or quick informal notes.
 ---
 
-# Writing Software Documents
+# Writing software documents
 
-Business analysts, product managers, architects, and senior engineers don't write deliverable documents free-form. They use standard structures so **no requirement is missed, developers can implement, QA can test, stakeholders can review, and AI can generate code with fewer errors.** Free-form prose silently drops sections; a structure forces every load-bearing question to get an answer (or be marked open).
+Only for a named, reusable document; a short write-up gets plain prose (unsure: ask "full <type> or a short write-up?").
 
-This skill produces a complete first draft in the correct structure for the document the user needs.
+## 1. Type
 
-## Step 0 — Is this actually a structured deliverable?
+Pick the best fit and say it. Ask one line only when the choice changes the audience (PRD = product/scope decision, FRD = exact behaviour to build; FRD = for humans, Specification = adds machine contracts; RFC = still choosing, ADR = decided). Spanning several types: write the one needed now, offer the next.
 
-Not every "write up" or "document this" wants one of these documents. If the user wants a code comment, a README section, a commit message, a Slack update, or a quick paragraph, write that prose directly — don't impose a heavyweight template. Use this skill only when the user wants a **named, reusable document** (a PRD, a spec, an ADR…) or clearly describes one. When in doubt, ask one line: "Do you want a full <type>, or just a short write-up?"
+## 2. Routing
 
-## Step 1 — Identify the document type
+This skill formats; it never turns trust-boundary work into fast path. If the document covers a trust-boundary item (auth, payments, PII, new endpoint/webhook, new vendor) and `tea-sdlc:security-engineer-subagent` has not run: label it **Working Draft**, add a `Routing / Required Review` section naming the missing gate, never label it Approved or implementation-ready, and save it only on request with `working-draft` in the filename or first heading. Labels: Working Draft → Security-Reviewed (review and any contract gate ran, evidence cited) → Approved (user/team accepted). Never write `security.md` (the Security agent's) or `ui-design.md` here.
 
-| The user wants to capture… | Type | Owning role | Reference file |
-|---|---|---|---|
-| The requirements of one change in a full-workflow spec (`docs/specs/<feature>/requirements.md`) | **Change-spec requirements** | Main session | `references/requirements-family.md` |
-| What the business wants and why (objectives, scope, success metrics) | **BRD** | BA, BO, PM | `references/requirements-family.md` |
-| Why a product feature exists, how it works, how success is measured | **PRD** | PM, PO | `references/requirements-family.md` |
-| Exact functional behavior — inputs, outputs, validation, exceptions | **FRD** | BA, Dev | `references/requirements-family.md` |
-| One unit of agile work with testable acceptance criteria | **User Story + AC** | BA | `references/agile-stories.md` |
-| A technical proposal up for discussion (system/API/architecture design) | **RFC** | Senior Dev, Architect | `references/architecture-records.md` |
-| A single architecture decision and its consequences | **ADR** | Architect | `references/architecture-records.md` |
-| A full, implementation-ready feature spec (API, events, schema, tests) | **Specification** | Dev, AI agent | `references/specification.md` |
-| A contract/compatibility/risk analysis: what exists vs. what's needed | **Concern Report** | Backend team | `references/concern-report.md` |
+## 3. Draft
 
-**Disambiguation rule:** if two types are plausible and the choice changes the *audience* (e.g. PRD vs. FRD, FRD vs. Specification), ask one line. Otherwise pick the best fit, state it ("This is an ADR — writing it now"), and proceed.
-- **PRD vs. FRD:** PRD if the reader makes a product/scope decision; FRD if they build exact behavior.
-- **FRD vs. Specification:** FRD is behavior described for humans; Specification adds machine contracts (API/event/schema) and is the codegen-ready artifact.
-- **RFC vs. ADR:** RFC if the team is still choosing; ADR if the decision is made and you're recording it.
+Ground it in the conversation, code, existing `docs/` and upstream artifacts. Fill every section or mark it N/A with a reason. Mark gaps `[NEEDS INPUT: what, why it matters]` and inferences `[ASSUMED: inference + basis]`; any number, SLA, threshold or limit nobody stated must carry one of them. Collect all markers in a final **Open Questions** section. Number requirements and rules (FR-1, BR-1…). Acceptance criteria are Given/When/Then and cover unhappy paths.
 
-If a request spans several types, produce the one that fits the current need and offer the next as a follow-up — don't dump all of them. They commonly relate as: requirements (BRD/PRD) → decisions (RFC → ADR) → Specification → User Stories, with a Concern Report when assessing a change against what exists. Treat that as a rough map, not a fixed pipeline.
-
-## Step 1.5 — Routing check (this skill formats; it does not bypass routing)
-
-This skill is a **structural layer**, not a substitute for the agent-routing model in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` and `${CLAUDE_PLUGIN_ROOT}/rules/agents.md`. Several of these documents are canonical spec artifacts: requirements, user stories, RFC/ADR/Specification and contracts are written by the main session; threat-model analysis (`security.md`) belongs to `tea-sdlc:security-engineer-subagent` and `ui-design.md` to the UI/UX designer.
-
-Before drafting in the main session, check: does the document describe **trust-boundary** work (auth, payments, PII, a new endpoint/webhook, a new external integration — see the `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` checklist) and `tea-sdlc:security-engineer-subagent` has not run? If so, flag it: the security review must run before the document can be treated as accepted. You can still draft it, but say plainly that it has not had that review. Formatting a document never converts trust-boundary work into fast-path work.
-
-Use artifact status labels so readers do not mistake a formatted draft for an approved contract:
-- **Working Draft** — written in the main session before required Security and contract gates have run.
-- **Security-Reviewed** — the required `tea-sdlc:security-engineer-subagent` review (and contract gate, when one applies) has run, with evidence paths cited.
-- **Approved** — explicitly accepted by the user/team after the required routing gates.
-
-For trust-boundary RFCs, ADRs, Specifications, or Concern Reports, default to **Working Draft** until the Security review and contract gate are satisfied. Add a short `Routing / Required Review` section near the top naming the missing gate, e.g. `Security review required: new endpoint + PII`.
-
-## Step 2 — Gather context before drafting
-
-A structured shell filled with guesses looks authoritative while being wrong. Ground the draft:
-
-- Read the conversation for stated goals, constraints, and decisions already made.
-- Read relevant code, existing `docs/`, and upstream artifacts (a Security threat model, the accepted contract, the requirements) so the document is consistent with them.
-- For library/API/CLI facts, verify rather than recall (`${CLAUDE_PLUGIN_ROOT}/rules/reduce-hallucinations.md`). If you can't verify, mark it — don't invent.
-
-## Step 3 — Draft the full document
-
-Open the matching reference file, follow its structure exactly, and fill every section with content grounded in context. The reference files carry the section list, ordering, and a worked example per type.
-
-**Two provenance markers — use them instead of fabricating:**
-
-- `[NEEDS INPUT: <what & why it matters>]` — a real gap; the answer isn't anywhere in context. Example: `OCR is invoked on upload. [NEEDS INPUT: which OCR provider — affects the latency SLA]`.
-- `[ASSUMED: <inference + basis>]` — you inferred something reasonable from context but the user should confirm it. Example: `Max file size 10MB [ASSUMED: matches the existing upload limit in config/upload.go]`.
-
-**Hard rule on numbers:** any quantitative target, SLA, threshold, percentage, or limit that the user or a source did *not* state MUST carry `[NEEDS INPUT]` or `[ASSUMED]` — never a bare invented number. The worked examples in the reference files show concrete numbers only to illustrate format; they are not a licence to make up metrics. An unmarked "p95 < 2s" or "85% target" that no one specified is a fabrication, and fabrication propagates straight into code and tests.
-
-Collect every `[NEEDS INPUT]` and `[ASSUMED]` into an **Open Questions** section at the end so the reader sees all open decisions at a glance. Number requirements and rules (FR-1, BR-1, AUTH-01…) so downstream docs, tests, and reviews can cite them precisely.
-
-**Requirement IDs depend on where the document lives.** A change spec's `requirements.md` uses keyed headings, `### <KEY>-<n>: <title>` with `Acceptance:` bullets and a `Verify:` line, because the lifecycle gates, the plan and the tests cite those IDs (`references/requirements-family.md`, Change-spec requirements). `US-n`, `AC-n` and `FR-n` are for standalone documents only (a BRD, PRD, FRD or story set that is not a spec's `requirements.md`). In a change spec, an open question is not left as a marker at approval: the blind spec check (`tea-sdlc:spec-check`) turns each one into a guess that is resolved or accepted as a risk.
-
-## Step 4 — Deliver
-
-Save to the layout path when the document is a spec artifact of the current change (full-workflow requirements/design/contracts/ADR) or the user asked for a file; otherwise return it in the conversation. Create a new spec folder with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" init <feature> --key <KEY>` (it writes the `README.md` with `status: proposed`; stages and formats in `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`), not by hand. When the user wants it published through a document connector, keep this structure and publish there.
-
-When you do save, use `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` (reuse the project's existing equivalent location first):
-
-| Type | Location |
+| Type | Sections |
 |---|---|
-| Change-spec requirements | `docs/specs/<feature>/requirements.md` (keyed format) |
-| BRD, PRD, FRD, User Story + AC | Where the user asks. When one becomes a spec's `requirements.md`, rewrite its requirements as keyed headings; the other sections can stay below as prose |
-| RFC, Specification | `docs/specs/<feature>/design.md` (machine contracts in `contracts/`) |
+| BRD | Introduction (Purpose, Scope, Definitions — link `glossary.md` if it exists, list only local terms), Business Background, Business Objectives (BO-n), Stakeholders, Functional Requirements (FR-n), Non-functional (NFR-n), Assumptions, Constraints, Risks, Success Metrics |
+| PRD | Overview, Problem Statement, Goals, User Personas, User Stories, User Flow, Functional Requirements, Edge Cases, Non-functional Requirements, Metrics, Rollout Plan, Risks |
+| FRD | Feature Overview, Business Rules, Inputs, Outputs, Validation Rules (field/required/rule table), Process Flow, Exception Cases (EX-n), Acceptance Criteria (AC-n) |
+| User story | `As a <role> I want <capability> So that <benefit>`; AC-n in Given/When/Then, each observable from outside; one capability per story; link each AC to its FR when derived |
+| RFC | Header (Author, Status Draft/In review/Accepted/Rejected, Date); Context, Problem, Goals, Non-Goals, Proposed Solution, Alternatives (real options, pros and cons), Risks, Rollout, Open Questions |
+| ADR | `# ADR-NNNN: <title>`, Status (Proposed/Accepted/Superseded by ADR-XXXX), Date; Context, Decision, Alternatives considered (one line each with reason), Consequences (including downsides). Immutable once Accepted: supersede with a new ADR |
+| Specification | Overview, Scope, Business Flow, User Flow, API Contract, Event Contract, Database Schema, Business Rules, Error Handling, Security, Rollout, Monitoring, Test Cases (TC-n), Open Questions. Contracts exact: field names, types, required, formats. Every HTTP endpoint shows request and both envelopes: `{"data":{…},"meta":{"timestamp":…}}` and `{"error":{"code","message","details":[]}}`; a vendor-forced shape is wrapped at ingress |
+| Concern report | Date, Scope; Summary (overall risk, biggest concern); table Concern / Status / Detail with Status `OK` (say how verified), `MISMATCH` (name the field, contract or consumer), `UNKNOWN` (not verified; never guess OK); Recommended actions, riskiest first, each tied to a row |
+
+**Change-spec requirements** (`docs/specs/<feature>/requirements.md`, parsed by `aidlc`): keyed requirements only, no narrative. `<KEY>` is the README `key:`; IDs are never reused. `US-n`/`AC-n`/`FR-n` are for standalone documents only.
+```
+### KYC-2: Reject unsupported ID image formats
+Acceptance:
+- Given the customer is on the KYC page, when they upload a .docx file, then the upload is rejected with UNSUPPORTED_FORMAT.
+Verify: test
+```
+`Verify:` is `test`, `check — <command or procedure>` or `manual — <reason>`. Criteria in Given/When/Then or EARS. Open questions are not left as markers at approval: `tea-sdlc:spec-check` turns them into guesses that are resolved or accepted as risk.
+
+## 4. Save
+
+Return it in the conversation unless it is a spec artifact of the current change or the user wants a file or a connector (keep this structure there). New spec folder: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" init <feature> --key <KEY>`, never by hand. Reuse the project's existing location first:
+
+| Type | Path |
+|---|---|
+| Change-spec requirements | `docs/specs/<feature>/requirements.md` |
+| BRD, PRD, FRD, stories | where the user asks; as a spec's `requirements.md`, rewrite as keyed requirements |
+| RFC, Specification | `docs/specs/<feature>/design.md` (≤ ~120 lines; machine contracts in `contracts/`) |
 | ADR | `docs/adr/NNNN-<decision>.md` |
-| Concern Report | `docs/specs/<feature>/concern-report.md` |
+| Concern report | `docs/specs/<feature>/concern-report.md` |
 
-Do **not** write `docs/specs/<feature>/security.md` from this skill — that file is the Security agent's. A security/compatibility concern on a trust-boundary surface should route to `tea-sdlc:security-engineer-subagent`, not be authored here.
-
-Do not persist a trust-boundary Working Draft as the authoritative contract unless the user explicitly asks for a draft file. When saving such a draft, include `working-draft` in the filename or first heading and keep the routing warning in the document. Do not label it `Approved` or present it as implementation-ready until the required security review (and contract gate, when one applies) has run.
-
-**If you're a strategic subagent (Security, UI/UX), defer to your own persistence rule, not this table.** The layout file names each agent's file. Use your agent's convention for path and filename to avoid double-persisting one artifact under two names, and return per `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md` (status + evidence path + exit-criteria) — cite the saved path, don't paste the document inline.
-
-Feature folders use a stable kebab-case slug (`docs/specs/kyc-upload/requirements.md`) — no dates or version suffixes, so re-runs update in place; ADRs get a sequence number (`docs/adr/0007-use-kafka-over-sqs.md`). Lifecycle status lives only in the spec folder's `README.md` frontmatter (owned by the integrating session), not in each document. A slug names one change: if the folder is already `implemented`, start a new slug (`auth-login-mfa`) instead of editing history.
-
-## Quality bar
-
-A document is done when it's **complete** (every template section present, or marked N/A with a reason), **implementable** (a dev could build without guessing — concrete inputs/outputs/formats/limits), **testable** (QA can derive cases — Given/When/Then, not "works well"), **reviewable** (headings let a stakeholder find their part), and **codegen-ready** (for Specifications, contracts precise enough to generate correct code). A section that can't be filled because the decision genuinely isn't made is an Open Question — not a reason to delete the section.
+Slugs are stable kebab-case, no dates or versions; an `implemented` spec gets a new slug. Lifecycle status lives only in the spec README frontmatter. A strategic subagent (Security, UI/UX) uses its own persistence path and returns the saved path, not the document.

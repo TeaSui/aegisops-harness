@@ -1,43 +1,13 @@
-# Agent Discipline (Shared)
+# Agent discipline (implementation agents)
 
-All implementation agents follow these rules. Domain-specific test commands stay in each agent definition.
+Domain test commands live in each agent definition.
 
-## TDD
-
-No production code without a failing test first. RED (one failing test) → GREEN (simplest code to pass) → REFACTOR. Minimum 80% coverage on changed code. Mock only external HTTP APIs; use real DB/in-memory for data layer tests.
-
-## Debugging
-
-No fixes without root cause investigation. Read errors → reproduce → check git diff → trace data flow → form ONE hypothesis → test smallest change. If 2 fix attempts fail on the same issue → STOP and escalate.
-
-## Verification
-
-No completion claims without running tests and build. Show actual command output: test count, pass/fail, coverage %, build exit code. Forbidden phrases: "should work", "probably passes", "looks good", "I'm confident" — without actual output to back them up.
-
-Write test output to a file outside the project tree (e.g. `/tmp/<slug>.log`) and confirm with the Read tool. A file on disk requires actually running the command.
-
-Read totals only from the result set produced by the command you ran: clear its result directory before the run, or use the tool's own summary. Never aggregate across result directories (e.g. Gradle's `build/test-results/{test,unitTest,cucumberTest}`); stale files from earlier runs inflate counts and resurrect fixed failures.
-
-## Escalation Triggers
-
-- 2 failed fixes on the same issue
-- Reading >10 files without producing code
-- >3 consecutive build/test errors
-
-When escalating, report: what you tried, errors seen, root cause guess, what would unblock you.
-
-## Project Context
-
-**Path convention:** in tea-sdlc files, paths beginning `rules/`, `references/`, `skills/` or `scripts/` are relative to the tea-sdlc plugin root (the parent directory of this `references/` folder), never to the target project or `~/.claude/`. Project paths such as `docs/…` are relative to the target project.
-
-Before acting on a spec or living doc, run the staleness check in `rules/strategic-output-persistence.md`.
-
-Follow the target project's documented stack, architecture, environment, security constraints and output locations, within the dispatch's owned scope. Treat personal stack and region choices in agent definitions as defaults only when the project leaves the choice open; do not migrate an established stack as part of unrelated work.
-
-## Factual Grounding
-
-Follow `rules/reduce-hallucinations.md`: never invent file paths, function names, CLI flags, library APIs, or commit SHAs. Every load-bearing claim must cite a source you verified this session (`path:line`, command output, or context7 doc) — otherwise say "I don't know". Evidence paths in your return must exist; fabricated paths are treated as BLOCKED by the dispatcher.
-
-## Conditional Agent Memory
-
-If the runtime provides an enabled persistent memory directory in the configured scope, this task authorizes memory writes there, and your existing tools permit them, record concise, dated, project-scoped findings without secrets or personal data. Otherwise return relevant learnings to the caller without claiming persistence. Do not enable memory, invent a path, add tools or delegate memory writes to bypass your role. Memory permission never authorizes additional implementation edits. Each agent's definition lists domain-specific examples of what to persist.
+- **TDD:** RED-GREEN-REFACTOR, one failing test at a time. ≥ 80% coverage on changed code. Mock only external HTTP APIs; data-layer tests use a real or in-memory DB.
+- **Debugging:** root cause before any fix: read the error, reproduce, check `git diff`, trace the data flow, test ONE hypothesis with the smallest change.
+- **Verification:** no completion claim without running tests and build and showing the output (test count, pass/fail, coverage %, build exit code). Never "should work", "probably passes", "looks good" without output. Write test output to a file outside the project tree (e.g. `/tmp/<slug>.log`) and Read it. Take totals only from the run you made: clear its result directory first or use the tool's own summary; never aggregate across result directories (e.g. Gradle `build/test-results/{test,unitTest,cucumberTest}`).
+- **Escalate** (report what you tried, errors seen, root-cause guess, what would unblock you) after 2 failed fixes on one issue, > 10 files read without producing code, or > 3 consecutive build/test errors.
+- **Paths:** `rules/`, `references/`, `skills/`, `scripts/` are relative to the tea-sdlc plugin root; `docs/…` is relative to the target project.
+- **Stale docs:** before acting on an active spec or living doc, check it: stale if its module has ≥ 5 commits since the doc's last commit, the doc's last commit is not reachable from HEAD, or README `updated:` is > 90 days old with module commits since. Stale → return `DONE_WITH_CONCERNS` naming the doc, date/SHA and commit count.
+- **Project first:** the target project's stack, architecture, security constraints and output locations win; agent-definition stack/region choices apply only when the project leaves them open; never migrate a stack in unrelated work.
+- **Grounding:** never invent paths, symbols, flags, APIs or SHAs; cite `path:line`, command output or a doc for every load-bearing claim, else say "I don't know". A fabricated evidence path is treated as `BLOCKED`.
+- **Memory:** only with an enabled memory directory, task authorization and tools that allow it: concise, dated, project-scoped findings, no secrets or personal data. Otherwise return learnings without claiming persistence. Never enable memory, invent a path or add tools; memory never authorizes extra edits.

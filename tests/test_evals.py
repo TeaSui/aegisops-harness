@@ -7,6 +7,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import stat
 import sys
 import tempfile
@@ -424,6 +425,36 @@ class StreamAndJudgeTest(unittest.TestCase):
             verdict = lifecycle_judge.judge({}, harness.parse_stream([]), pathlib.Path(tmp) / 'repo', None)
             self.assertEqual(verdict['score'], 0.0)
             self.assertIsNone(verdict['spec'])
+
+    @unittest.skipUnless(shutil.which('node') and shutil.which('npm'), 'needs node and npm')
+    def test_lifecycle_outcome_judge_scores_the_result_not_the_artifacts(self):
+        good = textwrap.dedent('''
+            const balances = new Map(); const transfers = new Map(); let next = 1;
+            export function deposit(u, a) { balances.set(u, (balances.get(u) || 0) + a); }
+            export const balance = (u) => balances.get(u) || 0;
+            export function transfer(f, t, a) { deposit(f, -a); deposit(t, a); const id = next++;
+              transfers.set(id, { f, t, a, refunded: false }); return id; }
+            export function refund(id, amount) { const x = transfers.get(id);
+              if (!x || x.refunded) throw new Error('no'); const a = amount ?? x.a;
+              if (!(a > 0) || a > x.a) throw new Error('bad'); x.refunded = true; deposit(x.t, -a); deposit(x.f, a); }
+        ''')
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp) / 'repo'
+            (repo / 'src').mkdir(parents=True)
+            (repo / 'src' / 'wallet.js').write_text(good)
+            (repo / 'package.json').write_text('{"type": "module", "scripts": {"test": "node -e 0"}}')
+            (pathlib.Path(tmp) / 'gh-state').mkdir()
+            (pathlib.Path(tmp) / 'gh-state' / 'prs.json').write_text('[{"number": 1}]')
+            events = [{'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'id': 't1', 'name': 'Bash',
+                       'input': {'command': 'gh pr create --body "Threats checked: double refund"'}}]}}]
+            verdict = lifecycle_judge.judge({'judge': 'outcome'}, harness.parse_stream(map(json.dumps, events)), repo)
+            self.assertTrue(verdict['pass'], verdict['summary'])
+            (repo / 'src' / 'wallet.js').write_text(good.replace("if (!x || x.refunded)", "if (!x)"))
+            (pathlib.Path(tmp) / 'gh-state' / 'prs.json').write_text('[]')
+            verdict = lifecycle_judge.judge({'judge': 'outcome'}, harness.parse_stream([]), repo)
+            self.assertFalse(verdict['pass'])
+            self.assertFalse(verdict['checks']['at_most_once'])
+            self.assertFalse(verdict['checks']['pr_opened'])
 
     def test_lifecycle_judge_reads_aidlc_status(self):
         with tempfile.TemporaryDirectory() as tmp:

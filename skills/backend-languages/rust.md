@@ -7,266 +7,36 @@ description: >
 
 # Rust Backend Patterns
 
-## When to use
+## Layout
+- Cargo workspace: `crates/api` (axum router, handlers, `AppError: IntoResponse`), `crates/service` (no HTTP), `crates/repository` (sqlx/diesel), `crates/domain` (types, traits, error enums; no I/O deps); `src/main.rs` wires runtime, config, router.
+- Commit `Cargo.lock` for application binaries (not library crates).
 
-Triggered by: `.rs` files, `Cargo.toml`, `tokio`, `axum`, `actix-web`, `thiserror`, `anyhow`, cargo workspace.
+## Errors
+- `thiserror` enums for domain/library errors; `anyhow` only for application glue.
+- `AppError { Domain(DomainError), Internal(anyhow::Error) }` with `From` impls so handlers use `?`; `IntoResponse` maps variants to status + error envelope (`Internal` → 500 `INTERNAL_ERROR`, generic message).
+- No `unwrap()`/`expect()` on production paths (tests and compile-time invariants only).
+- Log with `tracing::error!` before converting; never `println!`/`eprintln!`; never log tokens or PII. `#[tracing::instrument]` on service methods.
 
-## Project layout
+## Money
+- Never `f32`/`f64`: `rust_decimal::Decimal` (`dec!`) or `i64` minor units; assert exact equality.
 
-```
-myservice/
-├── Cargo.toml                   # Workspace manifest [workspace] members = [...]
-├── Cargo.lock                   # Always committed for binaries
-├── crates/
-│   ├── api/                     # axum router, handlers, extractors, response types
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── lib.rs
-│   │       ├── router.rs        # Router construction, state injection
-│   │       ├── handlers/        # One module per resource (orders.rs, users.rs)
-│   │       └── error.rs         # AppError implementing IntoResponse
-│   ├── service/                 # Business logic, no HTTP concerns
-│   │   └── src/lib.rs
-│   ├── repository/              # DB access via sqlx or diesel
-│   │   └── src/lib.rs
-│   └── domain/                  # Shared types, traits, error enums
-│       └── src/lib.rs
-└── src/
-    └── main.rs                  # Wire tokio runtime, config, router, server
-```
+## axum (0.8)
+- Handlers: `async fn` → `Result<impl IntoResponse, AppError>`; shared state via `State<AppState>` where `AppState` wraps `Arc<Inner>`.
+- Path params use `/{id}` (0.7 used `/:id`).
+- `Json<T>` rejects 400 (syntax) / 422 (shape) / 415 (content type); take `Result<Json<T>, JsonRejection>` to map rejections into the envelope.
+- Always add `tower_http::catch_panic::CatchPanicLayer` (axum drops the connection on panic) and `TraceLayer`; stack layers with `ServiceBuilder`.
+- Typed `Serialize`/`Deserialize` structs, not `serde_json::Value`.
 
-**Rules:**
-- Workspace crates enforce dependency boundaries at the compiler level.
-- `domain` crate has no external I/O dependencies — it defines traits, types, and errors.
-- `api` crate owns `AppError` which implements `axum::response::IntoResponse`.
-- `Cargo.lock` is always committed for application crates (not library crates).
+## Async
+- `tokio::join!` for fixed parallel calls; `JoinSet` to collect a dynamic fan-out; `tokio::spawn` for fire-and-forget.
+- Never block the runtime (`std::thread::sleep`, blocking I/O, heavy CPU) — use `spawn_blocking`.
+- Use `tokio::sync::Mutex` when a guard crosses `.await`; spawned futures must be `Send` (no `Rc`/`RefCell` across `.await`).
 
-## Error handling
+## Tests
+- `#[cfg(test)]` unit modules; `rstest` `#[case]` tables; `#[tokio::test]` for async; integration tests in crate `tests/`.
+- Repository tests use `#[sqlx::test]` against a real DB; do not mock the DB layer. Coverage ≥ 80% (`cargo llvm-cov` or `cargo tarpaulin --out Lcov`).
 
-Use `thiserror` for library/domain errors; `anyhow` for application-level glue code.
-
-```rust
-// domain/src/error.rs
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum DomainError {
-    #[error("order {0} not found")]
-    NotFound(String),
-    #[error("insufficient stock: requested {requested}, available {available}")]
-    InsufficientStock { requested: u32, available: u32 },
-    #[error("validation: {0}")]
-    Validation(String),
-}
-```
-
-```rust
-// api/src/error.rs — convert domain errors to HTTP responses
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
-use serde_json::json;
-use crate::domain::error::DomainError;
-
-pub enum AppError {
-    Domain(DomainError),
-    Internal(anyhow::Error),
-}
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let (status, code, message) = match &self {
-            AppError::Domain(DomainError::NotFound(id)) =>
-                (StatusCode::NOT_FOUND, "NOT_FOUND", format!("Not found: {id}")),
-            AppError::Domain(DomainError::InsufficientStock { .. }) =>
-                (StatusCode::UNPROCESSABLE_ENTITY, "INSUFFICIENT_STOCK", self.to_string()),
-            AppError::Domain(DomainError::Validation(msg)) =>
-                (StatusCode::BAD_REQUEST, "VALIDATION_ERROR", msg.clone()),
-            AppError::Internal(_) =>
-                (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Internal server error".into()),
-        };
-        let body = json!({"error": {"code": code, "message": message, "details": []}});
-        (status, Json(body)).into_response()
-    }
-}
-
-// Blanket From conversions
-impl From<DomainError> for AppError {
-    fn from(e: DomainError) -> Self { AppError::Domain(e) }
-}
-
-impl From<anyhow::Error> for AppError {
-    fn from(e: anyhow::Error) -> Self { AppError::Internal(e) }
-}
-```
-
-**Rules:**
-- Handler return type: `Result<impl IntoResponse, AppError>` — the `?` operator propagates via `From`.
-- Never `unwrap()` or `expect()` in production paths; reserve for compile-time invariants or tests.
-- Never log sensitive data (tokens, PII) in error contexts.
-- Use `tracing::error!` (not `eprintln!`) for server-side error logging before converting to response.
-
-## Testing
-
-Use `#[cfg(test)]` modules for unit tests; `rstest` for table-driven parametrized tests.
-
-```rust
-// service/src/order.rs
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
-
-    // Money is never f32/f64: use rust_decimal::Decimal or integer minor units (i64 cents).
-    #[rstest]
-    #[case(vec![LineItem { unit_price: dec!(1.00), qty: 2 }], dec!(0), dec!(2.00))]
-    #[case(vec![LineItem { unit_price: dec!(1.00), qty: 1 }, LineItem { unit_price: dec!(0.50), qty: 3 }], dec!(0.1), dec!(2.25))]
-    #[case(vec![], dec!(0), dec!(0))]  // empty cart
-    fn test_calculate_total(
-        #[case] items: Vec<LineItem>,
-        #[case] discount: Decimal,
-        #[case] expected: Decimal,
-    ) {
-        assert_eq!(calculate_total(&items, discount), expected); // exact, no epsilon
-    }
-
-    #[tokio::test]
-    async fn create_order_returns_not_found_for_missing_product() {
-        let repo = MockOrderRepo::new(); // or test double via trait
-        let svc = OrderService::new(repo);
-        let err = svc.create(CreateOrderRequest { product_id: 999, qty: 1 }).await.unwrap_err();
-        assert!(matches!(err, DomainError::NotFound(_)));
-    }
-}
-```
-
-**Rules:**
-- Integration tests in `tests/` directory at crate root; use `tokio::test` for async.
-- Use `sqlx::test` macro (with test DB) for repository tests — do not mock the DB layer.
-- Coverage: `cargo tarpaulin --out Lcov` or `cargo llvm-cov`; target ≥ 80%.
-
-## Concurrency
-
-```rust
-// Parallel async tasks with tokio::join!
-use tokio::join;
-
-async fn enrich_order(order: &Order) -> Result<EnrichedOrder, AppError> {
-    let (user_result, product_result) = join!(
-        user_client.get(order.user_id),
-        product_client.get(order.product_id),
-    );
-    let user = user_result.context("fetch user")?;
-    let product = product_result.context("fetch product")?;
-    Ok(EnrichedOrder { order, user, product })
-}
-
-// Fan-out with JoinSet for dynamic number of tasks
-use tokio::task::JoinSet;
-
-async fn process_batch(ids: Vec<u64>) -> Vec<Result<Output, AppError>> {
-    let mut set = JoinSet::new();
-    for id in ids {
-        set.spawn(async move { process_one(id).await });
-    }
-    let mut results = Vec::new();
-    while let Some(res) = set.join_next().await {
-        results.push(res.expect("task panicked"));
-    }
-    results
-}
-```
-
-**Rules:**
-- `tokio::spawn` for fire-and-forget; `JoinSet` when you need to collect results.
-- Never block the async runtime: avoid `std::thread::sleep`, blocking file I/O, or CPU-heavy work without `spawn_blocking`.
-- Use `tokio::sync::Mutex` (not `std::sync::Mutex`) when the guard must be held across `.await` points.
-
-## HTTP handler patterns (axum)
-
-```rust
-// api/src/handlers/orders.rs
-use axum::{extract::{Path, State}, Json};
-use serde::{Deserialize, Serialize};
-use crate::{AppState, error::AppError};
-
-#[derive(Deserialize)]
-pub struct CreateOrderBody {
-    pub product_id: u64,
-    pub qty: u32,
-}
-
-#[derive(Serialize)]
-pub struct OrderResponse {
-    pub id: u64,
-    pub status: String,
-}
-
-pub async fn create_order(
-    State(state): State<AppState>,
-    Json(body): Json<CreateOrderBody>,
-) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), AppError> {
-    let order = state.order_svc.create(body.product_id, body.qty).await?;
-    let resp = serde_json::json!({"data": {"id": order.id, "status": order.status}});
-    Ok((axum::http::StatusCode::CREATED, Json(resp)))
-}
-
-// router.rs
-pub fn build_router(state: AppState) -> axum::Router {
-    axum::Router::new()
-        .route("/orders", axum::routing::post(create_order))
-        .route("/orders/{id}", axum::routing::get(get_order)) // axum 0.8 syntax; 0.7 used `/:id`
-        .with_state(state)
-        .layer(tower_http::trace::TraceLayer::new_for_http())
-        .layer(tower_http::catch_panic::CatchPanicLayer::new()) // panic → 500 instead of a dropped connection
-}
-```
-
-**Rules:**
-- Handlers are `async fn`; return `Result<impl IntoResponse, AppError>`.
-- Use `State(state): State<AppState>` for shared application state (DB pool, service handles).
-- `Json(body)` rejects automatically: syntax error → 400, valid JSON of the wrong shape → 422, missing `Content-Type: application/json` → 415. Take `Result<Json<T>, JsonRejection>` to map these into the error envelope.
-- Add middleware via `.layer()` on the `Router`; use `ServiceBuilder` to stack multiple layers.
-
-## Dependency management
-
-```toml
-# Cargo.toml (workspace root)
-[workspace]
-members = ["crates/api", "crates/service", "crates/repository", "crates/domain"]
-resolver = "3"
-
-# Versions checked on crates.io 2026-11 — verify against Cargo.lock before copying.
-[workspace.dependencies]
-axum = { version = "0.8", features = ["macros"] }
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-anyhow = "1"
-tracing = "1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-sqlx = { version = "0.9", features = ["postgres", "runtime-tokio", "tls-rustls", "macros"] }
-tower-http = { version = "0.7", features = ["trace", "cors", "catch-panic"] }
-rust_decimal = "1"
-rust_decimal_macros = "1"
-rstest = "0.28"
-
-[workspace.package]
-edition = "2024"   # stable since Rust 1.85; keep 2021 only if the toolchain is older
-```
-
-- Define all shared dependency versions in `[workspace.dependencies]`; crates inherit with `dep = { workspace = true }`.
-- Run `cargo clippy -- -D warnings` and `cargo fmt --check` in CI.
-- Use `cargo audit` to check for known CVEs in dependencies.
-
-## Common pitfalls
-
-1. **`unwrap()` in request handlers** — axum does not catch panics: without `tower_http::catch_panic::CatchPanicLayer` the connection is dropped with no response. Use `?` with `From` conversions.
-2. **Holding `std::sync::Mutex` across `.await`** — deadlock risk; use `tokio::sync::Mutex`.
-3. **Cloning large state** — `AppState` should wrap `Arc<Inner>` so `.clone()` is cheap (pointer copy).
-4. **Missing `Send` bound on spawned futures** — `tokio::spawn` requires `Future: Send`. Avoid `Rc`, `RefCell`, non-`Send` guards across `.await`.
-5. **`serde_json::Value` everywhere** — define typed structs with `#[derive(Serialize, Deserialize)]`. Untyped JSON loses compile-time safety.
-6. **Ignoring `tracing` spans** — use `#[tracing::instrument]` on service methods for distributed traces; do not use `println!` in production.
-7. **Forgetting `Cargo.lock`** — application binaries must commit the lock file for reproducible builds.
+## Dependencies (checked 2026-11; verify against `Cargo.lock`)
+- Workspace `resolver = "3"`, `edition = "2024"` (keep 2021 only on toolchains < 1.85); all versions in `[workspace.dependencies]`, crates use `{ workspace = true }`.
+- `axum 0.8` (macros), `tokio 1` (full), `serde 1`, `serde_json 1`, `thiserror 2`, `anyhow 1`, `tracing 1`, `tracing-subscriber 0.3` (env-filter), `sqlx 0.9` (postgres, runtime-tokio, tls-rustls, macros), `tower-http 0.7` (trace, cors, catch-panic), `rust_decimal 1`, `rstest 0.28`.
+- CI: `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo audit`.

@@ -11,237 +11,68 @@ description: |
   test baseline, test report, consumer-driven, provider verification.
 ---
 
-# API Contract Testing Patterns
+# API Contract Testing
 
-Static structure/compatibility of `docs/specs/<f>/contracts/` = `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py <spec-dir>` (the contract gate). This skill covers runtime/consumer contract tests.
-
-## When to Use What
+Static structure/compatibility of `docs/specs/<f>/contracts/` is the contract gate: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py <spec-dir>`. This skill covers runtime and consumer contract tests.
 
 | Scenario | Approach |
 |---|---|
-| Frontend consumes Backend API | Consumer-driven contracts (Pact) |
-| Service A calls Service B | Consumer-driven contracts (Pact) |
-| Public API with OpenAPI spec | OpenAPI validation + contract tests |
-| API endpoint regression | Baseline comparison |
-| Pre-release validation | Smoke tests + contract tests + baseline |
+| Frontend → backend, service → service | Consumer-driven contracts (Pact) |
+| Public API with OpenAPI spec | Response validation against the spec + contract tests |
+| Endpoint regression | Baseline comparison |
+| Pre-release | Smoke + contract + baseline |
 
-## OpenAPI Spec Validation
+## Bind the installed validator
 
-### Select the target and installed validator
+- Use the repo's installed validator matching its OpenAPI version and JSON Schema dialect (e.g. openapi-core with the adapter of the installed release). Never hand-roll key checks or install a tool to get a pass. Spec linting or a snapshot alone does not validate responses.
+- From the task's service/module, find specs, contract/Pact tests, lockfiles, manifests and CI workflows. Record spec `openapi` version, SHA-256, commit, working-change scope and validator version from the lockfile.
+- Run the repo's documented command/selector from its CI. Never invent a script or switch service when a selector is missing.
+- Do not probe guessed localhost endpoints or execute operations found in a spec. No installs, service startup or mutating replay from discovery; in-process app or an explicitly authorized disposable target. A GET is not safe by method alone.
 
-The former inline OpenAPI loop is retired: checking a few required keys is not schema validation. Use the repository's installed contract runner, compatible with its OpenAPI version and JSON Schema dialect. Read the installed-validator workflow (`${CLAUDE_PLUGIN_ROOT}/skills/api-contract-testing/references/installed-validator-workflow.md`) for discovery, explicit target selection, negative fixtures, baseline comparison and result gates.
+## Scenario gate
 
-1. Identify the service/module, current working changes, spec path/hash and test environment from the task and project manifests. Use file discovery; do not fetch a guessed localhost endpoint or automatically execute operations found in a spec.
-2. Read the lockfile, existing contract tests and CI command. Inspect the installed validator's version/help and its matching documentation. Spec linting alone does not validate HTTP responses.
-3. Run the existing tests with deterministic request fixtures. Assert the scenario's **exact expected status**, content type and complete response schema through the real validator, including `$ref` and nested constraints. A declared 401 response is not success for a scenario expecting 200.
-4. Missing tool/test target, incompatible dialect, unresolved reference, parse error or no tests executed means **unsupported/failed**, never a contract PASS. Preserve the runner's nonzero failure status.
-5. No installations, service startup or mutating HTTP replay follows from discovery. Use in-process fixtures or an explicitly authorized disposable target; identify it in the report. Redact credentials and payload values from artifacts.
+- Each scenario: real fixture IDs, full body/query/headers; cover success and intended error responses.
+- Assert exact expected status first (a declared 401 does not pass a 200 scenario), then media type, JSON decode, full response schema incl. `$ref` and nested constraints.
+- Missing tool/target, incompatible dialect, unresolved ref, parse error or zero tests executed = unsupported/failed, never PASS. Never mask the exit status (`|| true`, trailing success command, unguarded pipe). A skipped schema branch is not compliance.
+- Resolve local refs under the spec root only; no remote refs without explicit scope.
+- Before trusting the validator integration, record negative-fixture evidence:
 
-## Consumer-Driven Contracts (Pact)
+| Fixture | Required outcome |
+|---|---|
+| Valid response with `$ref`/nested schema | Pass; nonzero tests ran |
+| Expects 200, gets declared 401/500 | Fail on status |
+| JSON media type, malformed body | Fail |
+| Wrong nested type / missing nested required / bad array item via `$ref` | Fail |
+| Unsupported dialect, unresolved ref, invalid spec | Fail or unsupported |
+| Zero scenarios, runner/config failure | Gate fails, nonzero exit |
+| Request with body/query | Server fixture confirms inputs arrived |
 
-### Spring Boot Provider (Pact JVM)
+- Redact credentials and payload values from artifacts.
 
-```xml
-<!-- pom.xml -->
-<dependency>
-  <groupId>au.com.dius.pact.provider</groupId>
-  <artifactId>junit5spring</artifactId>
-  <version>4.6.x</version>
-  <scope>test</scope>
-</dependency>
-```
+## Schemathesis (only if already installed)
 
-```java
-// Provider verification test
-@Provider("account-service")
-@PactBroker(url = "${PACT_BROKER_URL}")  // or @PactFolder("pacts") for local
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class AccountServicePactVerificationTest {
+- Check `st --version` / `st run --help`; use only flags the pinned release supports (`--include-operation-id`, `--phases examples`, `--checks status_code_conformance,content_type_conformance,response_schema_conformance`, `--report junit`).
+- Sends real HTTP: authorized disposable target only; auth via the project's secret-safe fixture, never a raw token on the command line.
+- Unresolved refs, unsupported schemas, missing examples or skipped operations block claims for those operations. Schema conformance accepts any declared status, so keep the scenario's exact-status assertion. Missing CLI or flags = unsupported; no auto-install.
 
-    @LocalServerPort
-    int port;
+## Pact
 
-    @TestTemplate
-    @ExtendWith(PactVerificationInvocationContextProvider.class)
-    void verifyPact(PactVerificationContext context) {
-        context.verifyInteraction();
-    }
+- Consumer (pact-js `PactV3` + `MatchersV3`, or the service's language): match shape and type, not environment values. Cover the error contract (e.g. 404 `RESOURCE_NOT_FOUND`) as well as success.
+- Provider: Pact JVM `junit5spring` (`@Provider`, `@PactBroker`/`@PactFolder`, `@State`, `HttpTestTarget` on random port); Go `pact-go/v2` `VerifyProvider` with `StateHandlers`.
+- Every consumer `given()` has a provider state handler.
+- Publish pacts with the consumer version; gate releases with `can-i-deploy`.
+- Contracts verify the interface, not business logic — integration tests are still required.
+- Auth tokens from env/fixtures, never hardcoded.
 
-    @BeforeEach
-    void setUp(PactVerificationContext context) {
-        context.setTarget(new HttpTestTarget("localhost", port));
-    }
+## Baseline regression
 
-    // State handlers — set up test data for each pact state
-    @State("account 12345 exists with balance 50000")
-    void accountExists() {
-        // Insert test data matching the state description
-        accountRepository.save(new Account("12345", 50000L, "SGD"));
-    }
+- Same installed validator and deterministic tests (not `check-contract.py`), with sanitized version-controlled fixtures or the installed snapshot facility, bound to the same spec version, selectors and fixtures.
+- Baseline stores method, resolved path, query, non-secret headers, body/encoding, fixture setup, expected status and media type, stable nested fields. Credentials come from fixtures at runtime.
+- Normalize only named volatile fields; preserve array/type/null distinctions; re-run full schema validation in both runs. Never coerce malformed JSON to null or compare top-level keys only. Mismatch fails the command.
+- Missing/empty baseline, zero cases or missing input reports = incomplete gate. Updating a baseline is a separate reviewed action. Schemathesis failure baselines suppress known findings; they are not snapshots or proof of fixes.
+- Latency is separate: repeated samples against the project budget under controlled load; one timing ratio proves nothing.
 
-    @State("account 99999 does not exist")
-    void accountNotFound() {
-        accountRepository.deleteById("99999");
-    }
-}
-```
+## Report
 
-### Go Provider (Pact Go)
-
-```go
-// provider_test.go
-func TestPactProvider(t *testing.T) {
-    // Start test server
-    srv := httptest.NewServer(setupRouter())
-    defer srv.Close()
-
-    // pact-go v2: github.com/pact-foundation/pact-go/v2/{provider,models}
-    verifier := provider.NewVerifier()
-
-    err := verifier.VerifyProvider(t, provider.VerifyRequest{
-        ProviderBaseURL: srv.URL,
-        Provider:        "transaction-service",
-        PactDirs:        []string{"./pacts"}, // or PactFiles / BrokerURL
-        StateHandlers: models.StateHandlers{
-            "user has 3 transactions": func(setup bool, s models.ProviderState) (models.ProviderStateResponse, error) {
-                if setup {
-                    seedTestTransactions(3)
-                }
-                return nil, nil
-            },
-        },
-    })
-
-    assert.NoError(t, err)
-}
-```
-
-### Consumer Contract (TypeScript/Frontend)
-
-```typescript
-// consumer.pact.test.ts — frontend or calling service
-import { PactV3, MatchersV3 } from '@pact-foundation/pact';
-
-const provider = new PactV3({
-  consumer: 'web-frontend',
-  provider: 'account-service',
-  dir: './pacts',
-});
-
-describe('Account API', () => {
-  it('returns account balance', async () => {
-    await provider
-      .given('account 12345 exists with balance 50000')
-      .uponReceiving('a request for account balance')
-      .withRequest({
-        method: 'GET',
-        path: '/api/accounts/12345/balance',
-        headers: { Authorization: MatchersV3.like('Bearer token') },
-      })
-      .willRespondWith({
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          data: {
-            accountId: '12345',
-            balance: MatchersV3.integer(50000),
-            currency: MatchersV3.string('SGD'),
-          },
-          meta: {
-            timestamp: MatchersV3.iso8601DateTime(),
-          },
-        },
-      })
-      .executeTest(async (mockServer) => {
-        const client = new AccountClient(mockServer.url);
-        const balance = await client.getBalance('12345');
-        expect(balance.accountId).toBe('12345');
-      });
-  });
-
-  it('returns 404 for unknown account', async () => {
-    await provider
-      .given('account 99999 does not exist')
-      .uponReceiving('a request for non-existent account')
-      .withRequest({
-        method: 'GET',
-        path: '/api/accounts/99999/balance',
-      })
-      .willRespondWith({
-        status: 404,
-        body: {
-          error: {
-            code: 'RESOURCE_NOT_FOUND',
-            message: MatchersV3.string(),
-          },
-        },
-      })
-      .executeTest(async (mockServer) => {
-        const client = new AccountClient(mockServer.url);
-        await expect(client.getBalance('99999')).rejects.toThrow();
-      });
-  });
-});
-```
-
-## Baseline Regression Testing
-
-### Repository-owned baseline comparison
-
-The inline capture/replay/comparison scripts are retired. Use the same deterministic project tests and installed schema validator as the runtime contract tests above (not `check-contract.py`, which only checks the spec files), with sanitized version-controlled fixtures or the project's installed snapshot facility. See § Baseline regression in `${CLAUDE_PLUGIN_ROOT}/skills/api-contract-testing/references/installed-validator-workflow.md` for required request and comparison fields.
-
-A baseline must retain the scenario's method, resolved path, query, headers excluding secrets, request body/encoding, fixture setup and expected status/content type. Replaying POST with no body is a different test. Compare nested values/arrays according to explicit stable-field rules, and run the complete schema validation again. Never silently replace malformed JSON with null or compare only top-level keys. Treat missing/empty baseline sets as an incomplete gate; update accepted snapshots only after reviewing the behavioral change.
-
-Timing is a separate measurement: use repeated samples and the project's latency budget under controlled load. A single baseline timing ratio is not proof of a functional regression.
-
-## Structured Test Report Format
-
-```json
-{
-  "report": {
-    "timestamp": "2024-01-15T10:30:00Z",
-    "environment": "staging",
-    "base_url": "http://localhost:8080",
-    "duration_seconds": 45.2,
-    "summary": {
-      "total_tests": 24,
-      "passed": 20,
-      "failed": 3,
-      "warnings": 1,
-      "pass_rate": "83.3%"
-    },
-    "by_category": {
-      "smoke": { "passed": 10, "failed": 0 },
-      "contract": { "passed": 5, "failed": 2 },
-      "security": { "passed": 4, "failed": 1 },
-      "regression": { "passed": 1, "failed": 0, "warnings": 1 }
-    },
-    "failures": [
-      {
-        "test": "POST /api/transfers — contract validation",
-        "expected": "response contains 'transactionId' field",
-        "actual": "field 'transactionId' missing from response",
-        "severity": "high",
-        "category": "contract"
-      }
-    ],
-    "recommendations": [
-      "POST /api/transfers response missing 'transactionId' — breaking change for frontend consumer",
-      "GET /api/transactions response time degraded 3x from baseline — investigate query performance"
-    ]
-  }
-}
-```
-
-### Report evidence
-
-Prefer the installed runner's JUnit/JSON output and exit status. Do not synthesize empty successful categories when an input report is absent. Mark each category `executed`, `failed`, `skipped`, `unsupported` or `static-only`; include tool/version, spec hash, scenario selectors, target and actual test counts. Keep the illustrative JSON above as a report shape, not generated evidence. Missing results or zero executed contract scenarios cannot pass a required gate.
-
-## Common Mistakes to Avoid
-
-1. **Testing exact values instead of structure** — contracts should validate shape (field exists, type correct), not exact values (which change per environment).
-2. **Missing state handlers** — Pact provider tests fail without proper state setup. Every `given()` needs a `@State` handler.
-3. **Not versioning contracts** — always publish with consumer version. Use `can-i-deploy` before releasing.
-4. **Conflating timing with schema compliance** — test latency against the project budget separately; one timing sample cannot certify either.
-5. **Contract tests replacing integration tests** — contracts verify the interface, not the business logic. Both are needed.
-6. **Hardcoded auth tokens in scripts** — use environment variables or token refresh scripts.
+- Source: the runner's JUnit/JSON output and exit status. Record exact command, runner version, spec hash, environment, target, scenario selectors, executed counts, sanitized report path. Per category mark `executed | failed | skipped | unsupported | static-only`; each failure as test / expected / actual / severity / category.
+- Never synthesize empty passing categories. Zero executed contract scenarios or missing results cannot pass a required gate. Say "unsupported: no compatible installed validator" when that is the case.

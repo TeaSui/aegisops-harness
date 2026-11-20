@@ -14,493 +14,85 @@ description: |
 
 # Fintech Mobile Patterns
 
-Primary platform: Flutter/Dart. iOS (Swift) and Android (Kotlin) patterns provided for native modules.
-
-## Biometric Authentication Flow
-
-### Flutter Implementation — local_auth 3.x
-
-Read `pubspec.lock` and platform setup first; the current route below uses the 3.x API. `AuthResult`, `AuthRepository`, token types and `SecureTokenStorage` are application interfaces to implement/test, not plugin APIs. This integration sketch has not been executed on a device.
-
-```dart
-import 'package:local_auth/local_auth.dart';
-
-class BiometricAuthUseCase {
-  final LocalAuthentication _localAuth;
-  final SecureTokenStorage _tokenStorage;
-  final AuthRepository _authRepo;
-
-  BiometricAuthUseCase(this._localAuth, this._tokenStorage, this._authRepo);
-
-  Future<AuthResult> authenticate() async {
-    try {
-      // OR permits device credentials on supported devices without biometrics.
-      final supported = await _localAuth.canCheckBiometrics ||
-          await _localAuth.isDeviceSupported();
-      if (!supported) return AuthResult.fallbackRequired(FallbackType.password);
-
-      final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Verify your identity to access your account',
-        biometricOnly: false, // OS may allow device passcode/PIN/pattern
-        persistAcrossBackgrounding: true,
-      );
-      if (!authenticated) return AuthResult.cancelled();
-
-      // Local authentication is not server authorization or crypto key binding.
-      final refreshToken = await _tokenStorage.getRefreshToken();
-      if (refreshToken == null) {
-        return AuthResult.fallbackRequired(FallbackType.password);
-      }
-      final tokens = await _authRepo.refreshSession(refreshToken);
-      await _tokenStorage.storeTokens(tokens);
-      return AuthResult.success(tokens.accessToken);
-    } on LocalAuthException catch (e) {
-      switch (e.code) {
-        case LocalAuthExceptionCode.userCanceled:
-        case LocalAuthExceptionCode.systemCanceled:
-          return AuthResult.cancelled();
-        case LocalAuthExceptionCode.temporaryLockout:
-        case LocalAuthExceptionCode.biometricLockout:
-        case LocalAuthExceptionCode.noCredentialsSet:
-        case LocalAuthExceptionCode.noBiometricHardware:
-        case LocalAuthExceptionCode.noBiometricsEnrolled:
-        case LocalAuthExceptionCode.userRequestedFallback:
-          return AuthResult.fallbackRequired(FallbackType.password);
-        default: // codes may be extended; don't assume an exhaustive enum
-          return AuthResult.error('Local authentication unavailable');
-      }
-    }
-  }
-}
-```
-
-Serialize concurrent prompts in the application; handle repository/session failures separately through the app's error boundary. For biometric-only policy, check enrollment with `getAvailableBiometrics()` and set `biometricOnly: true` on supported platforms; do not silently weaken a payment authorization policy. A successful OS prompt alone does not bind a storage read or transaction signature to hardware authentication.
-
-**Pinned 2.x projects only:** preserve their existing `options: AuthenticationOptions(...)`, `stickyAuth` and `PlatformException` handling until a planned migration. In 3.x the options wrapper is removed, `stickyAuth` becomes `persistAcrossBackgrounding`, and the app owns error UI; do not upgrade a dependency merely to copy this example. See [local_auth usage](https://pub.dev/packages/local_auth), [3.0 migration notes](https://pub.dev/packages/local_auth/changelog), and [structured exception codes](https://pub.dev/documentation/local_auth/latest/local_auth/LocalAuthExceptionCode.html).
-
-### Secure Token Storage
-
-The options fragment below is for a pinned `flutter_secure_storage` release supporting `encryptedSharedPreferences`. It is independent of local_auth's major; verify the installed storage package API before reuse. Configure current OS-backed storage according to that package and platform. For biometric-gated keys, use a platform/plugin facility that actually enforces authenticated key access; an earlier UI prompt does not impose that restriction.
-
-```dart
-// features/auth/data/secure_token_storage.dart
-
-class SecureTokenStorage {
-  final FlutterSecureStorage _storage;
-
-  // iOS: Keychain with kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly
-  // Android options below are legacy plugin options; verify flutter_secure_storage
-  // in pubspec.lock. They do not request StrongBox or biometric-bound key access.
-  static const _options = IOSOptions(
-    accessibility: KeychainAccessibility.passcode,
-    accountName: 'com.app.auth',
-  );
-  static const _androidOptions = AndroidOptions(
-    encryptedSharedPreferences: true,
-  );
-
-  SecureTokenStorage(this._storage);
-
-  Future<String?> getRefreshToken() => _storage.read(
-    key: 'refresh_token', iOptions: _options, aOptions: _androidOptions);
-
-  Future<void> storeTokens(AuthTokens tokens) async {
-    await _storage.write(
-      key: 'access_token',
-      value: tokens.accessToken,
-      iOptions: _options,
-      aOptions: _androidOptions,
-    );
-    await _storage.write(
-      key: 'refresh_token',
-      value: tokens.refreshToken,
-      iOptions: _options,
-      aOptions: _androidOptions,
-    );
-  }
-
-  Future<void> clearAll() async {
-    await _storage.deleteAll(iOptions: _options, aOptions: _androidOptions);
-  }
-}
-```
-
-### Rules
-```
-BIO-01: Never store biometric data — delegate to OS (LocalAuthentication/BiometricPrompt)
-BIO-02: Biometric unlocks a stored credential (refresh token), not the account directly
-BIO-03: Use the approved fallback policy; device credentials/password require appropriate re-authentication. Never bypass a biometric-only transaction requirement with an unverified app PIN.
-BIO-04: Respect OS lockout and server re-authentication policy; do not assume a portable attempt count or fixed lockout duration from local_auth.
-BIO-05: Re-enroll biometric binding when user changes device biometrics
-BIO-06: Transaction signing: require fresh biometric for payments > threshold amount
-```
-
-## Secure Transaction Display
-
-### Transaction Screen Pattern
-```dart
-// features/transactions/presentation/pages/transaction_detail_page.dart
-
-class TransactionDetailPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<TransactionDetailBloc, TransactionDetailState>(
-      builder: (context, state) {
-        return switch (state) {
-          TransactionDetailLoading() => const ShimmerSkeleton(),
-          TransactionDetailError(:final message) => ErrorView(message: message),
-          TransactionDetailLoaded(:final transaction) => _buildDetail(transaction),
-        };
-      },
-    );
-  }
-
-  Widget _buildDetail(Transaction tx) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Transaction Details')),
-      body: SecureWidget(             // prevents screenshots in sensitive areas
-        isSecure: true,
-        child: ListView(
-          children: [
-            AmountDisplay(
-              amount: tx.amount,      // stored in minor units (cents)
-              currency: tx.currency,
-              isDebit: tx.amount < 0,
-            ),
-            MaskedField(
-              label: 'To Account',
-              value: tx.recipientAccount,
-              maskFn: maskAccountNumber, // ****5678
-              revealable: true,
-            ),
-            // ... other fields
-          ],
-        ),
-      ),
-    );
-  }
-}
-```
-
-### Screenshot Prevention
-```dart
-// core/widgets/secure_widget.dart
-
-class SecureWidget extends StatefulWidget {
-  final bool isSecure;
-  final Widget child;
-
-  @override
-  State<SecureWidget> createState() => _SecureWidgetState();
-}
-
-class _SecureWidgetState extends State<SecureWidget> {
-  @override
-  void initState() {
-    super.initState();
-    // Android: FLAG_SECURE blocks screenshots/recording. iOS: hide content on app-switch
-    // (overlay on AppLifecycleState.inactive). flutter_windowmanager is unmaintained (last
-    // release 2021) — use a project-owned channel (below) or a maintained package verified
-    // for the installed Flutter version.
-    if (widget.isSecure) _secureScreen.invokeMethod('enable');
-  }
-
-  @override
-  void dispose() {
-    if (widget.isSecure) _secureScreen.invokeMethod('disable');
-    super.dispose();
-  }
-
-  static const _secureScreen = MethodChannel('app/secure_screen');
-  // MainActivity.kt handler:
-  //   "enable"  -> window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-  //   "disable" -> window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-```
-
-## Push Notifications for Financial Alerts
-
-### Notification Categories
-```dart
-// core/notifications/notification_types.dart
-
-enum NotificationCategory {
-  transaction,        // debit/credit alerts — high priority, immediate
-  security,           // login from new device, password change — critical
-  kyc,               // KYC status update — normal priority
-  marketing,          // offers, announcements — low priority, user opt-in
-}
-
-// Channel configuration (Android)
-final channels = {
-  NotificationCategory.transaction: AndroidNotificationChannel(
-    'transactions',
-    'Transaction Alerts',
-    importance: Importance.high,
-    sound: RawResourceAndroidNotificationSound('transaction_alert'),
-  ),
-  NotificationCategory.security: AndroidNotificationChannel(
-    'security',
-    'Security Alerts',
-    importance: Importance.max, // heads-up notification
-  ),
-};
-```
-
-### FCM Handler Pattern
-```dart
-// core/notifications/notification_handler.dart
-
-class NotificationHandler {
-  Future<void> initialize() async {
-    // Request permission (iOS)
-    final settings = await FirebaseMessaging.instance.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      // criticalAlert needs Apple's approved Critical Alerts entitlement; Apple's HIG reserves
-      // Critical for urgent health and safety information (public agencies, health or home
-      // apps), so a banking app should not expect it. Send security and transaction alerts with
-      // APNs `"interruption-level": "time-sensitive"` (iOS 15+; HIG cites account security).
-      criticalAlert: false,
-    );
-
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen(_handleForeground);
-
-    // Handle background/terminated tap
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
-
-    // Register device token with backend
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token != null) await _authRepo.registerDeviceToken(token);
-
-    // Handle token refresh
-    FirebaseMessaging.instance.onTokenRefresh.listen(
-      (token) => _authRepo.registerDeviceToken(token),
-    );
-  }
-
-  void _handleForeground(RemoteMessage message) {
-    final category = NotificationCategory.values.byName(
-      message.data['category'] ?? 'transaction',
-    );
-
-    // Transaction alerts: show in-app banner (not system notification)
-    if (category == NotificationCategory.transaction) {
-      _showInAppBanner(message);
-      // Invalidate cached balance/transactions
-      getIt<TransactionBloc>().add(const RefreshTransactions());
-    }
-
-    // Security alerts: always show system notification
-    if (category == NotificationCategory.security) {
-      _showSystemNotification(message, priority: Priority.max);
-    }
-  }
-}
-```
-
-### Rules
-```
-PUSH-01: Transaction notifications must NOT contain full account numbers or amounts in payload
-PUSH-02: Notification payload: use data-only messages, build display text client-side
-PUSH-03: Security alerts (new device login) use high priority: Android high-importance channel, iOS Time Sensitive interruption level (not Critical Alerts)
-PUSH-04: User must be able to disable marketing notifications independently
-PUSH-05: Invalidate cached financial data when transaction notification received
-PUSH-06: Test notification delivery with both app foreground and background states
-```
-
-## KYC Document Capture
-
-```dart
-// features/kyc/presentation/widgets/document_capture.dart
-
-class DocumentCapture extends StatelessWidget {
-  final KycDocumentType documentType;
-  final void Function(File) onCaptured;
-
-  Future<void> _captureDocument(BuildContext context) async {
-    final picker = ImagePicker();
-
-    // Camera preferred for identity documents (prevents submission of screenshots)
-    final source = documentType.requiresCamera
-        ? ImageSource.camera
-        : await _showSourcePicker(context);
-
-    final image = await picker.pickImage(
-      source: source,
-      maxWidth: 2048,           // limit resolution
-      maxHeight: 2048,
-      imageQuality: 85,         // compress to reduce upload size
-    );
-
-    if (image == null) return;
-
-    final file = File(image.path);
-    final sizeInMb = await file.length() / (1024 * 1024);
-
-    if (sizeInMb > 10) {
-      _showError(context, 'Document must be under 10MB');
-      return;
-    }
-
-    // Validate it looks like a document (basic checks)
-    if (!await _isValidImage(file)) {
-      _showError(context, 'Invalid document image');
-      return;
-    }
-
-    onCaptured(file);
-  }
-}
-
-// Document types with capture rules
-enum KycDocumentType {
-  nationalId(requiresCamera: true, sides: 2),
-  passport(requiresCamera: true, sides: 1),
-  proofOfAddress(requiresCamera: false, sides: 1),
-  selfie(requiresCamera: true, sides: 1);
-
-  final bool requiresCamera;
-  final int sides;
-  const KycDocumentType({required this.requiresCamera, required this.sides});
-}
-```
-
-### Rules
-```
-KYC-MOB-01: National ID and passport: camera only (prevents screenshot/photocopy fraud)
-KYC-MOB-02: Selfie: liveness detection recommended (blink/head turn prompt)
-KYC-MOB-03: Upload via pre-signed S3 URL (never through app server)
-KYC-MOB-04: Delete local document files immediately after successful upload
-KYC-MOB-05: Show upload progress with retry on failure (resume if possible)
-KYC-MOB-06: Document preview before submit — allow retake
-```
-
-## Offline-First for Financial Data
-
-```dart
-// features/transactions/data/repositories/transaction_repository_impl.dart
-
-class TransactionRepositoryImpl implements TransactionRepository {
-  final TransactionRemoteDataSource _remote;
-  final TransactionLocalDataSource _local;   // encrypted DB, e.g. drift (OFFLINE-06)
-  final ConnectivityService _connectivity;
-
-  @override
-  Stream<List<Transaction>> watchTransactions(String accountId) {
-    // Always serve from local first
-    _syncIfConnected(accountId);
-    return _local.watchTransactions(accountId);
-  }
-
-  Future<void> _syncIfConnected(String accountId) async {
-    if (!await _connectivity.isConnected) return;
-
-    try {
-      final lastSync = await _local.getLastSyncTimestamp(accountId);
-      final remote = await _remote.getTransactions(
-        accountId,
-        since: lastSync,
-      );
-      await _local.upsertTransactions(remote);
-      await _local.setLastSyncTimestamp(accountId, DateTime.now());
-    } catch (e) {
-      // Sync failure is non-fatal — stale data is better than no data
-      debugPrint('Sync failed: $e');
-    }
-  }
-}
-```
-
-### Offline Rules
-```
-OFFLINE-01: Display cached data immediately, sync in background
-OFFLINE-02: Show "Last updated X minutes ago" indicator when offline
-OFFLINE-03: Read-only when offline — disable transfer/payment buttons
-OFFLINE-04: Queue non-financial actions offline (profile updates), sync on reconnect
-OFFLINE-05: Never queue financial transactions offline — require connectivity
-OFFLINE-06: Encrypted local database (drift 2.32+ with SQLite3MultipleCiphers via the `sqlite3` hook `source: sqlite3mc`, or `sqflite_sqlcipher`; `sqlcipher_flutter_libs` is end-of-life; Isar 3 has no built-in encryption) with the key in Keychain/Keystore
-```
-
-## App Security Hardening
-
-```dart
-// core/security/app_security.dart
-
-class AppSecurity {
-  /// Call on app start
-  Future<void> initialize() async {
-    // Root/jailbreak detection
-    final isCompromised = await SafeDevice.isJailBroken ||
-                          await SafeDevice.isRealDevice == false;
-    if (isCompromised) {
-      // Allow but warn + log (blocking breaks legitimate dev testing)
-      _analyticsService.logSecurityEvent('compromised_device');
-    }
-
-    // Certificate pinning
-    HttpOverrides.global = CertificatePinningOverrides(
-      pins: AppConfig.certificatePins,
-    );
-
-    // App lifecycle: auto-lock after background > 5 minutes
-    AppLifecycleListener(
-      onStateChange: _handleLifecycleChange,
-    );
-  }
-
-  void _handleLifecycleChange(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _backgroundTimestamp = DateTime.now();
-    }
-    if (state == AppLifecycleState.resumed) {
-      final elapsed = DateTime.now().difference(_backgroundTimestamp!);
-      if (elapsed > const Duration(minutes: 5)) {
-        // Require re-authentication (biometric)
-        _authBloc.add(const RequireReauthentication());
-      }
-    }
-  }
-}
-```
-
-## Amount Handling
-
-```dart
-// CRITICAL: Financial amounts in minor units (cents/pips)
-// Never use double for money
-
-/// Amount stored as int (minor units). 1234 = $12.34
-class Money {
-  final int minorUnits;
-  final String currency;
-
-  const Money(this.minorUnits, this.currency);
-
-  String format({String locale = 'en_SG'}) {
-    final formatter = NumberFormat.simpleCurrency(
-      locale: locale,
-      name: currency,
-      decimalDigits: decimalPlaces,
-    );
-    return formatter.format(minorUnits / pow(10, decimalPlaces));
-  }
-
-  /// ISO 4217 exponent. Unknown currencies fail loudly instead of assuming 2.
-  int get decimalPlaces => switch (currency) {
-    'VND' || 'KRW' || 'JPY' => 0,
-    'KWD' || 'BHD' || 'OMR' || 'JOD' => 3,
-    'SGD' || 'USD' || 'MYR' || 'PHP' || 'EUR' => 2,
-    _ => throw UnsupportedError('No exponent configured for $currency'),
-  };
-}
-```
-
-## Testing Priorities
-
-Test biometric fallback chains, offline data display with stale indicators, KYC document capture validation, and amount formatting with minor units. Use `mockLocalAuth.canCheckBiometrics` for biometric tests, mock `ConnectivityService` for offline tests.
+Flutter/Dart primary; Swift/Kotlin only for native modules (platform channels). Read `pubspec.lock` before using any plugin API; do not upgrade a dependency just to match these notes.
+
+## Biometric auth
+
+- `local_auth` 3.x: `authenticate(localizedReason:, biometricOnly:, persistAcrossBackgrounding:)`, errors via `LocalAuthException`/`LocalAuthExceptionCode` (non-exhaustive — handle `default`). Pinned 2.x projects keep `AuthenticationOptions`/`stickyAuth`/`PlatformException` until a planned migration.
+- Map cancel → cancelled; lockout, no hardware, not enrolled, no credentials, user fallback → password fallback.
+- Serialize concurrent prompts. A passed OS prompt is not server authorization and does not bind a key read or signature to hardware auth — for biometric-gated keys use a facility that enforces authenticated key access (Keychain access control / Keystore `setUserAuthenticationRequired`).
+- Biometric-only policy: check `getAvailableBiometrics()`, set `biometricOnly: true`; never silently weaken a payment authorization policy.
+
+| Rule | |
+|---|---|
+| BIO-01 | Never store biometric data; delegate to OS (LocalAuthentication / BiometricPrompt). |
+| BIO-02 | Biometric unlocks a stored credential (refresh token), then refresh the session server-side; never unlocks the account directly. |
+| BIO-03 | Use the approved fallback policy; device credential/password needs proper re-auth. Never bypass a biometric-only transaction requirement with an unverified app PIN. |
+| BIO-04 | Respect OS lockout and server re-auth policy; assume no portable attempt count or lockout duration. |
+| BIO-05 | Re-enrol the biometric binding when device biometrics change. |
+| BIO-06 | Fresh biometric for payments above the threshold amount (transaction signing). |
+
+## Secure storage
+
+- Tokens in `flutter_secure_storage` (verify installed API). iOS Keychain `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly` (`KeychainAccessibility.passcode`); Android `encryptedSharedPreferences` is a legacy option and does not give StrongBox or biometric-bound keys. `clearAll` on logout.
+
+## Secure display
+
+- Sensitive screens: Android `FLAG_SECURE` via a project-owned MethodChannel (enable on mount, clear on dispose) or a maintained package — not `flutter_windowmanager` (unmaintained since 2021). iOS: overlay content on `AppLifecycleState.inactive`.
+- Account numbers masked (`****5678`), reveal on explicit action.
+- Every async screen has loading (skeleton), error and loaded states (sealed-state switch with Bloc).
+
+## Money
+
+- Amounts are `int` minor units; never `double`. Format with `NumberFormat.simpleCurrency` using the ISO 4217 exponent (VND/KRW/JPY 0; SGD/USD/MYR/PHP/EUR 2; KWD/BHD/OMR/JOD 3); an unknown currency throws, never defaults to 2.
+
+## Push notifications
+
+- Categories → Android channels: transaction (high importance), security (max, heads-up), kyc (default), marketing (low, opt-in).
+- iOS: no `criticalAlert` (Critical Alerts entitlement is reserved for health/safety); send security and transaction alerts with APNs `interruption-level: time-sensitive`.
+- Register the FCM token on start and on `onTokenRefresh`. Foreground transaction message → in-app banner + refresh transactions; security → system notification.
+
+| Rule | |
+|---|---|
+| PUSH-01 | No full account numbers or amounts in the payload. |
+| PUSH-02 | Data-only messages; build display text client-side. |
+| PUSH-03 | Security alerts (new-device login): Android high-importance channel, iOS Time Sensitive (not Critical). |
+| PUSH-04 | Marketing notifications can be disabled independently. |
+| PUSH-05 | Invalidate cached financial data on a transaction notification. |
+| PUSH-06 | Test delivery in foreground and background states. |
+
+## KYC capture
+
+- Capture limits: max 2048×2048, quality 85, reject > 10 MB, validate it decodes as an image. Types: national ID (camera, 2 sides), passport (camera, 1), proof of address (camera or gallery, 1), selfie (camera, 1).
+
+| Rule | |
+|---|---|
+| KYC-MOB-01 | National ID and passport: camera only. |
+| KYC-MOB-02 | Selfie: liveness detection recommended (blink/head-turn). |
+| KYC-MOB-03 | Upload via pre-signed S3 URL, never through the app server. |
+| KYC-MOB-04 | Delete local document files immediately after successful upload. |
+| KYC-MOB-05 | Show upload progress; retry on failure (resume if possible). |
+| KYC-MOB-06 | Preview before submit; allow retake. |
+
+## Offline-first
+
+Repository serves the local stream first and syncs in the background (`since: lastSync`); sync failure is non-fatal.
+
+| Rule | |
+|---|---|
+| OFFLINE-01 | Show cached data immediately, sync in background. |
+| OFFLINE-02 | Show "Last updated X minutes ago" when offline. |
+| OFFLINE-03 | Read-only offline: disable transfer/payment actions. |
+| OFFLINE-04 | Queue non-financial actions (profile updates) offline; sync on reconnect. |
+| OFFLINE-05 | Never queue financial transactions offline. |
+| OFFLINE-06 | Encrypted local DB with key in Keychain/Keystore: drift 2.32+ with SQLite3MultipleCiphers (`sqlite3` hook `source: sqlite3mc`) or `sqflite_sqlcipher`. Not `sqlcipher_flutter_libs` (EOL) or Isar 3 (no encryption). |
+
+## App hardening
+
+- Root/jailbreak or emulator detected: allow, warn and log a security event (blocking breaks dev testing) unless the project policy says block.
+- Certificate pinning on the HTTP client (pins from config).
+- Re-authenticate (biometric) after > 5 min in background.
+
+## Tests
+
+Biometric fallback chain (mock `LocalAuthentication`), offline display with stale indicator (mock connectivity), KYC capture validation, minor-unit formatting per exponent.

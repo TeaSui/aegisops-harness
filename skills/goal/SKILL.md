@@ -5,16 +5,10 @@ description: Execute an explicitly delegated end-to-end outcome autonomously, in
 
 # Autonomous outcome delivery
 
-Inspect relevant project instructions, existing changes, code and test commands before asking intake questions. Preserve the user's current work. Establish the goal, scope and measurable success criteria from the request and available evidence; ask only when a material constraint cannot be resolved.
-
-For a code change, invoke `tea-sdlc:brainstorming` next; it runs the trust-boundary check and, when the request handed over the outcome without check-ins, records the spec approval as delegated. Select the tier in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`; autonomy does not remove Security, contract, QA or permission boundaries. Fast path uses an in-context checklist, TDD for behavior changes and bug fixes, and relevant verification, with no formal plan or agent ceremony. Trust-boundary work obtains Security and any required contracts before the implementation plan.
-
-For substantial work or sessions that need recovery, persist `.goal/state.md` or the accepted plan location with goal, acceptance evidence, tasks/dependencies/status, decisions and blockers. Avoid scaffolding a state directory for a tiny fix. Keep `.goal/` out of commits (do not stage it). Update at meaningful checkpoints; reread after resume/compaction. Never recreate unknown state from memory.
-
-Continue authorized reversible work and delegated routine choices. Present material decisions without repeatedly asking for design/spec/execution approval already covered by the request. Keep native permission prompts, destructive operations and external releases inside their separately authorized scope. User messages steer the active goal unless clearly replacing/canceling it.
-
-Implement cohesive tasks and verify with commands/artifacts that establish the actual behavior. Use appropriate tools, not every tool by default. Run tests appropriate to a change; broaden testing when a failure, new change or unresolved concern warrants it. Debug from observed failures. Respect `${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`; continue independent tasks while blocked dependencies remain stopped.
-
-Before completion, compare every criterion with real evidence and review the integrated changes. Dispatch formal reviewers only in tiers that require/benefit from them. Missing runtime/independent gates stay explicit; never label degraded checks as passing those gates. Do not fabricate a test result, model identity, deployment or source link.
-
-Deliver a concise outcome, important changes, verified checks and material limitations. Link substantial artifacts instead of pasting the entire internal plan. Execute authorized follow-through rather than ending with a generic offer to continue.
+- Recon first (project instructions, existing changes, code, test commands); derive goal, scope and measurable success criteria; ask only for a material constraint you cannot resolve. Preserve the user's work.
+- Code change: invoke `tea-sdlc:brainstorming` next; it classifies the tier and records spec approval as delegated when the user handed over the outcome without check-ins. Autonomy removes no Security, contract, QA or permission gate.
+- Substantial or long work: keep `.goal/state.md` (or the plan) with goal, acceptance evidence, tasks and status, decisions, blockers; update at checkpoints, reread after resume or compaction, never rebuild it from memory, never stage `.goal/`. Skip it for tiny fixes.
+- Continue reversible work and routine choices without re-asking for approvals the request already covers. Destructive operations, permission prompts and external releases stay within their own authorization.
+- Bound loops per `${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`; keep independent tasks moving while a dependency is blocked.
+- Before finishing, check every success criterion against real evidence; label missing or degraded gates, never call them passed.
+- Deliver as authorized (merge/PR per the delivery skill) instead of ending with an offer to continue. Report outcome, key changes, checks and limits; link artifacts.

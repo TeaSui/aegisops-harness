@@ -5,44 +5,26 @@ argument-hint: "<error description>"
 
 Error: **$ARGUMENTS**
 
-Classify the task using `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`; complete required Security/contract prerequisites before implementing. The four investigations are read-only and may run as parallel agents in any tier; the fix follows the tier (Fast path: the main session implements it). For a single-service error use systematic-debugging instead. Follow `${CLAUDE_PLUGIN_ROOT}/rules/dispatch-prompt-contract.md` and `${CLAUDE_PLUGIN_ROOT}/rules/subagent-return-format.md`. Dispatch only useful independent branches using the available Agent tool (`Task` alias is supported); keep dependent investigation sequential. When agents are unavailable, report the missing independent gate and use an authorized local fallback.
+## When to run
+Run this only in full mode (`${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`) or when the user asks for a parallel investigation. Otherwise, and for any single-service error, use `tea-sdlc:systematic-debugging` in the main session.
 
-All reports disclose presence, counts, safe identifiers, filenames or explicitly redacted metadata only. Never print credentials, environment/config values, raw auth headers, connection strings, PII or request/response bodies. Diagnostics must stay within the authorized safe target; do not start services or replay mutating requests by default.
+## How to run
+- Dispatch only the independent branches below that would help, in parallel, through the Agent tool (the `Task` alias works), following `${CLAUDE_PLUGIN_ROOT}/rules/dispatch-prompt-contract.md`. Keep dependent steps sequential. If agents are unavailable, say so and run the branches yourself.
+- Every branch is read-only.
+- Reports carry only presence, counts, safe identifiers, filenames or redacted metadata. Never print credentials, env or config values, auth headers, connection strings, PII or request/response bodies.
+- Stay on the authorized safe target. Never start services or replay mutating requests.
 
-Choose from these four investigation branches:
+## Branches
+| Branch | Checks | Returns |
+|---|---|---|
+| Config | required env/config keys (presence and validity), credential-source availability, service-to-service settings (ports, hosts, feature flags) | what is present, missing or invalid, with values redacted |
+| Diagnostics | read-only health checks on the authorized target; ports (`lsof -i :<port>` or `ss -tlnp`); availability of required resources | what responds, sanitized results, skipped checks marked |
+| Code path | from the error surface back to where data or state first goes wrong | the originating `file:line` with a snippet |
+| History | `git log --oneline -20` on the related files; staged, unstaged and untracked changes; shallow or unborn history handled | the commits among those 20 that could explain the error |
 
-## Agent 1 — Config
-Check all config for this error:
-- Required environment/config keys: presence and validation status only
-- Connection/profile/credential-source availability: safe labels and filenames only
-- Service-to-service settings (ports, hostnames, feature flags)
-Report: which required configuration is present/missing or invalid; redact values.
-
-## Agent 2 — Diagnostics
-Run live checks:
-- Use configured read-only health checks on the authorized target; report status, content type and redacted metadata, never raw body/auth headers
-- Check ports: `lsof -i :<port>` or `ss -tlnp`
-- Inspect required resource availability if within scope; report counts/safe identifiers rather than sensitive contents
-Report: which prerequisites respond and the relevant sanitized result; mark unavailable/skipped checks explicitly.
-
-## Agent 3 — Code path
-Trace from error surface to origin:
-- Where does the error surface? What calls it, and what safe metadata describes the arguments?
-- Trace backward to where data is malformed or state is wrong
-Report: exact `file:line` where failure originates, with relevant code snippet.
-
-## Agent 4 — Git history
-Check for recent regressions:
-- `git log --oneline -20` on files related to the error
-- Inspect the verified relevant range and current staged/unstaged/untracked changes; handle shallow/unborn history explicitly
-Report: any commit in the last 20 that could explain this error.
-
-## Synthesis (after selected investigations return)
-
-1. Read all selected reports and their cited evidence
-2. State root cause: one specific, falsifiable sentence
-3. Cross-check the hypothesis against the collected findings; state remaining uncertainty
-4. Write a failing test that reproduces the root cause (test-driven-development), then implement the fix — cite the specific finding that justifies each change
-5. Verify with the `verification-before-completion` skill
-
-**Do not implement a fix before the necessary investigation and routing prerequisites are satisfied.**
+## Synthesis
+1. Read every report and the evidence it cites.
+2. State the root cause in one falsifiable sentence. Cross-check it against all the findings and state what remains uncertain.
+3. Finish the routing prerequisites (the security pass or the Security agent, and the contract gate) before fixing. The fix follows the tier.
+4. Write a failing test that reproduces the root cause (`tea-sdlc:test-driven-development`), then fix it, citing the finding behind each change.
+5. Verify with `tea-sdlc:verification-before-completion`.

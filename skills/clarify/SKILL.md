@@ -3,23 +3,10 @@ name: clarify
 description: Use before starting a task when the request leaves open something that changes what gets built (scope, behavior, data, interface, anything expensive to undo), or when the user asks to be asked clarifying questions first. Inspects the project, then asks only the questions whose answers change the work, each with the default that applies if unanswered. Skip for clear or routine requests. For a code change, brainstorming already covers this; load clarify when the user asks to be questioned first or the task is not a code change.
 ---
 
-Task: $ARGUMENTS
+Task: $ARGUMENTS (default: the task under discussion)
 
-When no task is given, use the task currently under discussion.
-
-**Look before asking.** Read the project instructions, the code involved, existing specs/ADRs and the earlier messages. Do not ask for anything those sources answer.
-
-**Sort what is still open:**
-
-- It would change what gets built — scope, behavior, data, an interface, a trust-boundary item in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`, or anything expensive to undo → ask.
-- It would not → choose a reasonable default, list it in one line under "Assumptions", and do not ask.
-
-**Ask in one batch**, most consequential first, five questions at most. Use the runtime's question tool when one is available. Each question:
-
-- is concrete: offers options or an example instead of an open "what do you want?";
-- says in one line what the answer changes;
-- names the default you will use if it goes unanswered.
-
-Ask a second round only when an answer opens a new question of the first kind. Stop when the remaining unknowns no longer change the work: state what you are still assuming, then start. If the user asked only for clarification, restate the task as you now understand it in three to five lines and wait.
-
-If nothing material is open, say so in one line and start. Do not manufacture questions to look thorough.
+1. Read project instructions, the code involved, specs/ADRs and earlier messages; never ask what they answer.
+2. An open point that changes scope, behaviour, data, an interface, a trust-boundary item or anything costly to undo → ask. Anything else → pick a default and list it under "Assumptions".
+3. One batch, most consequential first, ≤5 questions, via the runtime's question tool if any. Each: concrete options, one line on what the answer changes, the default if unanswered.
+4. Second round only if an answer opens a new question of that kind. Then state remaining assumptions and start. If the user asked only for clarification, restate the task in 3-5 lines and wait.
+5. Nothing material open → say so in one line and start.

@@ -8,27 +8,21 @@ description: >
 
 # Backend Language References
 
-Used by the main session on the fast path and preloaded into `tea-sdlc:backend-engineer-subagent`. It routes to the language reference file matching the detected triggers. Read only the reference that matches your current task.
+Read only `${CLAUDE_PLUGIN_ROOT}/skills/backend-languages/<file>` for the detected language (plain files, not skills); load several only for a genuinely polyglot repo.
 
-## Language Router
-
-| Language | Triggers | Reference |
-|----------|----------|-----------|
+| Language | Triggers | File |
+|----------|----------|------|
 | **Go** | `.go` files, `go.mod`, `goroutine`, `channel`, `errgroup`, Go modules | `golang.md` |
 | **Spring Boot** | `@SpringBootApplication`, `@RestController`, `build.gradle`, `pom.xml`, Spring MVC, JPA, Hibernate | `spring-boot.md` |
 | **Python** | `.py` files, `pyproject.toml`, `requirements.txt`, FastAPI, Starlette, `asyncio`, Pydantic | `python.md` |
 | **Rust** | `.rs` files, `Cargo.toml`, `cargo workspace`, `tokio`, `axum`, `actix`, `thiserror`, `anyhow` | `rust.md` |
 
-## How to use
-
-1. Detect the language from file extensions, build manifests, or imports.
-2. Read `${CLAUDE_PLUGIN_ROOT}/skills/backend-languages/<file>.md` for the matching file (e.g. `golang.md`); these files are not skills and cannot be invoked with the Skill tool.
-3. Apply patterns from that reference. Do not load multiple language references unless the project is genuinely polyglot.
-
 ## Shared conventions (all languages)
 
-- REST response envelope: `{ "data": {...}, "meta": { "timestamp": "..." } }` / `{ "error": { "code": "...", "message": "...", "details": [] } }`
-- Config via environment variables only — no hardcoded values
-- Repository pattern for data access; services own business logic
-- DTOs validated at entry points; never expose raw persistence models in API responses
-- Mock only external HTTP APIs in tests; use real or in-memory DB for query tests
+- Envelope: success `{ "data": {...}, "meta": { "timestamp": "..." } }`; error `{ "error": { "code": "...", "message": "...", "details": [] } }` with the correct HTTP status, mapped in one central handler.
+- Errors: no stack traces, ORM/internal details, rejected values or PII in responses or logs; log the full error server-side with safe fields only.
+- Money: never binary floating point. Integer minor units (rates in basis points) or an exact decimal type; compare exactly.
+- Config from environment variables only; secrets from env/Secrets Manager.
+- Layers: thin handler (validate DTO, call service) → service (business logic, transaction boundary) → repository. Never return persistence models from the API.
+- Tests: mock only external HTTP APIs; query tests hit a real DB (Testcontainers) or in-memory DB.
+- Commit lock files (`go.sum`, `uv.lock`/`poetry.lock`, `Cargo.lock` for binaries).

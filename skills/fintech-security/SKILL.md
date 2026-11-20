@@ -10,106 +10,101 @@ description: |
 
 # Fintech Security Control Catalogue
 
-**Candidate controls — cite only when earned by a STRIDE finding.** This is a lookup list, not a template. In lean mode (the default) the main session uses this catalogue for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` (assets, threats, controls; no `security.md`). In full mode the threat model, rule numbering and output format belong to `tea-sdlc:security-engineer-subagent` (`${CLAUDE_PLUGIN_ROOT}/agents/security-engineer-subagent.md`, Phase 3–4). When a finding needs a control, copy the idea below into a numbered rule under the matching prefix (`AUTH-NN`, `DATA-NN`, …), phrase it as WHAT must be true, and cite the finding.
+Candidate controls — cite one only when a STRIDE finding earns it; this is a lookup list, not a template.
 
-Numbers marked **(default — project must confirm)** are starting points, not regulatory facts. Confirm them against the project's compliance owner before they become rules. Compliance references name the framework (MAS TRM Guidelines, MAS Notice on Cyber Hygiene, PCI DSS, PDPA) without chapter numbers; cite a section only after checking the current published text.
+- **Lean mode (default):** the main session uses it for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` — assets, threats, controls; no `security.md`.
+- **Full mode:** threat model, rule numbering and output format belong to `tea-sdlc:security-engineer-subagent`. Copy the control into a numbered rule under its section prefix (`AUTH-NN`, `AUTHZ-NN`, `INPUT-NN`, `CRYPTO-NN`, `DATA-NN`, `LOG-NN`, `NET-NN`, `RATE-NN`, `DEP-NN`, `SECRET-NN`, `COMPLIANCE-NN`; payment controls under `DATA`), phrased as what must be true, citing the finding.
 
-Classification levels follow `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md` (Level 1 highly sensitive … Level 3 internal).
+Numbers marked **(default — project must confirm)** are starting points, not regulatory facts; confirm with the compliance owner before they become rules. Name frameworks (MAS TRM Guidelines, MAS Notice on Cyber Hygiene, PCI DSS, PDPA) without clause numbers unless checked against the current text. Data levels (Level 1 highly sensitive … Level 3 internal): `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`.
 
-## AUTH — authentication & session
+## AUTH
 
-- MFA for customer-facing financial transactions; step-up (separate factor) for high-value transfers and transaction signing.
-- Device binding: a new device requires step-up authentication before financial operations.
-- Idle session timeout: 15 min for financial operations, 30 min otherwise **(default — project must confirm)**.
-- Failed-login lockout after 5 attempts with progressive delays **(default — project must confirm)**; lockout must not enable account-enumeration or targeted lockout DoS.
-- JWT validation checks signature, algorithm (pinned; reject `none` and algorithm confusion), `exp`, `iss`, `aud`. Prefer asymmetric signing (e.g. RS256/ES256) when verifiers are separate services.
-- Spring: `SecurityFilterChain` ends in `.anyRequest().authenticated()`; more specific matchers before generic ones.
-- Go: use a maintained JWT library (e.g. `github.com/golang-jwt/jwt/v5`; `dgrijalva/jwt-go` is abandoned).
+- MFA for customer financial transactions; step-up (separate factor) for high-value transfers and transaction signing. New device → step-up before financial operations.
+- Idle timeout 15 min financial, 30 min otherwise **(default — project must confirm)**.
+- Lockout after 5 failed logins with progressive delay **(default — project must confirm)**; no account enumeration or targeted-lockout DoS.
+- JWT: verify signature, pinned algorithm (reject `none`/confusion), `exp`, `iss`, `aud`; asymmetric (RS256/ES256) when verifiers are separate services. Go: `golang-jwt/jwt/v5`, never abandoned `dgrijalva/jwt-go`.
+- Spring `SecurityFilterChain` ends `.anyRequest().authenticated()`; specific matchers first.
 
-## AUTHZ — authorization
+## AUTHZ
 
-- Object-level checks on every resource access (the caller owns or may act on the account/payment ID).
-- Spring: method-level `@PreAuthorize` on sensitive service operations; do not rely on URL matchers alone.
-- No mass assignment: request DTOs never bind role, owner, balance or status fields.
-- Admin actions require a distinct role and are audit-logged (see LOG).
+- Object-level ownership check on every resource access.
+- Spring `@PreAuthorize` on sensitive service methods, not URL matchers alone.
+- DTOs never bind role, owner, balance or status (no mass assignment).
+- Admin actions need a distinct role and are audit-logged.
 
-## INPUT — validation & output encoding
+## INPUT
 
-- Validate at the boundary: Spring `@Valid` + Bean Validation on every `@RequestBody`; Go validation in the handler before business logic.
-- Parameterized queries only (`$1`, `?`, JPA parameters); never `fmt.Sprintf`/string concatenation into SQL.
-- Request size limits: 1 MB JSON body, 10 MB per upload **(default — project must confirm)**; Go `http.MaxBytesReader`, Spring multipart limits.
-- Untrusted JSON: no Jackson polymorphic default typing; Go `json.Decoder` with `DisallowUnknownFields` where the contract is closed.
-- Regex in validators must be safe against catastrophic backtracking.
-- Go HTML: `html/template`, never `text/template`; file paths: `filepath.Clean` + base-directory containment check.
-- Payment amounts: positive, within limits, and no more fraction digits than the currency's ISO 4217 exponent (0 for VND/KRW, 2 for SGD/USD, 3 for KWD/BHD).
+- Validate at the boundary (Spring `@Valid` on every `@RequestBody`; Go in the handler before logic).
+- Parameterized queries only; never string-built SQL.
+- Body limits 1 MB JSON, 10 MB per upload **(default — project must confirm)** (`http.MaxBytesReader`, Spring multipart limits).
+- No Jackson polymorphic default typing; Go `DisallowUnknownFields` for closed contracts; ReDoS-safe regex.
+- Go `html/template` only; paths `filepath.Clean` + base-dir containment.
+- Amounts positive, within limits, fraction digits ≤ ISO 4217 exponent (VND/KRW 0, SGD/USD 2, KWD/BHD 3).
 
-## CRYPTO — encryption, hashing, keys
+## CRYPTO
 
 - Level 1 data encrypted at rest with customer-managed KMS keys; field-level encryption for national ID and account numbers.
-- Key rotation: KMS keys use **KMS automatic key rotation** (verify the rotation period options in current KMS docs); secrets (DB passwords, API keys) rotate via **Secrets Manager rotation**. Do not describe KMS keys as rotated by Secrets Manager. Rotation interval for secrets: ≤ 90 days **(default — project must confirm)**.
-- Passwords/PINs hashed with a memory-hard algorithm tuned to the target hardware; never reversible encryption.
-- Webhook callbacks from payment providers verified with the provider's signature scheme (typically HMAC-SHA256) using constant-time comparison and a timestamp/replay window.
-- Money arithmetic: integer minor units or a decimal type (`shopspring/decimal`, `math/big`, `BigDecimal`); never floating point. Guard against silent integer overflow in Go.
+- KMS keys: KMS automatic rotation. Secrets: Secrets Manager rotation, ≤ 90 days **(default — project must confirm)**. KMS keys are not rotated by Secrets Manager.
+- Passwords/PINs: memory-hard hash tuned to hardware; never reversible.
+- Provider webhooks: signature (typically HMAC-SHA256), constant-time compare, timestamp replay window.
+- Money: integer minor units or decimal (`BigDecimal`, `shopspring/decimal`, `math/big`); never float; guard Go integer overflow.
 
-## DATA — handling, PII, retention
+## DATA (incl. payments)
 
-- No PII in logs, URLs, error responses, metric tags or message-queue metadata/attributes.
-- Error responses to clients are generic; details stay in server logs. Spring: no `server.error.include-stacktrace=always`, no `spring.jpa.show-sql=true` in production.
-- PCI DSS: never store CVV or full PAN; use provider tokenization.
-- KYC documents: separate bucket, SSE-KMS with a customer-managed key, Block Public Access, upload and view via pre-signed URLs with 5-minute expiry **(default — project must confirm)**, MIME type validated server-side, malware scan before processing, no PII in object keys, OCR results processed in memory (no temp files).
-- Retention: financial transaction records 7 years, KYC documents 5 years after relationship end, then hard delete **(defaults from data-privacy-patterns.md — project must confirm with its compliance owner and jurisdiction)**.
-- Payments: idempotency key on every payment-creating endpoint; double-entry ledger; optimistic locking on balances (version column or DynamoDB conditional write); forward-only state machine (`INITIATED → PENDING → COMPLETED|FAILED`); daily reconciliation against the provider; 3DS2 for card payments where applicable.
+- No PII in logs, URLs, error responses, metric tags or queue metadata.
+- Generic client errors; details server-side only. Spring prod: no `include-stacktrace=always`, no `show-sql=true`.
+- PCI DSS: never store CVV or full PAN; provider tokenization.
+- KYC documents: separate bucket, SSE-KMS (CMK), Block Public Access, pre-signed upload/view URLs with 5-min expiry **(default — project must confirm)**, server-side MIME check, malware scan before processing, no PII in object keys, OCR in memory only.
+- Retention: transaction records 7 years, KYC documents 5 years after relationship end, then hard delete **(defaults from data-privacy-patterns.md — project must confirm with its compliance owner and jurisdiction)**.
+- Payments: idempotency key on every payment-creating endpoint; double-entry ledger; optimistic locking on balances (version column / DynamoDB conditional write); forward-only state machine `INITIATED → PENDING → COMPLETED|FAILED`; daily provider reconciliation; 3DS2 for cards where applicable.
 
-## LOG — logging & audit
+## LOG
 
-- Every financial transaction records who, what, when, from where, and result.
-- Audit logs are append-only/tamper-evident: S3 Object Lock (WORM) or a hash chain; CloudTrail in all regions with log file validation.
-- Audit retention: 7 years for financial transactions, 5 years for access logs **(default — project must confirm)**.
-- Real-time alerts on privilege escalation, bulk data export, and admin actions outside business hours.
+- Every financial transaction: who, what, when, from where, result.
+- Audit logs tamper-evident: S3 Object Lock (WORM) or hash chain; CloudTrail all regions with log file validation.
+- Audit retention 7 years financial, 5 years access logs **(default — project must confirm)**.
+- Real-time alerts: privilege escalation, bulk export, out-of-hours admin actions.
 
-## NET — network, TLS, CORS
+## NET
 
-- **TLS 1.2 minimum, TLS 1.3 preferred** for external and inter-service traffic; raise the floor to 1.3 only where every client supports it. Go: `tls.Config{MinVersion: tls.VersionTLS12}`.
-- Go HTTP clients set an explicit timeout (the default client has none); `http.Server` sets `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, `IdleTimeout`.
-- CORS: explicit allowed origins; never `*` with credentials or in production.
-- CSRF: keep protection whenever the browser sends credentials automatically (session cookies, JWT cookies, HTTP Basic). Disable only on an Authorization-header-only resource-server chain with no cookie alternative; statelessness alone is not a CSRF defense ([Spring CSRF considerations](https://docs.spring.io/spring-security/reference/features/exploits/csrf.html)).
-- S3 bucket policies deny non-TLS requests; Lambda attaches to a VPC only when it needs VPC resources.
-- Spring Actuator: only `/health` and `/info` public; `env`, `beans`, `configprops` require an admin role or stay unexposed. Go `pprof` on a separate, non-public port.
+- TLS 1.2 minimum, 1.3 preferred (floor 1.3 only where all clients support it); Go `MinVersion: tls.VersionTLS12`.
+- Go: HTTP clients set a timeout; `http.Server` sets `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, `IdleTimeout`.
+- CORS explicit origins; never `*` with credentials or in production.
+- CSRF stays on whenever the browser sends credentials automatically (session/JWT cookies, Basic); disable only on an Authorization-header-only chain with no cookie path — statelessness alone is not a defense.
+- S3 policies deny non-TLS; Lambda in a VPC only when it needs VPC resources.
+- Actuator: only `/health`, `/info` public. Go `pprof` on a separate non-public port.
 
-## RATE — rate limiting, quotas, DoS
+## RATE
 
-- Rate limits on authentication and OTP endpoints (Bucket4j, API Gateway usage plans or WAF rate rules).
-- Per-transaction and daily limits, configurable; velocity checks flag unusual frequency or amounts.
-- Cool-down before a newly added payee can receive funds: 12 hours **(default — project must confirm)**.
-- Pagination with a max page size on every list endpoint.
-- Kill switch to disable a transaction type within minutes.
-- Go: every goroutine has a context-based exit; no unbounded fan-out.
+- Rate limits on auth and OTP endpoints (Bucket4j, API Gateway usage plans, WAF rate rules).
+- Configurable per-transaction and daily limits; velocity checks.
+- New-payee cool-down 12 hours **(default — project must confirm)**.
+- Max page size on every list endpoint. Kill switch per transaction type, effective within minutes.
+- Go: every goroutine has a context exit; no unbounded fan-out.
 
-## DEP — dependencies & supply chain
+## DEP
 
-- Dependency and image scanning in CI (e.g. Trivy, Grype, Snyk); SBOM per build (Syft or Trivy).
-- No abandoned security-critical libraries (see the JWT note under AUTH).
+- Dependency and image scanning in CI (Trivy, Grype, Snyk); SBOM per build (Syft or Trivy). No abandoned security-critical libraries.
 
-## SECRET — secrets management
+## SECRET
 
-- No secrets in Lambda environment variables, IaC source, images or committed `.env` files: Secrets Manager or SSM SecureString, retrieved at runtime.
-- Spring `application.yml`: secrets only via `${ENV_VAR}` placeholders or a secrets backend.
-- Review patterns: AWS access keys (`AKIA[0-9A-Z]{16}`), private key headers (`-----BEGIN (RSA |EC )?PRIVATE KEY-----`), JWTs (`eyJ…\.eyJ…\.`), connection strings with passwords, hardcoded OTP seeds/HMAC keys.
-- Tooling: gitleaks pre-commit; trufflehog or detect-secrets (baseline mode) in CI.
+- No secrets in Lambda env vars, IaC, images or committed `.env`: Secrets Manager or SSM SecureString at runtime. Spring config only `${ENV_VAR}` or a secrets backend.
+- Review for `AKIA[0-9A-Z]{16}`, `-----BEGIN (RSA |EC )?PRIVATE KEY-----`, `eyJ…\.eyJ…\.`, passworded connection strings, hardcoded OTP seeds/HMAC keys.
+- gitleaks pre-commit; trufflehog or detect-secrets (baseline) in CI.
 
-## COMPLIANCE — MAS, PCI DSS, PDPA
+## COMPLIANCE
 
-- MAS TRM / Cyber Hygiene: MFA, session controls, audit trail, transaction notifications (SMS/push for every financial transaction), customer-configurable limits. Map each to a specific clause only after checking the current text.
-- PCI DSS: tokenization, no CVV/full PAN storage, scoped cardholder-data environment.
-- PDPA: purpose limitation, consent before Level 1/2 collection, retention and deletion per `data-privacy-patterns.md`.
-- Unclear compliance scope is an escalation for the security agent, not a guess.
+- MAS TRM / Cyber Hygiene: MFA, session controls, audit trail, notification for every financial transaction, customer-configurable limits.
+- PCI DSS: tokenization, no CVV/full PAN, scoped cardholder-data environment.
+- PDPA: purpose limitation, consent before Level 1/2 collection, retention/deletion per data-privacy-patterns.md.
+- Unclear compliance scope → escalate (full mode: the security agent), never guess.
 
-## AWS serverless quick checks
+## AWS serverless checks
 
 | Check | Prefix |
 |---|---|
 | Authorizer on every API Gateway method; WAF on public APIs | AUTH / RATE |
-| DynamoDB tables with Level 1 data use a customer-managed KMS key | CRYPTO |
-| SQS encrypted at rest (SSE-SQS minimum, SSE-KMS for PII) | CRYPTO |
-| IAM scoped to specific ARNs; wildcards need a written justification | AUTHZ |
-| EventBridge consumers validate `source`/`detail-type` and the payload schema | INPUT |
+| DynamoDB with Level 1 data uses a CMK | CRYPTO |
+| SQS encrypted (SSE-SQS minimum, SSE-KMS for PII) | CRYPTO |
+| IAM scoped to ARNs; wildcards need written justification | AUTHZ |
+| EventBridge consumers validate `source`, `detail-type`, payload schema | INPUT |

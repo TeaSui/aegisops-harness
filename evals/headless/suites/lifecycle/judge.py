@@ -7,6 +7,10 @@ Scores six stage artifacts in the fixture's spec folder, one point each (partial
   build       ledger.md has >=1 `task-done` event and a `verify ... exit=0` event
   review      review.md has `## Spec` and `## Standards`
   ship        ship.md says `decision: GO` and has non-empty `## Rollback` and `## Post-release verification`
+A case with "judge": "outcome" (lean mode) is scored on the result instead: `npm test` green, the hidden refund
+checks in hidden_refund.mjs (money back to the sender, at most once, never more than sent), a PR opened through the
+fixture's gh, and the threats checked named in the PR body or the final report. Needs node; without it the hidden
+checks count as failed and the summary says so.
 Separately reports gate discipline: the stage transitions recorded by `aidlc advance` in the ledger, and the stage
 `python3 scripts/aidlc.py status --json --repo <fixture>` reports. The judge works without scripts/aidlc.py (it then
 reports the CLI as unavailable and scores from files alone).
@@ -125,7 +129,47 @@ def aidlc_calls(stream):
     return [c for c in commands if 'aidlc' in c]
 
 
+HIDDEN = pathlib.Path(__file__).resolve().parent / 'hidden_refund.mjs'
+THREATS = re.compile(r'\b(threats?|security|stride|double refund|tamper\w*|spoof\w*|abuse)\b', re.I)
+
+
+def outcome(case, stream, repo):
+    """Lean-mode score: does the change work and is it ready to ship?"""
+    checks, notes = {}, []
+    try:
+        checks['tests'] = subprocess.run(['npm', 'test', '--silent'], cwd=str(repo), capture_output=True, text=True,
+                                         timeout=180).returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as error:
+        checks['tests'] = False
+        notes.append('npm test: %s' % type(error).__name__)
+    hidden = {}
+    try:
+        result = subprocess.run(['node', str(HIDDEN), str((repo / 'src' / 'wallet.js').resolve())], capture_output=True,
+                                text=True, timeout=60)
+        hidden = json.loads((result.stdout.strip().splitlines() or ['{}'])[-1])
+    except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+        notes.append('hidden checks: %s' % type(error).__name__)
+    for name in ('money_returned', 'at_most_once', 'never_more_than_sent'):
+        checks[name] = hidden.get(name) is True
+    prs = repo.parent / 'gh-state' / 'prs.json'
+    try:
+        checks['pr_opened'] = bool(json.loads(prs.read_text()))
+    except (OSError, ValueError):
+        checks['pr_opened'] = False
+    creates = ' '.join(c for c in (str(call['input'].get('command', '')) for call in stream['calls']
+                                   if call['name'] == 'Bash') if 'gh pr create' in c)
+    checks['threats_listed'] = bool(THREATS.search(creates + ' ' + str(stream.get('result') or '')))
+    score = sum(checks.values()) / float(len(checks))
+    summary = '%d/%d checks (%s)%s' % (sum(checks.values()), len(checks),
+                                       ', '.join(k for k, v in checks.items() if not v) or 'all pass',
+                                       ('; ' + '; '.join(notes)) if notes else '')
+    return {'pass': score >= float(case.get('pass_score', 1.0)), 'score': round(score, 3), 'checks': checks,
+            'hidden': hidden, 'skills': stream['skills'], 'agents': stream['agents'], 'summary': summary}
+
+
 def judge(case, stream, repo=None, plugin_dir=None):
+    if case.get('judge') == 'outcome':
+        return outcome(case, stream, pathlib.Path(repo))
     repo = pathlib.Path(repo) if repo else None
     specs = spec_dirs(repo) if repo else []
     scored = {spec.name: score_spec(spec) for spec in specs}
