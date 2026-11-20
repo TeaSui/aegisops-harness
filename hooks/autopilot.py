@@ -73,6 +73,10 @@ MONITORED = rx(r'\b(alarms?|alerts?|monitors?|metrics?|dashboards?)\b[^.\n]{0,40
 QUESTION_START = rx(r'^\s*(does|do|did|is|are|was|were|can|could|should|would|will|what|why|how|which|where|when|'
                     r'who)\b')
 MULTI_SERVICE = rx(r'\b(between|across) (the )?(micro)?services\b|\bservices? \S+ (and|->|→) \S+ services?\b')
+# Workflow mode. `lean` (the default) keeps every change in the main session: subagent fan-out costs several times
+# the tokens. `full` runs the AIDLC lifecycle with specialist subagents; set TEA_SDLC_WORKFLOW=full, or ask for it.
+FULL_REQUEST = rx(r'\b(full|complete) (aidlc |sdlc )?(workflow|process|lifecycle)\b|\baidlc\b|'
+                  r'\b(use|with|dispatch) (the )?(specialist )?(sub-?agents?|agents in parallel)\b')
 
 TRUST = (
     ('PII', rx(r'\b(pii|personal data|e-?mails?|phone( numbers?)?|home address|date of birth|dob|ssn|passports?|'
@@ -168,10 +172,15 @@ def is_code_work(text, debug):
     return bool(WEAK_CODE.search(text)) and not PROSE.search(text) and not OPS.search(text)
 
 
+def workflow_mode():
+    return 'full' if os.environ.get('TEA_SDLC_WORKFLOW', '').strip().lower() == 'full' else 'lean'
+
+
 def route(prompt, rules_dir):
     text = (prompt or '')[:6000]
     if not text.strip() or text.lstrip().startswith('/'):
         return ''
+    full = workflow_mode() == 'full' or bool(FULL_REQUEST.search(text))
     intents = [name for name, pattern in INTENTS if pattern.search(text)]
     change, debug, trust = None, None, []
     # A question gets an answer, not a workflow; a change to prose, git or ops is not gated as code.
@@ -194,7 +203,7 @@ def route(prompt, rules_dir):
         chain.append('brainstorming')  # the bootstrap's first action for any fix, so the order matches it
     if debug:
         chain.append('systematic-debugging')
-        if MULTI_SERVICE.search(text):
+        if MULTI_SERVICE.search(text) and full:
             chain.append('debug-parallel')
     if change or debug:
         chain.append('test-driven-development')
@@ -211,12 +220,17 @@ def route(prompt, rules_dir):
              'Load in this order, without waiting for the user to name them: '
              + ' → '.join(skill(name) for name in chain) + '.' if chain else None]
     if change or debug:
-        if trust:
+        if trust and full:
             lines.append(f'Routing: trust-boundary signal → walk the six-item check in {rules_dir}/workflow-routing.md;'
                          ' any YES (or unsure) → Full workflow (Security first).')
+        elif trust:
+            lines.append(f'Routing: trust-boundary signal, workflow mode lean (default) → Fast path with a security pass '
+                         f'({rules_dir}/workflow-routing.md § Lean mode), no subagents: check the threats and the '
+                         'security rules yourself and list them in the PR description. The full AIDLC workflow with '
+                         'subagents runs only when the user asks for it.')
         else:
             lines.append('Routing: no trust-boundary keyword → Fast path, unless the six-item check says otherwise.')
-    if any(name == 'fintech-security' for name, _ in domains):
+    if full and any(name == 'fintech-security' for name, _ in domains):
         lines.append('Threat models are produced by tea-sdlc:security-engineer-subagent (Full workflow); the skill is its '
                      'rule catalogue, not a replacement for that dispatch.')
     if 'finishing-a-development-branch' in chain:
@@ -492,6 +506,13 @@ def snapshot(cwd, which=None):
     which = which or __import__('shutil').which
     root = repo_root(cwd)
     lines, user = [], None
+    if workflow_mode() == 'full':
+        lines.append('Workflow mode: full (TEA_SDLC_WORKFLOW=full): trust-boundary changes run the AIDLC lifecycle '
+                     'with specialist subagents.')
+    else:
+        lines.append('Workflow mode: lean (default): every change stays in this session, no subagent dispatch; a '
+                     'trust boundary gets a security pass, not the full workflow. Run the full workflow only when the '
+                     'user asks for it or a spec bound to this branch is already in progress.')
     goal = root / '.goal' / 'state.md'
     if goal.is_file():
         lines.append('Resumable goal: read .goal/state.md first and continue from it (skill tea-sdlc:goal).')

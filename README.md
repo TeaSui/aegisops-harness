@@ -50,7 +50,7 @@ You describe the work in English; the plugin decides which skill, command and ga
 | When | What fires on its own | Hook |
 |---|---|---|
 | Session start, resume, `/clear`, compaction | Bootstrap plus a project snapshot: active specs with their plan progress and next step, a resumable `.goal/state.md`, open plans, a repository with no `docs/` yet, the superpowers plugin enabled alongside (use the tea-sdlc twin of each shared skill), a missing `gitleaks` (also shown to you, with the install command). Gate state older than 30 days is pruned | `session-start` |
-| Every prompt | Keyword router: code change → `brainstorming` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → Full workflow; domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `tea-sdlc:security-engineer-subagent`); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
+| Every prompt | Keyword router: code change → `brainstorming` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → fast path with a security pass (lean, the default) or Full workflow (full mode); domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `fintech-security`, plus `tea-sdlc:security-engineer-subagent` in full mode); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
 | Before the first production edit | Write a failing test first (once per session) · fix a failing external contract first | `tdd-gate.py`, `contract-gate.py` |
 | After tool calls | Three failing test runs in a row → `systematic-debugging`; `git revert` → `incident-to-eval`; a merge while a spec is `shipped` (or a pre-AIDLC spec is `accepted`) → `upgrade-service-docs` | `autopilot.py post` |
 | Before the session says “done” | Code changed since the last test run → run the tests or say why none applies (once per change set, at most 3 per session) | `autopilot.py stop` |
@@ -59,7 +59,7 @@ You describe the work in English; the plugin decides which skill, command and ga
 
 Notes are hints, not orders: the session skips any that does not fit and names what it applied. Measured on real headless sessions (Claude Code 2.1.319, `sonnet`): with the prompt note the session loaded `brainstorming`, stated the tier and wrote a failing test before the code; on a “pure rename” it first answered *“I ran no tests”*, the stop gate sent it back, and it ran the suite before reporting.
 
-Switches (environment variables, all default on): `TEA_SDLC_AUTOPILOT=off` (prompt and follow-up notes, session snapshot, subagent rules), `TEA_SDLC_SHIP_GATE=off`, `TEA_SDLC_VERIFY_GATE=off`, `TEA_SDLC_TDD_GATE=off`, `TEA_SDLC_CONTRACT_GATE=off`.
+Switches (environment variables, all default on): `TEA_SDLC_WORKFLOW=full` (opt in to the subagent-based full workflow; the default is lean), `TEA_SDLC_AUTOPILOT=off` (prompt and follow-up notes, session snapshot, subagent rules), `TEA_SDLC_SHIP_GATE=off`, `TEA_SDLC_VERIFY_GATE=off`, `TEA_SDLC_TDD_GATE=off`, `TEA_SDLC_CONTRACT_GATE=off`.
 
 ---
 
@@ -69,11 +69,15 @@ Every substantive task is classified by `rules/workflow-routing.md`: does it cro
 
 ```
 Trust boundary?
- ├─ NO  ──► Fast path       TDD, no subagents, single pre-PR review (several domains: edit in order, integration check)
- └─ YES ──► Full workflow   the AIDLC stage machine below, every stage behind a gate
+ ├─ NO  ──► Fast path                        TDD, no subagents, single pre-PR review (several domains: edit in order, integration check)
+ └─ YES ─┬─ lean mode (default) ──► Fast path + security pass   same session, no subagents: assets/threats/controls
+         │                                                       before the first edit, security tests, threats in the PR
+         └─ full mode ───────────► Full workflow                the AIDLC stage machine below, every stage behind a gate
 ```
 
-Promotion to the full workflow mid-task is mandatory when a fast-path change discovers a trust boundary.
+**Workflow mode.** Specialist subagents multiply token cost, so the default is **lean**: every change stays in the main session. Turn on **full** mode per project or per user with `TEA_SDLC_WORKFLOW=full` (for example `"env": {"TEA_SDLC_WORKFLOW": "full"}` in `.claude/settings.json`), or for one task by asking for it ("full workflow", "AIDLC", "use subagents"). A spec already in progress on the branch finishes in full mode. The session-start note states the mode.
+
+When a fast-path change discovers a trust boundary mid-task, it moves up to that mode's trust-boundary tier before writing more code.
 
 ---
 

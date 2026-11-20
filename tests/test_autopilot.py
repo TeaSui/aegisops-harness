@@ -131,7 +131,8 @@ class PromptRouterTest(HookCase):
 
     def test_backend_language_and_threat_model_hints(self):
         self.assertIn('tea-sdlc:backend-languages', self.route('Add a FastAPI endpoint that lists orders'))
-        self.assertIn('security-engineer-subagent', self.route('Threat model the transfer function'))
+        self.assertIn('security-engineer-subagent', self.route('Threat model the transfer function', {'TEA_SDLC_WORKFLOW': 'full'}))
+        self.assertNotIn('security-engineer-subagent', self.route('Threat model the transfer function'))
 
     def test_question_followed_by_an_ask_is_still_a_question(self):
         ctx = self.route('Does the Node.js test runner support test.each like Jest? Give me the source.')
@@ -155,18 +156,40 @@ class PromptRouterTest(HookCase):
         self.assertIn('tea-sdlc:systematic-debugging', self.route('ok, fix that bug'))
         self.assertIn('tea-sdlc:brainstorming', self.route('no, add a retry'))
 
+    FULL = {'TEA_SDLC_WORKFLOW': 'full'}
+
     def test_bug_fix_with_auth_signal(self):
-        ctx = self.route('Fix the login bug: users get a 500 error after the token expires')
+        ctx = self.route('Fix the login bug: users get a 500 error after the token expires', self.FULL)
         self.assertIn('tea-sdlc:systematic-debugging', ctx)
         self.assertIn('tea-sdlc:test-driven-development', ctx)
         self.assertIn('auth', ctx)
-        self.assertIn('Full workflow', ctx)
+        self.assertIn('Full workflow (Security first)', ctx)
 
     def test_payment_feature_is_a_trust_boundary(self):
-        ctx = self.route('Add a payment API for the e-wallet')
+        ctx = self.route('Add a payment API for the e-wallet', self.FULL)
         self.assertIn('tea-sdlc:brainstorming', ctx)
         self.assertIn('money', ctx)
-        self.assertIn('Full workflow', ctx)
+        self.assertIn('Full workflow (Security first)', ctx)
+
+    def test_lean_is_the_default_and_keeps_trust_work_in_session(self):
+        # Subagent-heavy runs cost too much to be the default: a trust boundary gets a security pass in the session.
+        ctx = self.route('Add a payment API for the e-wallet')
+        self.assertIn('money', ctx)
+        self.assertIn('lean', ctx)
+        self.assertIn('Fast path with a security pass', ctx)
+        self.assertIn('no subagents', ctx)
+        self.assertNotIn('Full workflow (Security first)', ctx)
+        self.assertNotIn('produced by tea-sdlc:security-engineer-subagent', self.route('Add PCI DSS checks to the card flow'))
+
+    def test_user_can_ask_for_the_full_workflow_in_the_prompt(self):
+        for prompt in ('Add a payment API for the e-wallet, full workflow please',
+                       'Use the AIDLC lifecycle to add refunds to the payment service'):
+            self.assertIn('Full workflow (Security first)', self.route(prompt), prompt)
+
+    def test_lean_mode_does_not_fan_out_debugging(self):
+        prompt = 'The 502 errors across services started after the deploy, fix it'
+        self.assertNotIn('tea-sdlc:debug-parallel', self.route(prompt))
+        self.assertIn('tea-sdlc:debug-parallel', self.route(prompt, self.FULL))
 
     def test_ui_bug_is_fast_path(self):
         ctx = self.route('Fix the bug where the Save button is misaligned')
@@ -394,6 +417,14 @@ class SessionSnapshotTest(HookCase):
         ctx = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
         self.assertIn('Spec docs/specs/refund at stage `accepted`, plan 1/2 tasks done', ctx)
         self.assertNotIn('src/docs', ctx)
+
+    def test_workflow_mode_is_announced(self):
+        ctx = self.start()['hookSpecificOutput']['additionalContext']
+        self.assertIn('Workflow mode: lean', ctx)
+        env = self.env({'TEA_SDLC_WORKFLOW': 'full'})
+        result = subprocess.run(['/bin/bash', str(SESSION_START)], input=json.dumps({'cwd': str(self.repo)}),
+                                env=env, capture_output=True, text=True, timeout=20, cwd=str(self.repo))
+        self.assertIn('Workflow mode: full', json.loads(result.stdout)['hookSpecificOutput']['additionalContext'])
 
     def test_resumable_goal_state_is_announced(self):
         (self.repo / '.goal').mkdir()

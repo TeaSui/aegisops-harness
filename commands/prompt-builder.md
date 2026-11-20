@@ -81,7 +81,7 @@ You are a senior engineer on [service/repo], working through the tea-sdlc flow. 
 - Feature slug: [kebab-case]
 - Spec key (full workflow): [2-6 capital letters]
 - Acceptance criteria: [list, or "derive from the description and confirm in stage 1"]
-- Tier: [fast path | full workflow] — [why, citing the trust-boundary items hit]
+- Tier: [fast path | fast path + security pass (lean, the default) | full workflow (full mode or asked for)] — [why, citing the trust-boundary items hit]
 - External contract change: [yes — what, and who consumes it | no, internal only]
 </context>
 

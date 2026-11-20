@@ -15,7 +15,7 @@ The pre-PR pass is the review stage of the AIDLC lifecycle (`references/aidlc.md
 ## Fast path
 
 1. Run verification and show its output (see `references/agent-discipline.md` § Verification).
-2. Run Claude Code's built-in `code-review` skill once on the diff; if unavailable, use the `tea-sdlc:requesting-code-review` skill with a fresh-context reviewer.
+2. Run Claude Code's built-in `code-review` skill once on the diff, at `low` effort in lean mode (the default) and its default effort in full mode; if unavailable, use the `tea-sdlc:requesting-code-review` skill with a fresh-context reviewer. On a trust-boundary change, the review also checks the security pass: the threats listed, their tests, no PII or secrets in logs.
 3. Fix each finding, or clear it with a stated reason backed by evidence. A note alone does not clear a finding.
 4. Re-review only the diff added by those fixes.
 5. Commit, then record the pass with `scripts/mark-pr-review.py --reviewer <name> --open-findings <n>`.

@@ -3,13 +3,14 @@ name: fintech-security
 description: |
   Reference for drafting or reviewing security rules in fintech code (Spring Boot, Go, AWS serverless):
   candidate controls for auth, payments, KYC documents, crypto/keys, logging, network, rate limits and secrets,
-  mapped onto the security agent's rule prefixes. Threat models are produced by tea-sdlc:security-engineer-subagent.
+  mapped onto the security agent's rule prefixes. In lean mode the main session uses it for its own security pass;
+  in full mode threat models are produced by tea-sdlc:security-engineer-subagent.
   Triggers on: payment security, KYC document handling, MAS/PDPA control lookup, fintech security review.
 ---
 
 # Fintech Security Control Catalogue
 
-**Candidate controls — cite only when earned by a STRIDE finding.** This is a lookup list, not a template. The threat model, rule numbering and output format belong to `tea-sdlc:security-engineer-subagent` (`${CLAUDE_PLUGIN_ROOT}/agents/security-engineer-subagent.md`, Phase 3–4). When a finding needs a control, copy the idea below into a numbered rule under the matching prefix (`AUTH-NN`, `DATA-NN`, …), phrase it as WHAT must be true, and cite the finding.
+**Candidate controls — cite only when earned by a STRIDE finding.** This is a lookup list, not a template. In lean mode (the default) the main session uses this catalogue for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` (assets, threats, controls; no `security.md`). In full mode the threat model, rule numbering and output format belong to `tea-sdlc:security-engineer-subagent` (`${CLAUDE_PLUGIN_ROOT}/agents/security-engineer-subagent.md`, Phase 3–4). When a finding needs a control, copy the idea below into a numbered rule under the matching prefix (`AUTH-NN`, `DATA-NN`, …), phrase it as WHAT must be true, and cite the finding.
 
 Numbers marked **(default — project must confirm)** are starting points, not regulatory facts. Confirm them against the project's compliance owner before they become rules. Compliance references name the framework (MAS TRM Guidelines, MAS Notice on Cyber Hygiene, PCI DSS, PDPA) without chapter numbers; cite a section only after checking the current published text.
 

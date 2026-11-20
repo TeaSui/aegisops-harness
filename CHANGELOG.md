@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.1.0 — 2026-11-20
+
+### Changed
+- **Lean is the default workflow mode.** Specialist subagents multiplied the token cost of every trust-boundary change. Now every change stays in the main session unless the user opts in:
+  - a trust boundary gets the **fast path with a security pass**: 3-6 lines of assets, threats and controls before the first edit (`fintech-security` as the catalogue), tests for the security behaviour, and the threats listed in the PR description;
+  - the pre-PR pass runs the built-in `code-review` at `low` effort;
+  - `debug-parallel` is not suggested, and the autopilot no longer points to the Security subagent.
+- **Full mode** brings back the AIDLC lifecycle with subagents. It applies when any of these holds:
+  - `TEA_SDLC_WORKFLOW=full` is set (for example in `.claude/settings.json` `env`);
+  - the prompt asks for it ("full workflow", "AIDLC", "use subagents");
+  - a spec bound to the branch is already in progress.
+- The session-start note states the mode (`Workflow mode: lean` or `full`). `rules/workflow-routing.md`, the bootstrap tier table, `brainstorming`, `fintech-security`, `pre-pr-review` and the README describe both modes.
+- The routing eval has a `secure` tier for the lean trust-boundary route, plus 5 mode cases (149 cases).
+
 ## 3.0.1 — 2026-11-20
 
 ### Fixed

@@ -24,7 +24,8 @@ Unsure counts as YES.
 |---|---|
 | Routine fix, no trust boundary | 2-3 lines: outcome, acceptance evidence, approach. Then continue immediately; for a bug or a failing test the next step is `tea-sdlc:systematic-debugging` (root cause before any fix). |
 | Feature or behavior change, no trust boundary | Add constraints and 2-3 approaches only if the tradeoff is real; recommend one. |
-| Trust boundary or new system | Full design and spec below (Full workflow). |
+| Trust boundary, lean mode (the default) | 3-6 lines: the approach plus the security pass (assets, threats, controls) from `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` § Fast path with a security pass. No spec folder, no subagents. |
+| Trust boundary or new system, full mode (`TEA_SDLC_WORKFLOW=full` or the user asked for the full workflow) | Full design and spec below (Full workflow). |
 
 ## 2. Clarify
 
@@ -61,7 +62,7 @@ This never authorizes destructive actions, external publishing or bypassing nati
 
 ## 5. Tier line
 
-End with one line: `Tier: fast path | full workflow — <trust-boundary items hit, or none>`. Then continue:
+End with one line: `Tier: fast path | fast path + security pass | full workflow — <trust-boundary items hit, or none>`. Then continue:
 
-- Fast path: `tea-sdlc:test-driven-development` in this session, no subagent dispatch, single pre-PR pass before a PR.
+- Fast path (with or without the security pass): `tea-sdlc:test-driven-development` in this session, no subagent dispatch, single pre-PR pass before a PR.
 - Full workflow: `tea-sdlc:writing-plans` on the accepted spec.

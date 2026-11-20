@@ -8,7 +8,8 @@ Deterministic and free (no model call). Each line of cases.jsonl is one case:
    "forbid": ["skill", ...],                # must not appear
    "trust": ["money", ...],                 # trust-boundary labels that must be signalled
    "forbid_trust": ["auth"] | true,         # labels that must not be signalled (true: none at all)
-   "tier": "full" | "fast",                 # routing line the note must carry
+   "tier": "full" | "secure" | "fast",      # routing line: Full workflow (TEA_SDLC_WORKFLOW=full or asked for),
+                                            # the lean default's fast path with a security pass, or plain fast path
    "expect_text": ["..."], "forbid_text": ["..."],   # raw substrings of the note
    "silent": true,                          # no note at all
    "env": {"TEA_SDLC_AUTOPILOT": "off"},    # extra environment for the hook
@@ -127,8 +128,10 @@ def check(case, note):
             if label in trust:
                 problems.append('forbidden trust label ' + label)
     tier = case.get('tier')
-    if tier == 'full' and 'Full workflow' not in note:
+    if tier == 'full' and 'Full workflow (Security first)' not in note:
         problems.append('expected Full workflow routing')
+    if tier == 'secure' and 'Fast path with a security pass' not in note:
+        problems.append('expected lean fast path with a security pass')
     if tier == 'fast' and 'Fast path' not in note:
         problems.append('expected Fast path routing')
     for text in case.get('expect_text', []):
