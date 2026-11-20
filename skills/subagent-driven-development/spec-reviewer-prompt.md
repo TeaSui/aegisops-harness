@@ -1,100 +1,29 @@
-# Spec Compliance Reviewer Prompt Template
+# Spec compliance reviewer template (per task)
 
-Use this template when dispatching a spec compliance reviewer subagent.
-
-**Purpose:** Verify implementer built what was requested (nothing more, nothing less)
-
-**Two uses:**
-- **Per task (build stage):** "What Was Requested" is the task block plus the acceptance criteria of the
-  requirement IDs it covers; the scope is the task's files.
-- **Spec axis of the review stage** (`skills/requesting-code-review/SKILL.md`): "What Was Requested" is the
-  spec folder — `requirements.md`, `design.md`, `contracts/` — plus the output of `aidlc trace <f>`; the scope
-  is the whole change. Fill `AXIS_RETURN` below so findings come back as `review.md` lines
-  (format: `references/aidlc.md` § review.md).
-
-Choose model/effort using `references/model-guide.md`. Every reviewer receives the
-actual requirements, owned review scope and applicable evidence. Use the available Agent tool
-(`Task` alias supported); no model label substitutes for independent inspection.
+Send to `tea-sdlc:code-reviewer` (or `general-purpose`). Fill every `[…]`.
 
 ```
-Task tool (general-purpose or tea-sdlc:code-reviewer):
-  description: "Review spec compliance for Task N"
-  prompt: |
-    You are reviewing whether an implementation matches its specification.
+description: "Spec compliance review T<n>"
+prompt: |
+  AXIS: spec
+  Check whether the implementation matches what was requested: nothing missing, nothing extra.
 
-    ## What Was Requested
+  ## Requested
+  [task block + acceptance criteria of the covered requirement IDs]
 
-    [FULL TEXT of task requirements]
+  ## Scope
+  [committed range | pending Git work | non-Git manifest; owned paths; checked state; untracked, deleted, renamed files; evidence logs]
+  Pending work: read staged and unstaged diffs plus the listed untracked files; never substitute HEAD~1..HEAD. Files drift during review → name the affected scope; do not certify an unreviewed state.
 
-    ## Review Scope
+  ## Implementer's claim
+  [from its report]
 
-    [REVIEW_SCOPE: committed range, pending Git work or non-Git original/changed manifest;
-    owned paths, baseline/checked state, untracked additions, deletions/renames, evidence logs]
-    For pending work inspect staged and unstaged diffs plus listed untracked files; do not
-    substitute HEAD~1..HEAD. Compare non-Git copies using the supplied manifest. If files drift
-    during review, report the affected scope; do not certify a later unreviewed state.
+  The claim is unverified. Read the actual code and compare it with each criterion line by line. Look for:
+  - missing: criteria not implemented, or claimed but absent
+  - extra: unrequested features, over-engineering
+  - misread: a requirement interpreted differently or solved the wrong way
+  - traceability: each criterion has a test named with its requirement ID that checks the stated behavior; no test cites an ID it does not check
 
-    ## What Implementer Claims They Built
-
-    [From implementer's report]
-
-    ## CRITICAL: Do Not Trust the Report
-
-    Reports can be incomplete or optimistic. Inspect the actual scoped changes and cited
-    evidence independently; an implementer report alone cannot establish compliance.
-
-    **DO NOT:**
-    - Take their word for what they implemented
-    - Trust their claims about completeness
-    - Accept their interpretation of requirements
-
-    **DO:**
-    - Read the actual code they wrote
-    - Compare actual implementation to requirements line by line
-    - Check for missing pieces they claimed to implement
-    - Look for extra features they didn't mention
-
-    ## Your Job
-
-    Read the implementation code and verify:
-
-    **Missing requirements:**
-    - Did they implement everything that was requested?
-    - Are there requirements they skipped or missed?
-    - Did they claim something works but didn't actually implement it?
-
-    **Extra/unneeded work:**
-    - Did they build things that weren't requested?
-    - Did they over-engineer or add unnecessary features?
-    - Did they add "nice to haves" that weren't in spec?
-
-    **Traceability:**
-    - Does each acceptance criterion have a test named with its requirement ID (e.g. `RFD-1 rejects over-capture`)
-      that checks the behavior the criterion states?
-    - Does any test cite a requirement ID it does not actually check?
-
-    **Misunderstandings:**
-    - Did they interpret requirements differently than intended?
-    - Did they solve the wrong problem?
-    - Did they implement the right feature but wrong way?
-
-    **Verify by reading code, not by trusting report.**
-
-    Report every discrepancy you find, including ones you are uncertain about or consider
-    minor. Do not filter for importance or confidence — the dispatcher filters downstream.
-    Include a confidence level per finding.
-
-    [AXIS_RETURN — review stage only: "List every finding as one line,
-    `- [ ] S<n> (must|should|nit): <requirement ID or design/contract section> — <what is missing, extra or wrong>
-    at <file:line> (confidence: high|medium|low)`, numbering from S<first>. must = a requirement or acceptance
-    criterion not met, or behavior that contradicts design/contracts; should = partial coverage, a test that does
-    not prove its criterion, scope creep; nit = wording or naming against the glossary. Do not rank across or merge
-    findings; the main session copies your lines into review.md as they are."]
-
-    Report per `rules/subagent-return-format.md` (any shape — prose, markdown, or XML):
-    - Status DONE when everything matches after code inspection (spec compliant)
-    - Status BLOCKED with the list of missing/extra items (file:line references) when issues are found
-    - Always include a 1–3 sentence summary, actual reviewed scope/state, evidence paths and
-      one met/not-met exit-criteria result per supplied requirement. State skipped/unsupported
-      checks; code inspection does not establish runtime test success.
+  Report every discrepancy, uncertain or minor ones included, each with file:line and confidence; do not filter.
+  Status: DONE when everything matches after inspection; BLOCKED with the list otherwise. Include a 1-3 sentence summary, the reviewed scope/state, and met/not met per criterion. Code inspection does not prove tests pass; say which checks were skipped.
 ```

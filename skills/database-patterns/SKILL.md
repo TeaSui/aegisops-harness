@@ -11,336 +11,43 @@ description: |
 
 # Database Patterns
 
-## CTE-First Query Approach
+## Queries (MySQL 8+ / PostgreSQL)
+- CTE-first: multi-step logic and nested subqueries become named CTEs, one step per CTE. Skip CTEs for single-table lookups. On a hot path, profile first and use a subquery if the planner does better. MySQL < 8.0 has no CTEs.
+- Recursive CTEs carry a depth guard (`WHERE depth < 10`). MySQL has no arrays: build the path as `CONCAT` of `LPAD(id, 20, '0')` and size the base `CAST(... AS CHAR(n))` for max depth (strict mode errors on overflow).
+- Postgres upsert: `INSERT … ON CONFLICT (…) DO UPDATE SET …, updated_at = NOW() RETURNING *`.
+- No `SELECT *` in production; no N+1 (JOIN or batch fetch); window functions for running totals/moving averages.
 
-**Default to CTEs (Common Table Expressions) over subqueries and temp tables.** CTEs are more readable, composable, and debuggable. Each CTE is a named, testable step.
+## Indexes
+- Index columns used in WHERE/JOIN/ORDER BY, and every FK column. Skip low-cardinality booleans. Index actual query patterns only (each index slows writes).
+- Composite indexes follow the leftmost prefix. Use partial indexes (Postgres) for queried subsets, expression indexes for `LOWER(email)`, covering indexes to avoid table lookups. MySQL prefix indexes for long strings. `FORCE INDEX` is a last resort.
+- `EXPLAIN ANALYZE` before and after; the index must actually be used.
 
-### Pattern: Replace Subqueries with CTEs
+## Zero-downtime migrations (expand-contract)
+1. Expand: add the new column nullable; deploy code writing both.
+2. Backfill in batches by key range (`WHERE new IS NULL AND id BETWEEN $1 AND $2`).
+3. Switch reads to the new column; verify.
+4. Contract: drop the old column in a later deploy. Keep the new name — renaming back breaks running instances (needs a second expand-contract).
 
-```sql
--- AVOID: nested subqueries
-SELECT o.id, o.total, c.name
-FROM orders o
-JOIN customers c ON c.id = o.customer_id
-WHERE o.id IN (
-    SELECT order_id FROM order_items
-    WHERE product_id IN (
-        SELECT id FROM products WHERE category = 'electronics'
-    )
-    GROUP BY order_id
-    HAVING SUM(quantity) > 5
-);
+Rules:
+- Never drop a column in the same deploy as the code change.
+- New columns are nullable or have a server-side DEFAULT (no `NOT NULL` without default).
+- Postgres: `CREATE INDEX CONCURRENTLY`; set a `lock_timeout`; prefer metadata-only changes (nullable `ADD COLUMN`, non-volatile DEFAULT on PG 11+); `ADD CONSTRAINT … NOT VALID` then `VALIDATE CONSTRAINT`; type changes and other table rewrites go through expand-contract. `pg_repack` only removes bloat.
+- MySQL tables > 1M rows: `gh-ost` or `pt-online-schema-change`.
+- Test migrations on a production-size dataset.
+- Flyway naming: `V<n>__<snake_description>.sql`; repeatable `R__<description>.sql`.
 
--- PREFER: CTEs — each step is named and testable independently
-WITH electronics_products AS (
-    SELECT id
-    FROM products
-    WHERE category = 'electronics'
-),
-bulk_orders AS (
-    SELECT order_id
-    FROM order_items
-    WHERE product_id IN (SELECT id FROM electronics_products)
-    GROUP BY order_id
-    HAVING SUM(quantity) > 5
-)
-SELECT o.id, o.total, c.name
-FROM orders o
-JOIN customers c ON c.id = o.customer_id
-WHERE o.id IN (SELECT order_id FROM bulk_orders);
-```
+## DynamoDB (single-table)
+- List access patterns first, then design PK/SK and GSIs, and document them as an access-pattern table (pattern → PK, SK, GSI).
+- Keys are typed prefixes: `CUSTOMER#<id>` / `ORDER#<ts>#<id>`. Query with `begins_with(SK, …)`, `ScanIndexForward=false` for newest first, and a `Limit`.
+- Each extra access pattern on the same items needs its own GSI (GSI1, GSI2 …), not a second value on GSI1.
+- No constant partition keys (`ALL_ORDERS`): write-shard as `ORDERS#<yyyy-mm-dd>#<shard 0..N-1>`, query shards in parallel and merge. Shard a dominant `STATUS#<status>` the same way.
+- No Scans (a scan means a missing index/GSI).
+- Items ≤ 400 KB; store blobs in S3 by key.
+- Eventually consistent reads (half the cost) unless strong consistency is required.
 
-### Pattern: Multi-Step Business Logic
-
-```sql
--- Monthly revenue report with running totals
-WITH daily_revenue AS (
-    SELECT
-        DATE(created_at) AS revenue_date,
-        SUM(total) AS daily_total,
-        COUNT(*) AS order_count
-    FROM orders
-    WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
-      AND status = 'completed'
-    GROUP BY DATE(created_at)
-),
-with_running_total AS (
-    SELECT
-        revenue_date,
-        daily_total,
-        order_count,
-        SUM(daily_total) OVER (ORDER BY revenue_date) AS running_total,
-        AVG(daily_total) OVER (ORDER BY revenue_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS moving_avg_7d
-    FROM daily_revenue
-)
-SELECT *
-FROM with_running_total
-ORDER BY revenue_date;
-```
-
-### Pattern: Recursive CTE (Hierarchies)
-
-```sql
--- Organization hierarchy (PostgreSQL: ARRAY[] and || are PostgreSQL-only)
-WITH RECURSIVE org_tree AS (
-    -- Base: top-level managers
-    SELECT id, name, manager_id, 1 AS depth, ARRAY[id] AS path
-    FROM employees
-    WHERE manager_id IS NULL
-
-    UNION ALL
-
-    -- Recursive: each employee's reports
-    SELECT e.id, e.name, e.manager_id, ot.depth + 1, ot.path || e.id
-    FROM employees e
-    JOIN org_tree ot ON e.manager_id = ot.id
-    WHERE ot.depth < 10 -- safety limit to prevent infinite recursion
-)
-SELECT id, name, depth, path
-FROM org_tree
-ORDER BY path;
-
--- MySQL 8+: build the path as a string instead of an array
--- base:      CAST(LPAD(id, 20, '0') AS CHAR(1000)) AS path
--- recursive: CONCAT(ot.path, '/', LPAD(e.id, 20, '0'))
--- The base SELECT fixes the column width (strict mode: "Data too long"), so size CHAR(n)
--- for max depth; LPAD truncates values longer than its width (20 fits BIGINT).
-```
-
-### Pattern: CTE for Upsert with Returning
-
-```sql
--- PostgreSQL: insert or update, return the result
-WITH upserted AS (
-    INSERT INTO user_preferences (user_id, preference_key, preference_value)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (user_id, preference_key)
-    DO UPDATE SET
-        preference_value = EXCLUDED.preference_value,
-        updated_at = NOW()
-    RETURNING *
-)
-SELECT * FROM upserted;
-```
-
-### When NOT to Use CTEs
-- **Simple single-table queries** — `SELECT * FROM users WHERE id = $1` does not need a CTE.
-- **Performance-critical hot paths** where the query planner does better with subqueries (profile first, optimize second).
-- **MySQL < 8.0** — CTEs not supported (but MySQL 8+ supports them fully).
-
-## Indexing Strategies
-
-### PostgreSQL
-
-```sql
--- Composite index: leftmost prefix rule applies
-CREATE INDEX idx_orders_customer_status ON orders (customer_id, status);
--- Supports: WHERE customer_id = X
--- Supports: WHERE customer_id = X AND status = Y
--- Does NOT support: WHERE status = Y (alone)
-
--- Partial index: index only the rows you query
-CREATE INDEX idx_orders_pending ON orders (created_at)
-    WHERE status = 'pending';
--- Much smaller than full index, faster for the specific query pattern
-
--- Expression index
-CREATE INDEX idx_users_email_lower ON users (LOWER(email));
--- Supports: WHERE LOWER(email) = 'user@test.com'
-
--- CONCURRENTLY: no table lock during creation (PostgreSQL)
-CREATE INDEX CONCURRENTLY idx_orders_created ON orders (created_at);
-```
-
-### MySQL
-
-```sql
--- Covering index: all queried columns in the index (avoids table lookup)
-CREATE INDEX idx_orders_cover ON orders (customer_id, status, total, created_at);
--- SELECT status, total FROM orders WHERE customer_id = X → index-only scan
-
--- Prefix index for long strings
-CREATE INDEX idx_users_email ON users (email(50));
-
--- Force index hint (last resort — prefer fixing the query)
-SELECT * FROM orders FORCE INDEX (idx_orders_customer_status) WHERE ...;
-```
-
-### Index Decision Checklist
-1. **Is this column in WHERE, JOIN, or ORDER BY?** If yes, consider indexing.
-2. **What's the cardinality?** Boolean columns rarely benefit from B-tree indexes.
-3. **Read-heavy or write-heavy?** Every index slows writes. Over-indexing kills insert performance.
-4. **Can I use a partial index?** If you only query a subset (e.g., active records), partial index is better.
-5. **Check `EXPLAIN ANALYZE`** before and after — verify the index is actually used.
-
-## Zero-Downtime Migration Patterns
-
-### Expand-then-Contract (for column changes)
-
-**Phase 1 — Expand:** Add new column (nullable), deploy code that writes to BOTH columns.
-```sql
-ALTER TABLE orders ADD COLUMN status_v2 VARCHAR(50); -- nullable, no default needed yet
-```
-
-**Phase 2 — Backfill:** Populate new column from old.
-```sql
--- Batch update to avoid long locks
-UPDATE orders SET status_v2 = status WHERE status_v2 IS NULL AND id BETWEEN $1 AND $2;
-```
-
-**Phase 3 — Switch:** Deploy code that reads from new column. Verify.
-
-**Phase 4 — Contract:** Drop old column (after all code stops using it). Keep `status_v2` as the final name: renaming it back to `status` in place breaks every running instance that reads `status_v2`. If the original name must return, run a second expand/contract cycle.
-```sql
-ALTER TABLE orders DROP COLUMN status;
-```
-
-### Migration Safety Rules
-1. **Never DROP COLUMN in the same deploy as the code change.** Old code instances may still need it.
-2. **Add columns as NULLABLE** or with a server-side DEFAULT. `NOT NULL` without default locks the table for backfill.
-3. **CREATE INDEX CONCURRENTLY** (PostgreSQL) to avoid blocking writes.
-4. **Large table ALTERs** — MySQL: `pt-online-schema-change` or `gh-ost` for tables > 1M rows. PostgreSQL: prefer metadata-only changes (nullable `ADD COLUMN`, non-volatile `DEFAULT` on PG 11+), `ADD CONSTRAINT … NOT VALID` (FK/CHECK) then `VALIDATE CONSTRAINT` (takes only SHARE UPDATE EXCLUSIVE), and a `lock_timeout`; table-rewriting changes (type changes) go through expand/contract. `pg_repack` only removes bloat online — it does not apply schema changes.
-5. **Test migrations against a production-size dataset.** A migration that takes 1 second on dev can lock production for minutes.
-
-### Flyway Naming Convention
-```
-V1__create_orders_table.sql
-V2__add_orders_status_index.sql
-V3__add_customer_email_column.sql
-R__refresh_order_summary_view.sql  # repeatable migration
-```
-
-## DynamoDB Access Pattern Design
-
-### Single-Table Design Process
-1. **List access patterns first** — what queries does the application need?
-2. **Design keys to support those queries** — PK/SK for main, GSIs for alternative patterns.
-3. **Document in an access pattern table.**
-
-### Example: E-commerce
-
-| Access Pattern | PK | SK | GSI |
-|---|---|---|---|
-| Get order by ID | `ORDER#<orderId>` | `METADATA` | |
-| Get customer's orders | `CUSTOMER#<custId>` | `ORDER#<timestamp>#<orderId>` | |
-| Get order items | `ORDER#<orderId>` | `ITEM#<itemId>` | |
-| Orders by status | | | GSI1PK: `STATUS#<status>`, GSI1SK: `ORDER#<timestamp>` |
-| Recent orders (global) | | | GSI2PK: `ORDERS#<yyyy-mm-dd>#<shard 0..N-1>`, GSI2SK: `<timestamp>#<orderId>` |
-
-An item has one value per attribute, so a second access pattern on the same items needs a second GSI (GSI2), not a second GSI1PK value. A single constant key such as `ALL_ORDERS` is a hot partition; bucket by day and shard, then query the shards in parallel and merge. Shard `STATUS#<status>` the same way when one status dominates.
-
-### Query Patterns (Application Code)
-
-```java
-// Get customer's orders (sorted by date, newest first)
-QueryRequest query = QueryRequest.builder()
-    .tableName(TABLE_NAME)
-    .keyConditionExpression("PK = :pk AND begins_with(SK, :prefix)")
-    .expressionAttributeValues(Map.of(
-        ":pk", AttributeValue.fromS("CUSTOMER#" + customerId),
-        ":prefix", AttributeValue.fromS("ORDER#")
-    ))
-    .scanIndexForward(false) // newest first
-    .limit(20)
-    .build();
-```
-
-```go
-// Go — using aws-sdk-go-v2
-input := &dynamodb.QueryInput{
-    TableName:              aws.String(tableName),
-    KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :prefix)"),
-    ExpressionAttributeValues: map[string]types.AttributeValue{
-        ":pk":     &types.AttributeValueMemberS{Value: "CUSTOMER#" + customerID},
-        ":prefix": &types.AttributeValueMemberS{Value: "ORDER#"},
-    },
-    ScanIndexForward: aws.Bool(false),
-    Limit:           aws.Int32(20),
-}
-```
-
-### DynamoDB Anti-Patterns
-1. **Scan operations** — scans read the entire table. If you need a scan, you're missing an index.
-2. **Hot partitions** — a single PK getting disproportionate traffic. Distribute with write sharding: `STATUS#active#<shard>`.
-3. **Large items** — DynamoDB max 400KB per item. Store large blobs in S3, reference by key.
-4. **Relying on consistent reads everywhere** — eventually consistent reads are 2x cheaper and sufficient for most patterns.
-
-## Redis Patterns
-
-### Data Structure Selection
-
-| Need | Redis Type | Example |
-|------|-----------|---------|
-| Cache a value | STRING | `SET user:123 "{json}" EX 3600` |
-| Cache with fields | HASH | `HSET user:123 name "John" email "j@t.com"` |
-| Leaderboard / ranking | SORTED SET | `ZADD leaderboard 1500 "user:123"` |
-| Rate limiting | STRING + INCR | `INCR rate:user:123:min` + `EXPIRE` |
-| Session store | HASH | `HSET session:abc user_id 123 role admin` |
-| Distributed lock | STRING + NX | `SET lock:order:456 owner NX EX 30` |
-| Recent items / feed | LIST | `LPUSH recent:user:123 item_id` + `LTRIM` |
-| Unique tracking | SET or HyperLogLog | `SADD visitors:2026-04-13 "user:123"` |
-
-### Cache-Aside Pattern (Most Common)
-
-```java
-public Order getOrder(String orderId) {
-    // 1. Check cache
-    String cached = redis.opsForValue().get("order:" + orderId);
-    if (cached != null) {
-        return objectMapper.readValue(cached, Order.class);
-    }
-
-    // 2. Cache miss — load from DB
-    Order order = orderRepository.findById(orderId)
-        .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
-
-    // 3. Populate cache with TTL
-    redis.opsForValue().set(
-        "order:" + orderId,
-        objectMapper.writeValueAsString(order),
-        Duration.ofMinutes(30)
-    );
-
-    return order;
-}
-
-// Invalidate on write — only after the transaction commits. Deleting inside the transaction
-// lets a concurrent reader re-cache the old row before commit (or evicts for a rolled-back write).
-@Transactional
-public Order updateOrder(String orderId, UpdateOrderRequest req) {
-    Order order = orderRepository.findById(orderId).orElseThrow(...);
-    order.apply(req);
-    order = orderRepository.save(order);
-    events.publishEvent(new OrderChanged(orderId)); // ApplicationEventPublisher
-    return order;
-}
-
-@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-public void evictOrder(OrderChanged e) {
-    redis.delete("order:" + e.orderId());
-}
-```
-
-### Cache Key Naming Convention
-```
-<entity>:<id>                    → order:456
-<entity>:<id>:<field>            → user:123:preferences
-<entity>:list:<filter>:<page>    → product:list:electronics:1
-rate:<scope>:<window>            → rate:user:123:min
-lock:<resource>                  → lock:order:456
-```
-
-### Cache Invalidation Rules
-1. **Invalidate after commit** — delete the cache key after every committed write to the source (`@TransactionalEventListener(AFTER_COMMIT)` or an outbox/CDC consumer).
-2. **TTL as safety net** — always set TTL even with active invalidation. Prevents stale data if invalidation fails.
-3. **Cache stampede protection** — use distributed locks or probabilistic early expiration for hot keys.
-4. **Never cache errors** — a temporary DB outage should not fill your cache with error responses.
-
-## Common Mistakes
-
-1. **N+1 queries** — fetching a list then querying each item individually. Use JOINs or batch fetches.
-2. **Missing indexes on foreign keys** — every FK column should be indexed for JOIN performance.
-3. **SELECT * in production** — select only needed columns. Especially with wide tables or JSONB.
-4. **Caching without TTL** — data becomes stale with no expiration. Always set a TTL.
-5. **Over-indexing** — each index slows inserts/updates. Index for actual query patterns, not "just in case."
-6. **DynamoDB scan instead of query** — always query with PK. If you need scan, add a GSI.
+## Redis
+- Types: STRING cache/`INCR`+`EXPIRE` rate limit; HASH object/session; ZSET ranking; LIST+`LTRIM` feeds; SET/HyperLogLog uniques. Locks use `SET lock:<res> <owner> NX EX 30`.
+- Keys: `<entity>:<id>`, `<entity>:<id>:<field>`, `<entity>:list:<filter>:<page>`, `rate:<scope>:<window>`, `lock:<resource>`.
+- Cache-aside; every key has a TTL (e.g. 30 min) even with active invalidation.
+- Invalidate only after commit (`@TransactionalEventListener(phase = AFTER_COMMIT)` or an outbox/CDC consumer), never inside the transaction.
+- Protect hot keys from stampedes (lock or probabilistic early expiry). Never cache errors.

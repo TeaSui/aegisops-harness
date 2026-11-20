@@ -1,13 +1,5 @@
-# Code Patterns Rules
+# Code patterns
 
-- **API response envelope (mandatory for every HTTP-exposed endpoint):**
-  - Success: `{ "data": {...}, "meta": {"timestamp": "..."} }`
-  - Error: `{ "error": {"code": "...", "message": "...", "details": []} }`
-  - Applies to all implementation agents that produce HTTP endpoints: `tea-sdlc:backend-engineer-subagent` (including model endpoints), `tea-sdlc:platform-engineer-subagent` (API Gateway + Lambda, scaffolded API gateways), and any mobile/frontend BFF produced by those agents. Pre-existing endpoints that diverge should be migrated when touched; do not introduce new shapes.
-  - If a third-party contract forces a different shape (e.g., a webhook signed by a vendor), wrap it at the ingress and translate to the envelope internally.
-- Error handling: try/catch at boundaries only
-- Config: environment variables, no hardcoded values
-- Database: repository pattern for data access
-- Services: single responsibility, dependency injection
-- DTOs: validate at entry points
-- Static analysis: new code must pass the SonarQube "Sonar way" quality gate — see `references/sonar-way.md`
+- **Every HTTP endpoint uses the envelope.** Success `{ "data": {...}, "meta": {"timestamp": "..."} }`; error `{ "error": {"code": "...", "message": "...", "details": []} }`. Applies to backend (incl. model endpoints), platform (API Gateway + Lambda, scaffolded gateways) and any BFF. Migrate a diverging existing endpoint when you touch it; never add a new shape. A vendor-forced shape (e.g. signed webhook) is translated at ingress.
+- try/catch only at boundaries; config from environment variables, nothing hardcoded; repository pattern for data access; single-responsibility services with dependency injection; DTOs validated at entry points.
+- New code passes SonarQube "Sonar way": A ratings, all hotspots reviewed, ≥ 80% coverage and ≤ 3% duplication on new code.

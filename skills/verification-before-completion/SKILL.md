@@ -5,55 +5,32 @@ description: Use before saying work is done, fixed or passing, before a commit, 
 
 # Verification before completion
 
-A completion claim is something the user acts on: they merge, deploy or move to the next task. Make the claim only when a check you can point to supports it, and say plainly when one does not.
+1. Name the check that proves the claim for the exact state and scope (commit or pending files, command, environment).
+2. Reuse an earlier result only if that state is unchanged and nothing invalidated it; rerun after relevant edits, dependency or config changes, new failures, or `/prove-it`.
+3. Read the decisive output (exit code, failures, skips); redact secrets.
+4. Claim only what it supports, evidence beside the claim; otherwise report the actual state.
 
-## Before claiming a status
+| Claim | Needs | Not enough |
+|---|---|---|
+| Tests pass | 0 failures for this state and scope | stale run; targeted run sold as full suite |
+| Build / lint clean | exit 0 / 0 errors from that command | another tool passing |
+| Bug fixed | original symptom no longer reproduces | code changed |
+| Regression test | failed before the fix, passes after | passes once |
+| Agent done | diff, cited evidence and exit results read by you | its own report |
+| Requirements met | line-by-line against plan/spec (`aidlc trace`) | tests green |
 
-1. **Identify** the check that would show the claim is true, for the exact state and scope being claimed: commit/base or pending-file manifest, command, relevant environment or tool version.
-2. **Reuse or run.** Reuse an earlier inspected result when that state and scope are unchanged and no failure or uncertainty has invalidated it, per `${CLAUDE_PLUGIN_ROOT}/rules/reduce-hallucinations.md`. Run the check again after relevant edits, dependency/config changes or new failures, or when the user asks for a fresh challenge such as `/prove-it`.
-3. **Read** the decisive output: exit code, failure count, what was skipped. Redact sensitive values.
-4. **Claim what the output supports**, with the evidence beside it. If the output does not support the claim, report the actual state instead.
+## Full workflow
 
-## What supports a claim
+Evidence is what the CLI recorded (`aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`):
+- Tests pass = the latest `aidlc verify <f> --cmd "<full suite>"` exited 0 and its fingerprint equals the current code. A run outside the CLI does not count; any code edit needs a new `verify`.
+- Task done = `aidlc task-done` exited 0 and ticked it; never tick by hand.
+- Requirements met = `aidlc trace <f>` shows each requirement with a passing test, check or stated manual verification.
+- Done / verified / reviewed / ready to ship = `aidlc check <f> --to <stage>` passes; quote it. If it lists findings, report the actual stage and blockers, then fix them.
 
-| Claim | Supported by | Not supported by |
-|-------|--------------|------------------|
-| Tests pass | Test output for the checked state/scope: 0 failures | An invalidated earlier run; a targeted run presented as the whole suite |
-| Linter clean | Linter output: 0 errors | A partial check, extrapolation |
-| Build succeeds | Build command: exit 0 | Linter passing, logs that look fine |
-| Bug fixed | The original symptom no longer reproduces | The code was changed |
-| Regression test works | It failed before the fix and passes after | It passes once |
-| Agent completed | The changed files/diff, cited evidence and exit-criteria results, read by you | The agent's own success report |
-| Requirements met | A line-by-line check against the plan or spec; in the full workflow `aidlc trace` | Tests passing |
-| Full-workflow stage reached | `aidlc check <f> --to <stage>` passes, or `aidlc advance` succeeded | A test run outside `aidlc verify`; a `verify` event whose fingerprint no longer matches the code |
+## Scope
 
-## Full workflow: the gate is the evidence
-
-For a change with a spec folder, the evidence is recorded by the CLI, not by a test run you read in the terminal (formats and gates: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`):
-
-- **Tests pass** means the latest `verify` event in `ledger.md` exited 0 and its code fingerprint equals the current one. Run the suite through `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full suite>"`; a run outside the CLI is not recorded and does not count. Any code edit after that run changes the fingerprint, so run `verify` again before the next claim.
-- **A task is done** means `aidlc task-done` ran its exit command, it exited 0, and the task is ticked; never tick `plan.md` by hand.
-- **Requirements met** means `aidlc trace <f>` shows every requirement with a passing test, a check, or a stated manual verification.
-- **The change is done, verified, reviewed or ready to ship** means the gate for that stage passes. Quote its result; when it lists findings, report the stage the spec is actually at and what blocks the next one, then fix them rather than describing the change as done.
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" check <f> --to <verified|reviewed|shipped>
-```
-
-The fast path keeps the general rules below: the test output for the exact state you are claiming.
-
-## Scope the claim to the evidence
-
-- A partial check supports a partial claim. Say what ran and what it covered.
-- Distinguish PASS, FAIL, SKIPPED, UNSUPPORTED and static-only checks. Skipped tests are not passing tests, a parser does not prove runtime behavior, and a check that needs a missing service cannot be reported as passing.
-- When a check cannot run (missing service, dependency or permission), or the user asked to skip it, say what was not verified and what that leaves open. "Changed, not verified" is a complete report; a guess presented as a result is not.
-- "Should", "probably" and "seems to" mean the claim is ahead of the evidence. Run the check, or state the claim as unverified.
-- For a regression test, cite the failing run seen before the fix. Only reverse a known owned patch in isolation; preserve a recoverable copy and never reset or delete user or other-agent work. See `test-driven-development` for safe recovery.
-
-## Proportion
-
-Match the check to the change. A prose typo needs a re-read, not the test suite; a change to shared behavior needs the whole suite, not one test. Apply this before any success claim, before committing or opening a PR when the claim depends on checks, and before moving to a dependent task or reporting a delegated task complete.
-
-## Related
-
-`grounding-claims` covers all factual claims (paths, symbols, APIs, commit SHAs); this skill covers success claims. Both put the evidence before the assertion.
+- Partial check → partial claim; say what ran. Keep PASS, FAIL, SKIPPED, UNSUPPORTED and static-only distinct.
+- A check that cannot run: say what is unverified and what that leaves open. "Changed, not verified" is a valid report.
+- "Should", "probably", "seems" = claim ahead of evidence.
+- To show a regression test failing, reverse only your own patch in isolation; never reset others' work.
+- Proportion: a prose typo needs a re-read; shared behaviour needs the whole suite.

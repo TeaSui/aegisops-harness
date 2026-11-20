@@ -1,38 +1,16 @@
-# Code Quality Reviewer Prompt Template
+# Code quality reviewer template (per task)
 
-Use this template when dispatching a code quality reviewer subagent.
-
-**Purpose:** Verify implementation is well-built (clean, tested, maintainable)
-
-**Only dispatch after spec compliance review passes.**
+Dispatch only after the spec compliance review passes. Send to `tea-sdlc:code-reviewer` the template `skills/requesting-code-review/code-reviewer.md`, filled with:
 
 ```
-Task tool (tea-sdlc:code-reviewer):
-  Use template at skills/requesting-code-review/code-reviewer.md
-
-  AXIS: task (per-task review in the build stage; the two-axis review of the whole change is
-        skills/requesting-code-review/SKILL.md)
-  WHAT_WAS_IMPLEMENTED: [from implementer's report]
-  PLAN_OR_REQUIREMENTS: T<n> from docs/specs/<feature>/plan.md, with the covered requirement IDs
-  REVIEW_SCOPE: [committed range OR pending Git work OR non-Git manifest; owned paths and checked state]
-  BASE_SHA: [verified starting commit, only for committed-range review; otherwise omit]
-  HEAD_SHA: [verified ending commit, only for committed-range review; otherwise omit]
-  DESCRIPTION: [task summary]
+AXIS: standards
+WHAT_WAS_IMPLEMENTED: [from the implementer's report]
+PLAN_OR_REQUIREMENTS: T<n> of docs/specs/<feature>/plan.md with its covered requirement IDs
+REVIEW_SCOPE: [committed range | pending Git work incl. staged, unstaged, untracked owned files | non-Git copies + hash manifest; owned paths; checked state]
+BASE_SHA / HEAD_SHA: [committed range only]
+FIRST_ID: Q1
+DESCRIPTION: [task summary]
+Also check: one responsibility per file with a clear interface; units testable alone; the plan's file structure followed; files this change made large (not pre-existing size); changes stay inside the task's files; tests named with their requirement ID and testing behavior, not mocks.
 ```
 
-**In addition to standard code quality concerns, the reviewer should check:**
-- Does each file have one clear responsibility with a well-defined interface?
-- Are units decomposed so they can be understood and tested independently?
-- Is the implementation following the file structure from the plan?
-- Did this implementation create new files that are already large, or significantly grow existing files? (Don't flag pre-existing file sizes — focus on what this change contributed.)
-- Did the change stay inside the task's `files` list?
-- Are tests named with the requirement ID they prove (e.g. `RFD-1 rejects over-capture`), and do they test behavior rather than mocks?
-
-Choose model/effort via `references/model-guide.md`. Use the available Agent tool
-(`Task` alias supported). For pending review include staged, unstaged and untracked owned
-changes; for non-Git review supply original/changed copies and a hash manifest. Do not require
-commits merely to request a review or replace pending scope with the last committed diff.
-
-**Coverage over filtering:** instruct the reviewer to report every issue found, including uncertain or low-severity ones, with a confidence level and severity per finding — the dispatcher filters downstream. Do not add "be conservative" or "high-severity only" language.
-
-**Code reviewer returns:** status + evidence + findings per `rules/subagent-return-format.md` (shape flexible). Map outcomes to status: Critical issues → `BLOCKED` with specifics; Important issues → `DONE_WITH_CONCERNS` with the items listed; Minor/Suggestions-only or clean review → `DONE`. Include strengths, the actual reviewed scope/state, file evidence and exit-criteria checks. Separate inspected/static evidence from executed tests and report skipped/unavailable gates.
+Never request commits just to get a review, and never add "high-severity only" wording: the reviewer reports everything with severity and confidence. Status: any must → BLOCKED; should only → DONE_WITH_CONCERNS; nits or clean → DONE.

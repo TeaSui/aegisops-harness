@@ -1,35 +1,20 @@
-# Review Loop Iteration Limits
+# Review loop limits (full workflow)
 
-These limits apply to full workflow paths only. Fast-path changes have no formal review loops per `rules/workflow-routing.md`. Leaf dispatches still honor the per-dispatch bailout in `references/workflows/dispatch-prompt-contract.md` (max 2 fix attempts on the same issue → BLOCKED).
+The fast path has no review loops: one pre-PR pass plus one diff-only re-review. Any leaf dispatch: 2 failed fix attempts on the same issue → return `BLOCKED`. Debugging: 3 failed fixes → stop and question the approach.
 
-When using subagent-driven-development or any workflow with review loops:
+## Per task in the build stage
+- Max 2 fix rounds per review (spec compliance, code quality); max 4 review iterations per task in total.
+- Round 2 still failing usually means a deeper problem: check that before patching again.
+- At the limit the same implementer gets no further round. Re-dispatch the task once to a fresh implementer one model tier up (haiku → sonnet → opus → fable) with the findings and the failed approaches. If that fails too → stop and escalate (below); wait for the user's decision.
 
-## Spec Compliance Review Loop
-- **Max 2 fix rounds per task.** Reviewer finds issues → implementer fixes (round 1) → reviewer finds issues again → implementer fixes (round 2) → if reviewer still finds issues → STOP.
-- Escalate to human: "Task N has failed spec compliance after 2 fix rounds. The spec may be ambiguous or the task scope may be wrong."
-- Do NOT keep looping. Something is structurally wrong.
+## Review stage
+Spec and Standards once each (in parallel with QA), then at most ONE diff-only re-review of the fixes by a single tea-sdlc:code-reviewer with `AXIS: both`.
 
-## Code Quality Review Loop
-- **Max 2 fix rounds per task.** Same rule as spec compliance.
-- If quality issues persist after 2 fix rounds, the implementation approach needs rethinking, not more patches.
+## Convergence
+- A re-review covers the fix diff only, unless the fix touched shared behaviour.
+- Fix a bug class across the whole diff in one round, not instance by instance.
+- Never re-raise a finding already fixed or cleared with a reason; cite the earlier round.
+- A finding that survives two fix rounds is structural → escalate.
 
-## Combined Limit
-- **Max 4 total review iterations per task** (spec + quality combined).
-- If a task consumes 4+ review rounds, it's too complex for a single dispatch. Split it.
-
-## Implementer Fix Rounds
-- When reviewer sends implementer back to fix:
-  - Fix round 1: Normal — address specific issues
-  - Fix round 2: Concerning — check if issues are symptoms of a deeper problem.
-  - Still failing after round 2: the same implementer does not get a third round. Re-dispatch the task once to a fresh implementer one model tier up (references/model-guide.md), with the reviewers' findings and the failed approaches. If that attempt fails too → STOP and escalate.
-
-## Convergence Across Rounds
-- A re-review after a fix round covers the fix diff, not the whole change, unless the fix touched shared behavior.
-- When a reviewer finds a bug class (e.g., unvalidated input at a boundary), fix the class across the diff in one round, not instance by instance over several rounds.
-- Do not re-raise a finding already fixed or cleared with a stated reason; cite the earlier round instead.
-- A finding that survives two fix rounds counts as a structural problem and triggers escalation.
-
-## What "Escalate" Means
-1. Report to human: which task, what was tried, what keeps failing
-2. Propose: split the task, simplify the spec, or change the approach
-3. Wait for human decision before continuing
+## Escalate
+Stop and tell the user which task, what was tried and what keeps failing; propose split, simpler spec or different approach; wait for the decision.

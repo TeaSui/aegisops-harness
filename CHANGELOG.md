@@ -1,5 +1,45 @@
 # Changelog
 
+## 3.2.0 — 2026-11-20
+
+Terse prompts. The skills, agents, rules, references and commands were written for a model that had to be taught; a frontier model needs only what it would not do by default.
+
+### Changed
+- **Shorter prompts:**
+  - Every skill, agent, rule, reference and command is rewritten with standard domain terms (RED-GREEN-REFACTOR, STRIDE, EARS, transactional outbox, expand-contract…) instead of explanations.
+  - Examples are kept only where code or another agent parses the format.
+  - Total size goes from 710 KB to 294 KB (−59%), and the always-loaded session bootstrap from 8.7 KB to 4.2 KB.
+  - Frontmatter `name` and `description` are unchanged, so skill triggering is untouched.
+- **Flat references:** the longest file → file chain goes from 21 links to 4. Rules and references no longer point to each other, except three pointers to separate procedures. 9 supporting files were folded into their `SKILL.md`, and 2 reference files into the rules of the same name.
+- **Full-mode cost cuts:**
+  - One blind spec-check pass.
+  - Review: Spec and Standards once each, then at most one diff-only re-review by one `tea-sdlc:code-reviewer` with `AXIS: both`.
+  - Coming back to review after a fix or NO-GO re-reviews only the diff.
+  - Artifact budgets, e.g. `design.md` ≤ ~120 lines.
+  - `references/aidlc.md` is read per stage.
+  - `tea-sdlc:code-reviewer` and `tea-sdlc:security-engineer-subagent` run on `sonnet`.
+- **Opening a PR:** the session runs `gh pr create` and decides from what `gh` answers, never from the remote URL. This line is now in the bootstrap and `finishing-a-development-branch`. In lean mode, 3/3 sessions had given up on the PR without trying `gh`.
+
+### Fixed (found by an independent review of the rewrite)
+- **Implementer template:**
+  - It carries its own guard rails again: no `docs/specs/**` edits, a broken contract is NEEDS_CONTEXT, never revert others' work, a TDD RED run first.
+  - 2 failed fix attempts → BLOCKED.
+  - It has `Out of scope` and `Bailout` fields.
+- **Reviewers and QA:** the per-task spec reviewer gets `AXIS: spec`, and QA receives the running target so live API checks run.
+- **Loop limits:** at the limit the session stops and waits for the user.
+- **`references/aidlc.md`:** it again explains `security: not-applicable`, and it lists `**/docs/specs/**` among the files the code fingerprint excludes.
+- **`security.md` header:** has `Data classes:` again.
+
+### Measured
+Same refund prompt, `claude-opus-5-5`, 3 runs per mode. A new `L1-refund-lean` case is scored on outcome: `npm test`, hidden refund checks, PR opened, threats listed. The headless runner now applies a case's `env`.
+
+| | 3.1.0 | 3.2.0 |
+|---|---|---|
+| Lean (default) | $1.34–1.43, 5/6 checks (no PR) | **$1.01–1.09, 6/6** |
+| Full (`TEA_SDLC_WORKFLOW=full`) | $8.87–10.22 (3.0.0), 23–44 min | **$6.18–7.78, 17–23 min**, 6/6 stages, `shipped` |
+| tdd | — | 4/4 |
+| passive | 16/18 (baseline) | 16/18 |
+
 ## 3.1.0 — 2026-11-20
 
 ### Changed

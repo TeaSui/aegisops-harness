@@ -3,238 +3,41 @@ name: receiving-code-review
 description: Use when review feedback arrives (from the tea-sdlc:code-reviewer subagent, the code-review skill, a PR comment or the user), before changing code for it — verify each finding against the code, fix or clear it with evidence (in the full workflow, close each line of review.md with `fixed:` or `cleared:` and re-stamp after the re-review), push back when it is wrong, and skip performative agreement (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
-# Code Review Reception
+# Receiving Code Review
 
-## Overview
+Findings are claims to verify, not orders. For each: understand it, check it against the code, decide, then fix one item at a time with a test.
 
-Code review requires technical evaluation, not emotional performance.
+## Rules
 
-**Core principle:** Verify before implementing. Ask before assuming. Technical correctness over social comfort.
+- No performative agreement or thanks ("You're absolutely right", "Great point", "Thanks for…"). State the fix or the technical objection, or just act. Wrong pushback is corrected in one factual line ("Checked X: it does Y; fixing").
+- Unclear items: pause only the changes that depend on them, ask one focused question, and continue the independent items.
+- The user's feedback is trusted once understood. External or subagent feedback: check it is correct for this stack, does not break existing behavior or platform/version support, and that the reviewer had the context; a conflict with a decision the user made goes to the user first.
+- "Implement it properly" for a feature: grep for real usage. Unused → decline (YAGNI) and clear the finding with the search command and result. Ask the user only when the answer is theirs alone (a planned external consumer, a product commitment the code cannot show).
+- Push back, with code, tests or search results, when a suggestion breaks behavior, lacks context, violates YAGNI, is wrong for the stack or ignores a compatibility reason.
+- Order: blocking (breakage, security), then simple, then complex; test each fix and check for regressions.
+- Reply to GitHub inline comments in their thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level comment.
 
-## The Response Pattern
+## Full workflow: close the lines of `review.md`
 
-```
-WHEN receiving code review feedback:
-
-1. READ: Complete feedback without reacting
-2. UNDERSTAND: Restate requirement in own words (or ask)
-3. VERIFY: Check against codebase reality
-4. EVALUATE: Technically sound for THIS codebase?
-5. RESPOND: Technical acknowledgment or reasoned pushback
-6. IMPLEMENT: One item at a time, test each
-```
-
-## Forbidden Responses
-
-**NEVER:**
-- "You're absolutely right!"
-- "Great point!" / "Excellent feedback!" (performative)
-- "Let me implement that now" (before verification)
-
-**INSTEAD:**
-- Restate the technical requirement
-- Ask clarifying questions
-- Push back with technical reasoning if wrong
-- Just start working (actions > words)
-
-## Handling Unclear Feedback
-
-```
-IF an item is unclear:
-  Identify which changes depend on resolving it
-  Pause those dependent changes and ask a focused clarification
-  Continue understood, authorized fixes that are demonstrably independent
-
-WHY: Dependencies determine what must wait; one unclear item does not block unrelated work.
-Reuse existing authorization for the same scope (see session-bootstrap) and ${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md.
-```
-
-**Example:**
-```
-your human partner: "Fix 1-6"
-You understand 1,2,3,6. Unclear on 4,5.
-
-❌ WRONG: Assume the meaning of 4,5, or block unrelated fixes without checking dependencies
-✅ RIGHT: "I will fix independent items 1,2,3,6. Items 4 and 5 need clarification; dependent changes will wait."
-```
-
-## Source-Specific Handling
-
-### From your human partner
-- **Trusted** - implement after understanding
-- **Still ask** if scope unclear
-- **No performative agreement**
-- **Skip to action** or technical acknowledgment
-
-### From External Reviewers
-```
-BEFORE implementing:
-  1. Check: Technically correct for THIS codebase?
-  2. Check: Breaks existing functionality?
-  3. Check: Reason for current implementation?
-  4. Check: Works on all platforms/versions?
-  5. Check: Does reviewer understand full context?
-
-IF suggestion seems wrong:
-  Push back with technical reasoning
-
-IF can't easily verify:
-  State the missing evidence, investigate within the authorized scope, and clarify only the dependent decision if needed
-
-IF conflicts with your human partner's prior decisions:
-  Stop and discuss with your human partner first
-```
-
-**your human partner's rule:** "External feedback - be skeptical, but check carefully"
-
-## YAGNI Check for "Professional" Features
-
-```
-IF reviewer suggests "implementing properly":
-  grep codebase for actual usage yourself
-
-  IF unused: decline it and clear the finding with the search evidence
-             ("nothing calls this endpoint: <search command and result>")
-  IF used: Then implement properly
-  Ask the user only when the answer is theirs alone (a planned external consumer,
-  a product commitment the code cannot show)
-```
-
-**your human partner's rule:** "You and reviewer both report to me. If we don't need this feature, don't add it."
-
-## Implementation Order
-
-```
-FOR multi-item feedback:
-  1. Identify dependencies and clarify unclear items; pause only dependent work
-  2. Implement understood, authorized items in this order:
-     - Blocking issues (breaks, security)
-     - Simple fixes (typos, imports)
-     - Complex fixes (refactoring, logic)
-  3. Test each fix individually
-  4. Verify no regressions
-```
-
-## Where findings live
-
-**Full workflow (review stage):** the findings are the lines in the spec's `review.md` (format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` § review.md). Close each one on its own line, never by deleting or rewording it:
+Format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 `review.md`. Close each finding on its own line; never delete or reword it:
 
 ```markdown
 - [x] S1 (must): RFD-1 second criterion is not implemented at src/refunds/api.ts:41 — fixed: src/refunds/api.ts:44, test "RFD-1 rejects over-capture"
-- [x] Q2 (nit): rename `amt` at src/refunds/model.ts:8 — cleared: matches the PSP field name, see design.md §2
 ```
 
-- `fixed:` names where the fix is and, for behavior, the test (named with the requirement ID) that proves it.
-- `cleared:` gives the evidence that the finding does not apply: a search result, a design section, a test, or the user's decision (`cleared: accepted by <name> — <reason>`).
-- A finding from a PR comment, QA or the user during this stage is added to the axis it belongs to with the next free ID, then closed the same way.
+- `fixed:` where the fix is and, for behavior, the test named with the requirement ID that proves it.
+- `cleared:` the evidence it does not apply (search result, design section, test) or the user's decision: `cleared: accepted by <name> — <reason>`.
+- A finding from a PR comment, QA or the user during this stage goes under its axis with the next free ID and is closed the same way.
 
-After the fixes: run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full suite>"` again (the code changed), get the one diff-only re-review, close what it adds, then re-stamp and advance:
+Then, because code changed: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full suite>"`, the one diff-only re-review (a single reviewer, both axes), close what it adds, then:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" stamp <f> review
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> reviewed
 ```
 
-A stamp is valid only for the code it was taken on; any later code change needs a new `verify` and a new stamp. A finding that is still open after the re-review goes to the user only when the decision is theirs; otherwise go back with `aidlc advance <f> building --back --reason "<finding>"`.
+A stamp is valid only for the code it was taken on; any later code change needs a new `verify` and stamp. Still open after the re-review → the user only if the decision is theirs; otherwise `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> building --back --reason "<finding>"`.
 
-**Fast path:** run one diff-only re-review of the fixes (`${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`), then commit and record the pass per `requesting-code-review` (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open after that re-review go to the user as explicit open items, not another loop.
+## Fast path
 
-## When To Push Back
-
-Push back when:
-- Suggestion breaks existing functionality
-- Reviewer lacks full context
-- Violates YAGNI (unused feature)
-- Technically incorrect for this stack
-- Legacy/compatibility reasons exist
-- Conflicts with your human partner's architectural decisions
-
-**How to push back:**
-- Use technical reasoning, not defensiveness
-- Ask specific questions
-- Reference working tests/code
-- Involve your human partner if architectural
-
-## Acknowledging Correct Feedback
-
-When feedback IS correct:
-```
-✅ "Fixed. [Brief description of what changed]"
-✅ "Good catch - [specific issue]. Fixed in [location]."
-✅ [Just fix it and show in the code]
-
-❌ "You're absolutely right!"
-❌ "Great point!"
-❌ "Thanks for catching that!"
-❌ "Thanks for [anything]"
-❌ ANY gratitude expression
-```
-
-**Why no thanks:** Actions speak. Just fix it. The code itself shows you heard the feedback.
-
-**If you catch yourself about to write "Thanks":** DELETE IT. State the fix instead.
-
-## Gracefully Correcting Your Pushback
-
-If you pushed back and were wrong:
-```
-✅ "You were right - I checked [X] and it does [Y]. Implementing now."
-✅ "Verified this and you're correct. My initial understanding was wrong because [reason]. Fixing."
-
-❌ Long apology
-❌ Defending why you pushed back
-❌ Over-explaining
-```
-
-State the correction factually and move on.
-
-## Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Performative agreement | State requirement or just act |
-| Blind implementation | Verify against codebase first |
-| Batch without testing | One at a time, test each |
-| Assuming reviewer is right | Check if breaks things |
-| Avoiding pushback | Technical correctness > comfort |
-| Guessing through ambiguity | Clarify dependent items while continuing independent authorized fixes |
-| Can't verify a dependent change | State the gap, investigate within scope, and clarify before that change |
-
-## Real Examples
-
-**Performative Agreement (Bad):**
-```
-Reviewer: "Remove legacy code"
-❌ "You're absolutely right! Let me remove that..."
-```
-
-**Technical Verification (Good):**
-```
-Reviewer: "Remove legacy code"
-✅ "Checking... build target is 10.15+, this API needs 13+. Need legacy for backward compat. Current impl has wrong bundle ID - fix it or drop pre-13 support?"
-```
-
-**YAGNI (Good):**
-```
-Reviewer: "Implement proper metrics tracking with database, date filters, CSV export"
-✅ "Grepped the codebase: nothing calls this endpoint, so not adding metrics tracking (YAGNI). Finding cleared with that search."
-```
-
-**Unclear Item (Good):**
-```
-your human partner: "Fix items 1-6"
-You understand 1,2,3,6. Unclear on 4,5.
-✅ "I will fix independent items 1,2,3,6. Clarification is needed for 4,5 before their dependent changes."
-```
-
-## GitHub Thread Replies
-
-When replying to inline review comments on GitHub, reply in the comment thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level PR comment.
-
-## The Bottom Line
-
-**External feedback = suggestions to evaluate, not orders to follow.**
-
-Verify. Question. Then implement.
-
-No performative agreement. Technical rigor always.
+One diff-only re-review of the fixes, then commit and record the pass per `tea-sdlc:requesting-code-review` §3 (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open go to the user as explicit open items, not another loop.

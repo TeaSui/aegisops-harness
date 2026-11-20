@@ -5,64 +5,50 @@ description: Use first, before reading files or editing, whenever a request buil
 
 # Design clarification
 
-This skill runs first for code-changing work, after any opener skill (`tea-sdlc:goal`, `tea-sdlc:clarify`, `tea-sdlc:expert-lens`, `tea-sdlc:reframe`) that applies. It scales with the change; it never becomes a reason to stop.
+Runs first for code-changing work, after any opener skill that applies (`tea-sdlc:goal`, `tea-sdlc:clarify`, `tea-sdlc:expert-lens`, `tea-sdlc:reframe`). It scales with the change and is never a reason to stop.
 
 ## 1. Trust-boundary check
 
-Walk the six items first; the answer sets the depth. Trust boundary = YES if the change touches any of:
-
-1. PII or financial data
-2. auth, session or permission rules
-3. money, billing or payments
-4. a new endpoint, webhook or public surface
-5. a new external vendor
-6. security config or secrets (TLS, JWT, IAM, encryption)
-
-Unsure counts as YES.
+Trust boundary = YES if the change touches any of: (1) PII or financial data, (2) auth, session or permission rules, (3) money, billing or payments, (4) a new endpoint, webhook or public surface, (5) a new external vendor, (6) security config or secrets (TLS, JWT, IAM, encryption). Unsure = YES.
 
 | Change | Depth |
 |---|---|
-| Routine fix, no trust boundary | 2-3 lines: outcome, acceptance evidence, approach. Then continue immediately; for a bug or a failing test the next step is `tea-sdlc:systematic-debugging` (root cause before any fix). |
-| Feature or behavior change, no trust boundary | Add constraints and 2-3 approaches only if the tradeoff is real; recommend one. |
-| Trust boundary, lean mode (the default) | 3-6 lines: the approach plus the security pass (assets, threats, controls) from `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` § Fast path with a security pass. No spec folder, no subagents. |
-| Trust boundary or new system, full mode (`TEA_SDLC_WORKFLOW=full` or the user asked for the full workflow) | Full design and spec below (Full workflow). |
+| Routine fix, no trust boundary | 2-3 lines: outcome, acceptance evidence, approach; continue. Bug or failing test → `tea-sdlc:systematic-debugging` next. |
+| Feature or behavior change, no trust boundary | Add constraints, and 2-3 approaches only when the tradeoff is real; recommend one. |
+| Trust boundary, lean mode (default) | 3-6 lines before the first edit: approach, assets touched, threats (STRIDE / OWASP), controls kept or added (`tea-sdlc:fintech-security` as catalogue; honour an existing `security.md`). Then tests for the security behaviour (authz denied, input rejected, no PII in logs, idempotent money movement); `check-contract.py` if an external contract changes; the pre-PR pass covers security and the PR lists threats checked. No spec, no subagents. |
+| Trust boundary or new system, full mode (`TEA_SDLC_WORKFLOW=full`, the user asked for it, or a spec bound to the branch is past `proposed`) | Spec per AIDLC (§3–§4 below). |
 
 ## 2. Clarify
 
-If the request already carries goals, acceptance criteria and a tier (for example a `/prompt-builder` prompt), confirm them in one line, state any assumption you make, and continue. If you cannot ask the user (non-interactive run) or they delegated the choices, answer your own questions with the most reasonable assumption, say what you assumed, and proceed.
+Request already carries goals, acceptance criteria and a tier (e.g. a `/prompt-builder` prompt) → confirm in one line, state assumptions, continue. Non-interactive, or choices delegated → answer your own questions with the most reasonable assumption and say so.
 
-Read the applicable project context, then identify the outcome, constraints, acceptance evidence and material unknowns. Consult available sources before asking for information they already contain. Ask one concise question only when the answer changes the design; otherwise state the assumption and continue.
+Read project context and existing sources before asking. Identify outcome, constraints, acceptance evidence, material unknowns. Ask one concise question only when the answer changes the design. Compare 2-3 approaches when the tradeoff matters; recommend one with cost, risk, validation. Keep domain conventions and security controls. Size the design to the change: a config change is a few sentences; a new system states interfaces, ownership, data flow, failure behavior. Challenge a significant architecture decision once; record unresolved concerns.
 
-Compare two or three approaches when the tradeoff matters. Recommend one with its costs, risks and validation. Preserve existing domain conventions and security controls. A configuration change may need a few sentences; a new system needs interfaces, ownership, data flow and failure behavior. Make components understandable and independently testable. For significant architecture decisions, challenge the design once; keep review iterations bounded and record unresolved concerns.
+Visual decision the user should compare (layouts, mockups, diagrams) → browser companion: `${CLAUDE_PLUGIN_ROOT}/skills/brainstorming/visual-companion.md` (its `skills/brainstorming/scripts/…` run from `${CLAUDE_PLUGIN_ROOT}`). Not for text questions.
 
-For an actual visual decision (layouts, mockups, diagrams the user should compare), use the browser companion in `${CLAUDE_PLUGIN_ROOT}/skills/brainstorming/visual-companion.md`; its `skills/brainstorming/scripts/…` commands run from `${CLAUDE_PLUGIN_ROOT}`. It is not an intake ceremony.
+## 3. Spec (full workflow only)
 
-## 3. Spec (Full workflow only)
+`aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run it yourself. Formats: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 (`requirements.md`, README frontmatter); folder placement: `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` §4 (reuse the project's existing locations).
 
-The stages, gates and file formats are in `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`; the folder and its writers are in `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` §4 (reuse the project's existing locations, §6). Run the CLI yourself, never ask the user to. Below, `aidlc` stands for `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`.
+1. Stable kebab-case slug; a 2-6 letter key unused by other specs (`aidlc status`). `aidlc init <feature> --key <KEY>` (pass a folder path when the spec is not in the repository's own `docs/specs/`).
+2. `README.md`: summary, file index, frontmatter `scope`, `affects`, `contract: none|external`, `security: required` (or `not-applicable — <reason>` only for a non-trust change the user chose to run through the full workflow).
+3. `requirements.md`: keyed requirements only, no narrative: `### <KEY>-<n>: <title>`, acceptance bullets under `Acceptance:` (Given/When/Then or EARS, one observable outcome each, unhappy paths included), a `Verify:` line.
+4. Dispatch `tea-sdlc:security-engineer-subagent` for `security.md` (threat table + numbered rules) and, when the UI needs design, `tea-sdlc:ui-ux-designer-subagent` for `ui-design.md`; they run while you write the design.
+5. Only when a contract or the architecture changes: `design.md` (≤ ~120 lines) and `contracts/`, following the security rules; an ADR per decision that outlives the change. `contract: external` → `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` until it passes.
+6. `tea-sdlc:spec-check`, then close every guess in the spec; a product-choice guess gets your most reasonable answer, listed for approval.
 
-1. Pick a stable kebab-case slug for this one change and a 2-6 letter key that no other spec uses (`aidlc status` lists the existing specs). Run `aidlc init <feature> --key <KEY>` to create the folder in the owning scope (pass the folder path instead of the slug when it is not the repository's own `docs/specs/`).
-2. Fill `README.md`: summary, file index and the frontmatter fields `scope`, `affects`, `contract: none|external` and `security: required` (or `not-applicable — <reason>`, only under the escape hatch in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`).
-3. Write `requirements.md`: one `### <KEY>-<n>: <title>` heading per requirement, its acceptance criteria as bullets under `Acceptance:` (Given/When/Then or EARS, one observable outcome per bullet, unhappy paths included), and a `Verify:` line (`aidlc.md` §2). Business rules and new terms may follow in any form.
-4. Dispatch `tea-sdlc:security-engineer-subagent` for `security.md` (threat model and numbered rules), and `tea-sdlc:ui-ux-designer-subagent` for `ui-design.md` when the UI needs design. Both can run while you write the design.
-5. When a contract or the architecture changes, write `design.md` and `contracts/`, following the Security rules. Write an ADR for each decision that outlives the change. For `contract: external`, run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` and fix the contracts until it passes.
-6. Once the spec files exist, invoke `tea-sdlc:spec-check`. Close every guess it lists: answer it in the spec, or accept the risk with a reason. A guess that needs a product choice gets your most reasonable answer, written into the spec and listed for the approval below.
+Do not commit or scaffold an existing repository just because a template says so.
 
-Do not commit or scaffold an existing repository only because a template says so.
+## 4. One approval point (full workflow only)
 
-## 4. One approval point (Full workflow only)
+Present once: summary, requirements, design, security rules, contract result, choices made closing guesses. Approval is the user's; skip asking only when the request explicitly delegated it ("end to end without checking in"). Record `accepted_by: <name> (<date>)` or `<name> (delegated in request)` in the README, then `aidlc advance <feature> accepted` (never set `status:` by hand). Gate findings → fix and rerun; that is not a new approval round unless the fix changes what was approved (say so in one line). No other confirmation rounds. Approval never authorizes destructive actions, external publishing or bypassing native controls.
 
-Present the spec once: summary, requirements, design, security rules, contract result, and the choices you made while closing guesses. Ask the user to approve it; approval is a decision only the user can make. If the original request explicitly delegated approval (for example "handle this end to end without checking in"), do not ask.
-
-Record `accepted_by: <name> (<date>)`, or `<name> (delegated in request)`, in the README frontmatter. Then run `aidlc advance <feature> accepted`. Do not set `status:` by hand. If the gate lists findings, fix them and run it again; fixing a gate finding is not a new approval round, unless the fix changes what the user approved, which you then say in one line. Do not add confirmation rounds for sections, the plan or execution.
-
-Fast path has no approval gate and no spec folder: state the approach and continue.
-
-This never authorizes destructive actions, external publishing or bypassing native controls beyond the user's scope.
+Fast path: no approval gate, no spec folder.
 
 ## 5. Tier line
 
-End with one line: `Tier: fast path | fast path + security pass | full workflow — <trust-boundary items hit, or none>`. Then continue:
+End with exactly one line:
 
-- Fast path (with or without the security pass): `tea-sdlc:test-driven-development` in this session, no subagent dispatch, single pre-PR pass before a PR.
-- Full workflow: `tea-sdlc:writing-plans` on the accepted spec.
+`Tier: fast path | fast path + security pass | full workflow — <trust-boundary items hit, or none>`
+
+Then: fast path (with or without security pass) → `tea-sdlc:test-driven-development` in this session, no subagent dispatch, single pre-PR pass before a PR. Full workflow → `tea-sdlc:writing-plans` on the accepted spec.

@@ -1,82 +1,62 @@
-# Workflow Routing
+# Workflow routing
 
-## Trust Boundary Check
+## Trust-boundary check
+Walk all six; any YES or unsure → trust boundary.
+1. Reads, writes or logs PII or sensitive data (identity, contact, ID numbers, financial, health, credentials).
+2. Creates, validates or changes authN, session or authZ rules (login, tokens, permissions, roles).
+3. Processes money, billing or third-party payments.
+4. Exposes a new URL, endpoint, webhook or other surface reachable from outside the trust domain.
+5. Integrates a new external vendor, partner API or third-party script.
+6. Changes a security-relevant dependency, config key or secret-handling path (TLS, JWT keys, IAM, encryption).
 
-Does this change touch **any** of the following? Any single YES → trust boundary.
+## Workflow mode
+- **lean (default):** main session only; no subagent, `debug-parallel` or AIDLC spec unless the user asks. If full would clearly pay off, say so in one line and let the user choose.
+- **full:** `TEA_SDLC_WORKFLOW=full` (e.g. `.claude/settings.json` `env`), the user asks ("full workflow", "AIDLC", "use subagents"), or a spec bound to the branch is past `proposed`.
 
-1. Reads, writes, or logs PII or sensitive data (names, emails, phones, addresses, IDs, financial data, health data, auth credentials).
-2. Creates, validates, or mutates auth / session / authorization rules (login, tokens, permissions, roles).
-3. Processes money, billing, or third-party payment flows.
-4. Exposes a new URL, endpoint, webhook, or public surface consumable outside the trust domain.
-5. Integrates with a new external vendor, partner API, or third-party script.
-6. Modifies a security-relevant dependency, config key, or secret-handling path (TLS, JWT keys, IAM, encryption).
+The session-start note states the mode.
 
-If unsure on any item, treat as YES. Under-classification is the dominant failure mode.
-
-## Workflow Mode
-
-Subagent fan-out multiplies token cost, so the default mode is **lean**.
-
-- **lean (default):** every change runs in the main session with no subagent dispatch. A trust boundary gets the fast path with a security pass (below), not the full workflow.
-- **full:** trust-boundary changes run the Full workflow with specialist subagents. It is on when `TEA_SDLC_WORKFLOW=full` is set (for example in the project's `.claude/settings.json` `env`), when the user asks for it in their own words ("full workflow", "AIDLC", "use subagents"), or when a spec bound to the current branch is already past `proposed` (finish it in the mode it started in).
-
-The session-start note states the mode. In lean mode, do not dispatch subagents, run `debug-parallel`, or start an AIDLC spec unless the user asks; when a change is large or risky enough that the full workflow would clearly pay for itself, say so in one line and let the user choose.
-
-## Routing Tiers
-
-| Trust boundary? | lean (default) | full |
+| Trust boundary | lean | full |
 |---|---|---|
-| **NO** (any number of domains) | **Fast path** | **Fast path** |
-| **YES** (any number of domains) | **Fast path with a security pass** | **Full workflow** |
+| NO (any number of domains) | Fast path | Fast path |
+| YES (any number of domains) | Fast path with a security pass | Full workflow |
 
-### Fast path with a security pass (lean mode, trust boundary)
-The fast path below, plus, in the main session and without dispatching anyone:
-1. Before the first edit, walk the six-item check and write 3-6 lines: assets touched, the threats that apply (STRIDE / OWASP), and the controls the change keeps or adds. Use `tea-sdlc:fintech-security` as the control catalogue and honour an existing `docs/specs/<feature>/security.md` when there is one.
-2. Write tests for the security behaviour (authorisation denied, input rejected, no PII in logs, idempotent money movement), not only the happy path.
-3. If an external contract changes, run the contract gate (`python3 scripts/check-contract.py`) on the drafted contract.
-4. The pre-PR pass (`rules/pre-pr-review.md`) covers security explicitly, and the PR description lists the threats checked and any left to the human reviewer.
+## Fast path
+TDD + verification. Brainstorming first, 2-3 lines stating the approach (no artifact). No plan, worktree, subagent or review loop. Before a PR or hand-off: the single pre-PR pass (`rules/pre-pr-review.md`). Update a living doc whose documented behaviour changed in the same change.
 
-### Fast path
-Implement with TDD + verification. Brainstorming runs first for every code change (session bootstrap, First action rule); on the fast path keep it to 2-3 lines — it is the "state the approach" step (no artifact). No plan document. No worktree. No subagent dispatch. No review loops. Before opening a PR or handing off, run the single pre-PR pass in `rules/pre-pr-review.md`.
-When the change spans several domains (a domain is a distinct stack surface: backend, frontend, mobile, AWS/infra, data pipeline, AI/LLM, DevOps pipeline; a shared library touched by one stack adds none): write the task order in 2-3 lines before touching the second domain, edit in dependency order (a RED test that must exist before another domain's fix comes first), follow TDD in each domain, and run the smoke test at the integration point before merge; do not skip it because each side passed in isolation.
+Several domains (backend, frontend, mobile, AWS/infra, data pipeline, AI/LLM, DevOps; a shared library used by one stack adds none): write the task order in 2-3 lines before the second domain; edit in dependency order; TDD per domain; smoke-test the integration point before merge even if each side passed.
 
-### Full workflow (full mode, trust boundary)
-The AIDLC stages in `references/aidlc.md`. A spec enters a stage only through `scripts/aidlc.py advance`, and only when that stage's gate passes; the session runs the CLI itself.
+## Lean mode: fast path with a security pass
+In the main session, no dispatch:
+1. Before the first edit write 3-6 lines: assets touched, applicable threats (STRIDE / OWASP), controls kept or added. Control catalogue: `tea-sdlc:fintech-security`; honour an existing `docs/specs/<feature>/security.md`.
+2. Test the security behaviour (authZ denied, input rejected, no PII in logs, idempotent money movement), not only the happy path.
+3. External contract change → `python3 scripts/check-contract.py` on the drafted contract.
+4. The pre-PR review covers security explicitly; the PR description lists the threats checked and any left to the human reviewer.
 
-1. **proposed → accepted.** Brainstorming and design clarification, then the spec: keyed requirements with acceptance criteria and `Verify:`, `security.md` from the Security subagent, `design.md` + `contracts/` and the contract gate (`python3 scripts/check-contract.py docs/specs/<feature>`) if an external contract changes, and the blind spec check with every guess closed. Then the one user approval.
-2. **planned.** The implementation plan as a task graph (covers, depends, owner, files), every requirement covered, no shared file between tasks that may run in parallel.
-3. **building.** On a feature branch, `subagent-driven-development` dispatches the ready tasks (`aidlc next`) in parallel batches; each task is ticked by `aidlc task-done`; decisions the session takes instead of asking are recorded with `aidlc ruling`.
-4. **verified.** All tasks done, every `Verify: test` requirement referenced by a test, the full test run green at the current code fingerprint.
-5. **reviewed.** Two separate reviews in `review.md`: Spec (against requirements, design, contracts) and Standards (code quality, security rules, conventions), every finding fixed or cleared; QA runs in the same stage (with live API validation when a service is running).
-6. **shipped.** The PR with CI green and `ship.md`: GO, rollback and post-release verification.
-7. **implemented.** After merge, `/upgrade-service-docs` promotes the spec into the living docs.
+## Full workflow (full mode, trust boundary)
+The session runs `python3 scripts/aidlc.py` itself; a stage is entered only via `aidlc advance` when its gate passes. Read only the current stage's part of `references/aidlc.md` (§1 gates, §2 formats, §3 CLI).
+1. **accepted:** clarify; `requirements.md` (acceptance bullets + `Verify:` only); `security.md` (threat table + numbered rules) from tea-sdlc:security-engineer-subagent; `design.md` (≤ ~120 lines) + `contracts/` + `python3 scripts/check-contract.py docs/specs/<feature>` only when a contract or the architecture changes; ONE blind spec check, guesses closed in the spec; one user approval.
+2. **planned:** task graph; every requirement covered; parallel tasks share no file.
+3. **building:** feature branch; `subagent-driven-development` dispatches `aidlc next` batches; `aidlc task-done`; decisions taken instead of asking → `aidlc ruling`.
+4. **verified:** `aidlc verify` green at the current fingerprint.
+5. **reviewed:** Spec and Standards axes once each, in parallel with tea-sdlc:qa-subagent; `review.md` = finding lines, each fixed or cleared; then at most ONE diff-only re-review by a single tea-sdlc:code-reviewer with `AXIS: both`, never a second full round.
+6. **shipped:** PR, CI green, `ship.md` (required sections only).
+7. **implemented:** after merge, `/upgrade-service-docs`.
 
-Contract drafting is needed only for an external contract change (HTTP/RPC API, event, shared schema, public library API); skip it when there is no new contract surface (e.g., tightening validation on an existing endpoint). The main session drafts the contracts and the contract gate verifies them; the main session dispatches implementers using custom agent definitions as context.
+External contract change = HTTP/RPC API, event, shared schema or public library API; tighter validation on an existing endpoint is not one.
 
-## Mid-execution domain expansion
+## Mid-execution promotion
+Re-classify when scope grows; promotion is mandatory.
+- Fast path hits a trust boundary → stop. Full mode: `aidlc init`, run from `proposed` (cite done work in the plan), dispatch Security on the unmerged work and apply its rules before more code. Lean: do the security pass on the work so far first.
+- Full workflow gains a domain → add its tasks, `aidlc check <feature> --to planned`, reuse Security output, re-run the contract gate if the contract grows; new requirements get one blind spec-check pass over the new requirements only, then approval.
 
-If a task begins in one tier but discovers additional scope mid-execution, re-classify before proceeding:
+## Escape hatch (full mode)
+A trust-boundary change may take the fast path with TDD only if ALL hold:
+1. ≤ 30 lines of production code across ≤ 3 files (tests excluded).
+2. No new endpoint, external surface, dependency, schema or migration.
+3. The trigger is a touch, not a new decision (renaming a field already classified as PII, not adding one).
+4. An existing Security rule or threat model covers the path; cite it (default `docs/specs/<feature>/security.md`).
 
-- Fast path discovers a trust boundary → **stop**. In full mode, promote to Full workflow, dispatch Security on the unmerged work and apply its rules before writing more code; in lean mode, do the security pass on the work so far before writing more code.
-- Fast path promoted to Full workflow: create the spec (`aidlc init`) and take it through the stages from `proposed`; work already done is cited in the plan, not redone.
-- Full workflow → discovers another domain: keep the full workflow, add that domain's tasks to the plan and re-run its gate (`aidlc check <feature> --to planned`), reuse the existing Security output, and re-run the contract gate if the contract grows. New requirements go back through the spec check and the user's approval.
+Commit message: `Escape hatch applied: <cite rule>`. Any condition fails → full workflow. This wins over any other skip list for Security.
 
-Do not silently stay in the lower tier. Promotion is mandatory once the trigger is met.
-
-## Small-change escape hatch
-
-In full mode, a trust-boundary change may use the fast path if ALL of the following hold:
-1. Diff is ≤ 30 lines of production code across ≤ 3 files (test code excluded).
-2. No new endpoint, no new external surface, no new dependency, no schema/migration change.
-3. The trust-boundary trigger is a touch, not a new decision (e.g., renaming a field already classified as PII, not introducing a new PII field).
-4. An existing Security rule or threat model already covers the touched code path (cite the resolved Security artifact path, default `docs/specs/<feature>/security.md` per `references/documentation-layout.md`).
-
-With all four true: full workflow → fast path with TDD. Document the decision in the commit message: "Escape hatch applied: <cite rule>". If any condition fails, use the full tier.
-
-## Ambiguous?
-
-Walk the 6-item checklist above. If any item is YES, the trust-boundary tier of the current mode (security pass in lean, full workflow in full). Otherwise fast path. Do not rely on a single gut-check question.
-
-## Design Decision Quality
-
-For a non-trivial design decision (architecture, API contract, data model, skill/agent design), look for flaws and counter-arguments in your draft before presenting it (in full mode, have an agent do it); resolve material ones within `rules/review-loop-limits.md` and report the rest. Skip for implementation tasks, bug fixes and single-file changes.
+## Design-decision quality
+Non-trivial design decision (architecture, API contract, data model, skill/agent design): seek flaws and counter-arguments in your draft before presenting (full mode: an agent does it); resolve material ones in ≤ 2 rounds, report the rest. Skip for implementation, bug fixes, single-file changes.

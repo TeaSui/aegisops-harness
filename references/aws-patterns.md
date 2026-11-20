@@ -1,354 +1,39 @@
-# AWS Patterns (CDK TypeScript, Serverless-First)
+# AWS patterns (CDK TypeScript, serverless-first)
 
-Follow the target project stack, account, credential source, region, deployment process and security requirements first. CDK TypeScript, Node.js 22/ARM64, `ai-driven` and `ap-southeast-1` are personal defaults for choices left open. Preserve installed dependency versions and existing architecture; these fragments are examples, not an instruction to migrate.
+The project's stack, account, region, deploy process and security rules come first; these are defaults for open choices (CDK TypeScript, `ap-southeast-1`, profile `ai-driven`). Never upgrade CDK or migrate a stack to match this file; check props against the installed `aws-cdk-lib`.
 
-Snippets are illustrative construct/handler fragments, not standalone compiled programs. Supply project imports, bindings, business handlers and tests; validate against installed versions before use. Deployment requires task authorization and a verified resolved target. Never expose credentials or sensitive payloads in logs.
+## Conventions
+- Stacks `Project-<Purpose>` with `envName: 'dev' | 'staging' | 'prod'` props; resource names `${envName}-<name>`; region from `CDK_DEFAULT_REGION` (project/CLI target first).
+- Tags (mandatory): app `Project`, `ManagedBy=cdk`; stack `Environment`, `Stack`.
+- Least privilege via `grant*` methods; custom statements scoped to exact actions and ARNs built with `this.partition/region/account` (e.g. `parameter/${envName}/<service>/*`).
+- Secrets: never in env vars or logs. Pass the secret identifier (`API_SECRET_ID`), fetch and cache at runtime via the SDK/extension with scoped read + KMS access. `Secret.fromSecretNameV2` imports a reference, not a value.
 
-## CDK Project Setup
+## Lambda
+`NODEJS_22_X`, `ARM_64` (verify dependency compatibility), 512 MB, 30 s timeout, `Tracing.ACTIVE`, DLQ, explicit `logGroup` (`logs.LogGroup`, 1-month retention) instead of legacy `logRetention` when the installed CDK supports it.
 
-```typescript
-// bin/app.ts
-const app = new cdk.App();
+## DynamoDB
+Single-table `PK`/`SK`, GSIs `GSI1PK`/`GSI1SK` (projection ALL), `PAY_PER_REQUEST`, `AWS_MANAGED` encryption, PITR via `pointInTimeRecoverySpecification`, `RETAIN` in prod / `DESTROY` elsewhere, streams `NEW_AND_OLD_IMAGES` when used. Keys: `<ENTITY>#<id>` + `METADATA`; one-to-many `USER#<id>` / `ORDER#<id>`; GSI by status `STATUS#<s>` / `ORDER#<ts>#<id>`. No PII in keys.
 
-const env = {
-  account: process.env.CDK_DEFAULT_ACCOUNT,
-  region: process.env.CDK_DEFAULT_REGION ?? 'ap-southeast-1', // project/CLI target first
-};
+## Step Functions
+- Retry Lambda `TooManyRequestsException`/`ServiceException` (2 s, max 3, backoff 2) only when effects tolerate replay; Catch to a Fail/recovery state with `resultPath: '$.error'`.
+- Prefer SDK integrations (e.g. `DynamoPutItem`) over Lambda wrappers. EXPRESS vs STANDARD by duration/delivery semantics.
+- `tracingEnabled: true`; logs level `ERROR`, `includeExecutionData: false` (payloads may hold PII).
 
-new DatabaseStack(app, 'Project-Database', { env, envName: 'prod' });
-new ComputeStack(app, 'Project-Compute', { env, envName: 'prod' });
-```
+## SQS → Lambda
+FIFO: `batchSize` ≤ 10, no `maxBatchingWindow`; FIFO DLQ for a FIFO queue. Visibility timeout = 6 × Lambda timeout; redrive `maxReceiveCount: 3`; `reportBatchItemFailures: true` with partial batch responses (FIFO: return the failed and all later messages); idempotent business effects.
 
-```typescript
-// Shared stack props interface
-interface AppStackProps extends cdk.StackProps {
-  envName: 'dev' | 'staging' | 'prod';
-}
-```
+## API Gateway
+Explicit approved CORS origins and only the needed methods; stage tracing + metrics + `INFO` logging; throttling 1000 rps / burst 500; Cognito (or JWT) authorizer; integration timeout 29 s (verify quota for the API type).
 
-## Lambda Patterns
-
-Current CDK v2 prefers an explicit `logGroup` (a `logs.LogGroup` you create, which supports tag propagation and Aspects) over the legacy `logRetention` prop, which uses a custom resource. Check which the installed `aws-cdk-lib` supports and what the project already uses; do not upgrade CDK just for this. [aws-lambda README: Log Group](https://github.com/aws/aws-cdk/blob/main/packages/aws-cdk-lib/aws-lambda/README.md).
-
-```typescript
-// Standard Lambda construct
-const handlerLogs = new logs.LogGroup(this, 'HandlerLogs', {
-  retention: logs.RetentionDays.ONE_MONTH,
-});
-
-const handler = new lambda.Function(this, 'Handler', {
-  functionName: `${props.envName}-my-handler`,
-  runtime: lambda.Runtime.NODEJS_22_X,
-  architecture: lambda.Architecture.ARM_64,     // verify dependency compatibility and measured cost
-  handler: 'index.handler',
-  code: lambda.Code.fromAsset('src/lambdas/handler', {
-    bundling: {
-      image: lambda.Runtime.NODEJS_22_X.bundlingImage,
-      command: ['bash', '-c', 'npm ci && npm run build && cp -r dist/* /asset-output/'],
-    },
-  }),
-  environment: {
-    TABLE_NAME: table.tableName,
-    QUEUE_URL: queue.queueUrl,
-    // NEVER put secrets here — use SSM/Secrets Manager
-  },
-  timeout: Duration.seconds(30),
-  memorySize: 512,
-  tracing: lambda.Tracing.ACTIVE,
-  logGroup: handlerLogs,
-  deadLetterQueue: dlq,
-});
-
-// Grant least-privilege permissions
-table.grantReadWriteData(handler);
-queue.grantSendMessages(handler);
-```
-
-## DynamoDB Patterns
-
-Enable PITR by default and preserve project recovery/retention requirements. Current CDK v2 uses `pointInTimeRecoverySpecification`; the older `pointInTimeRecovery` property is deprecated. Use the property supported by the installed CDK, without an unrelated dependency upgrade. [TableProps](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_dynamodb.TableProps.html), [PITR specification](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_dynamodb.PointInTimeRecoverySpecification.html).
-
-```typescript
-// Single-table design
-const table = new dynamodb.Table(this, 'MainTable', {
-  tableName: `${props.envName}-main`,
-  partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
-  sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
-  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-  encryption: dynamodb.TableEncryption.AWS_MANAGED,
-  pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
-  removalPolicy: props.envName === 'prod'
-    ? cdk.RemovalPolicy.RETAIN
-    : cdk.RemovalPolicy.DESTROY,
-  stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES, // if using DynamoDB Streams
-});
-
-// GSI for alternative access patterns
-table.addGlobalSecondaryIndex({
-  indexName: 'GSI1',
-  partitionKey: { name: 'GSI1PK', type: dynamodb.AttributeType.STRING },
-  sortKey: { name: 'GSI1SK', type: dynamodb.AttributeType.STRING },
-  projectionType: dynamodb.ProjectionType.ALL,
-});
-```
-
-**Key design patterns:**
-```
-// Entity          PK                SK
-// User            USER#<userId>     METADATA
-// Order           ORDER#<orderId>   METADATA
-// User's orders   USER#<userId>     ORDER#<orderId>
-// By status (GSI) STATUS#<status>   ORDER#<timestamp>#<orderId>
-```
-
-## Step Functions Patterns
-
-Retry/Catch are supported on Task, Parallel and Map states. Add bounded retries for transient errors when effects tolerate replay, and Catch handlers where recovery is required. Handle execution-level failures in the caller/monitoring path; do not attach these fields to every state. [AWS error handling](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html).
-
-```typescript
-// Fragments inside a construct/stack; project provides functions, table and log group.
-const handleError = new sfn.Fail(this, 'WorkflowFailed');
-const validate = new tasks.LambdaInvoke(this, 'Validate', {
-  lambdaFunction: validateFn,
-  outputPath: '$.Payload',
-  retryOnServiceExceptions: true,
-});
-
-const processJob = new tasks.LambdaInvoke(this, 'Process', {
-  lambdaFunction: processFn,
-  outputPath: '$.Payload',
-}).addRetry({
-  errors: ['Lambda.TooManyRequestsException', 'Lambda.ServiceException'],
-  interval: Duration.seconds(2),
-  maxAttempts: 3,
-  backoffRate: 2,
-}).addCatch(handleError, { resultPath: '$.error' });
-
-// SDK integration avoids a Lambda wrapper for this write.
-const persist = new tasks.DynamoPutItem(this, 'Persist', {
-  table,
-  item: {
-    PK: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.id')),
-    SK: tasks.DynamoAttributeValue.fromString('METADATA'),
-    data: tasks.DynamoAttributeValue.mapFromJsonPath('$.data'),
-  },
-});
-
-const stateMachine = new sfn.StateMachine(this, 'Pipeline', {
-  stateMachineName: `${props.envName}-pipeline`,
-  stateMachineType: sfn.StateMachineType.EXPRESS, // select for the project's duration/delivery needs
-  definitionBody: sfn.DefinitionBody.fromChainable(validate.next(processJob).next(persist)),
-  tracingEnabled: true,
-  logs: {
-    destination: logGroup,
-    level: sfn.LogLevel.ERROR,
-    includeExecutionData: false, // payloads may contain PII/secrets
-  },
-});
-```
-
-## SQS + Lambda Event Source
-
-The example uses FIFO: keep batches at most 10 and omit `maxBatchingWindow`, which FIFO does not support. Configure the source queue DLQ/redrive policy, implement partial batch responses and make business effects idempotent; SQS event source mappings invoke Lambda synchronously. For FIFO failure responses, preserve ordering by returning failed and unprocessed messages after the first failure. [SQS mapping parameters](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-parameters.html), [AWS SQS handling](https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html).
-
-```typescript
-// FIFO source queue and DLQ must use compatible queue types.
-const sourceDlq = new sqs.Queue(this, 'SourceDlq', {
-  queueName: `${props.envName}-jobs-dlq.fifo`,
-  fifo: true,
-});
-const queue = new sqs.Queue(this, 'Queue', {
-  queueName: `${props.envName}-jobs.fifo`,
-  fifo: true,
-  contentBasedDeduplication: true,
-  visibilityTimeout: Duration.seconds(30 * 6), // 6x Lambda timeout
-  deadLetterQueue: {
-    queue: sourceDlq,
-    maxReceiveCount: 3,
-  },
-});
-
-// Event source mapping
-handler.addEventSource(new lambdaEventSources.SqsEventSource(queue, {
-  batchSize: 10,
-  reportBatchItemFailures: true, // partial batch response
-}));
-```
-
-## API Gateway + Lambda
-
-```typescript
-const api = new apigateway.RestApi(this, 'Api', {
-  restApiName: `${props.envName}-api`,
-  defaultCorsPreflightOptions: {
-    allowOrigins: projectAllowedOrigins, // explicit approved origins supplied by the project
-    allowMethods: ['GET'], // expand only to required methods
-  },
-  deployOptions: {
-    tracingEnabled: true,
-    metricsEnabled: true,
-    loggingLevel: apigateway.MethodLoggingLevel.INFO,
-    throttlingRateLimit: 1000,
-    throttlingBurstLimit: 500,
-  },
-});
-
-const integration = new apigateway.LambdaIntegration(handler, {
-  proxy: true,
-  timeout: Duration.seconds(29), // example value; verify the API type/account quota
-});
-
-const users = api.root.addResource('users');
-users.addMethod('GET', integration, {
-  authorizationType: apigateway.AuthorizationType.COGNITO,
-  authorizer: cognitoAuthorizer,
-});
-```
-
-## EventBridge Patterns
-
-```typescript
-// Rule to trigger Step Functions
-new events.Rule(this, 'TriggerPipeline', {
-  schedule: events.Schedule.rate(Duration.minutes(5)),
-  targets: [
-    new eventsTargets.SfnStateMachine(stateMachine, {
-      input: events.RuleTargetInput.fromObject({ source: 'scheduled' }),
-    }),
-  ],
-});
-
-// Event bus for domain events
-const bus = new events.EventBus(this, 'DomainBus', {
-  eventBusName: `${props.envName}-domain`,
-});
-
-new events.Rule(this, 'OnOrderCreated', {
-  eventBus: bus,
-  eventPattern: {
-    source: ['com.tyme.orders'],
-    detailType: ['OrderCreated'],
-  },
-  targets: [new eventsTargets.LambdaFunction(processOrderFn)],
-});
-```
+## EventBridge
+Domain bus `${envName}-domain`; event `source` `com.tyme.<domain>`, `detailType` past-tense (`OrderCreated`); schedules target Step Functions directly.
 
 ## Observability
+- Lambda Powertools Logger (`addContext`) and Metrics (EMF); metric names `<service>.<entity>.<action>[.<outcome>]` in snake_case; never log raw records.
+- Alarms (starting defaults, description prefixed `[P<n>] ${envName}`): Lambda errors ≥ 5 per 5 min for 2 periods [P2]; p99 duration > 5 s for 3 periods [P3]; any DLQ message ≥ 1 [P2]; `treatMissingData: NOT_BREACHING`.
 
-```typescript
-// Lambda structured logging (PowerTools)
-import { Logger } from '@aws-lambda-powertools/logger';
-import type { Context, SQSEvent, SQSBatchResponse } from 'aws-lambda';
-const logger = new Logger({ serviceName: 'order-processor' });
+## Cost
+Estimate from current regional pricing and measured usage; no assumed savings (Layers save nothing at runtime; no universal on-demand/provisioned crossover; API caching needs tenant/auth isolation).
 
-export const handleBatch = async (event: SQSEvent, context: Context): Promise<SQSBatchResponse> => {
-  logger.addContext(context);
-  logger.info('Processing batch', { batchSize: event.Records.length });
-  // Project processor handles persistence/idempotency and partial failures; never log raw records.
-  return processBatch(event);
-};
-
-// Custom metrics (Powertools v2, Embedded Metric Format). Namespace and names follow
-// references/observability-patterns.md (<service>.<entity>.<action>[.<outcome>]).
-import { Metrics, MetricUnit } from '@aws-lambda-powertools/metrics';
-const metrics = new Metrics({ namespace: projectMetricNamespace, serviceName: 'order-service' });
-metrics.addMetric('order_service.order.created', MetricUnit.Count, 1);
-metrics.addMetric('order_service.order.create.duration', MetricUnit.Milliseconds, durationMs);
-metrics.publishStoredMetrics();
-
-// CloudWatch Alarms (thresholds are starting defaults; severities per observability-patterns.md)
-const errorAlarm = handler.metricErrors({ period: Duration.minutes(5) })
-  .createAlarm(this, 'LambdaErrors', {
-    threshold: 5,
-    evaluationPeriods: 2,
-    treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    alarmDescription: `[P2] ${props.envName} handler error rate elevated`,
-  });
-
-handler.metricDuration({ statistic: 'p99', period: Duration.minutes(5) })
-  .createAlarm(this, 'LambdaLatencyP99', {
-    threshold: 5000, // ms
-    evaluationPeriods: 3,
-    alarmDescription: `[P3] ${props.envName} handler P99 latency > 5s`,
-  });
-
-dlq.metricApproximateNumberOfMessagesVisible()
-  .createAlarm(this, 'DlqDepth', {
-    threshold: 1,
-    evaluationPeriods: 1,
-    alarmDescription: `[P2] ${props.envName} messages in DLQ — investigate failures`,
-  });
-
-// Dashboard
-new cloudwatch.Dashboard(this, 'Dashboard', {
-  dashboardName: `${props.envName}-operations`,
-  widgets: [[
-    new cloudwatch.GraphWidget({ title: 'Lambda Errors', left: [handler.metricErrors()] }),
-    new cloudwatch.GraphWidget({ title: 'DynamoDB Throttles', left: [table.metricThrottledRequests()] }),
-  ]],
-});
-```
-
-## IAM Least Privilege Patterns
-
-```typescript
-// Custom policy for specific actions only
-handler.addToRolePolicy(new iam.PolicyStatement({
-  effect: iam.Effect.ALLOW,
-  actions: [
-    'ssm:GetParameter',
-    'ssm:GetParameters',
-  ],
-  resources: [
-    `arn:${this.partition}:ssm:${this.region}:${this.account}:parameter/${props.envName}/service-name/*`,
-  ],
-}));
-
-// Secrets Manager access
-const secret = secretsmanager.Secret.fromSecretNameV2(this, 'ApiSecret', `${props.envName}/api-key`);
-secret.grantRead(handler);
-handler.addEnvironment('API_SECRET_ID', secret.secretName); // identifier only, never secretValue
-```
-
-`fromSecretNameV2` imports a reference; it does not fetch a value. Pass an identifier and retrieve/cache the value at runtime through the approved SDK/extension, with scoped read/KMS access and no secret logging. [CDK Secret](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_secretsmanager.Secret.html), [runtime retrieval](https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieving-secrets_lambda.html).
-
-## Cost Optimization
-
-Estimate cost from current regional pricing, request sizes, frequency, duration, utilization and retention. These are evaluation candidates, not fixed savings guarantees:
-
-| Pattern | Evaluate |
-|---------|----------|
-| ARM64 Lambda | Dependency compatibility, measured duration and regional compute pricing |
-| DynamoDB on-demand/provisioned | Read/write units, utilization, storage, backups and streams; no universal daily-write crossover |
-| Express/Standard Step Functions | Required execution/delivery semantics, duration, state transitions and logs |
-| Lambda Layers | Packaging/deployment needs; no automatic runtime-cost saving |
-| S3 lifecycle/Intelligent-Tiering | Access patterns, minimum durations and monitoring/retrieval charges |
-| API caching | Cacheability, tenant/auth isolation, hit ratio and cache costs |
-
-## Deployment Workflow
-
-Resolve credentials/account/region through the project process first; do not replace CI roles or SSO with a personal profile. Use existing authorization for the requested deployment scope. The following are examples to adapt, not commands to run for content validation:
-
-```bash
-: "${DEPLOY_STACK:?Set the project-authorized stack name}"
-: "${AWS_REGION:?Set the verified project region}"
-
-npx cdk diff "$DEPLOY_STACK"
-# Deploy only when the task authorizes this reviewed target; preserve native approval checks.
-npx cdk deploy "$DEPLOY_STACK"
-aws cloudformation describe-stacks --stack-name "$DEPLOY_STACK" --region "$AWS_REGION"
-```
-
-Use the project-approved redacted log/diagnostic workflow; capture status, identifiers and counts rather than dumping request payloads or secrets.
-
-## Resource Tagging (Mandatory)
-
-```typescript
-// Apply to entire app
-cdk.Tags.of(app).add('Project', projectName); // project-designated identifier
-cdk.Tags.of(app).add('ManagedBy', 'cdk');
-
-// Stack-level tags
-cdk.Tags.of(this).add('Environment', props.envName);
-cdk.Tags.of(this).add('Stack', this.stackName);
-```
+## Deploy
+Credentials/account/region via the project process, never a personal profile in place of CI roles or SSO. `cdk diff` before `cdk deploy`, only with authorization for that target, native approvals kept. Diagnostics: status, IDs, counts; never payloads or secrets.

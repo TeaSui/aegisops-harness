@@ -1,124 +1,35 @@
-# AI Integration Rules
+# AI integration rules
 
-Fixed numbers in this file (cost thresholds, rate limits, eval sizes and pass marks, iteration caps, alert thresholds) are starting defaults; replace them with project values.
+Numbers below are starting defaults; project values win.
 
-## Sources of truth (live, never vendored)
-Claude API details change faster than any local copy. Use, in this order:
-1. Claude Code's built-in **`/claude-api`** skill (ships and updates with Claude Code; auto-loads when code imports `anthropic` / `@anthropic-ai/sdk`; subcommands for migration, SDK upgrades, cost and evals).
-2. Official docs, read live: append `.md` to any page (e.g. https://platform.claude.com/docs/en/models/overview.md); index at https://platform.claude.com/llms.txt; docs MCP server at https://platform.claude.com/docs/mcp; Context7 library `/websites/platform_claude_en` (confirm with `resolve-library-id`).
-3. The installed SDK's source and changelog (`anthropic-sdk-python`, `anthropic-sdk-typescript`).
-Never answer API shapes, model IDs, prices or limits from memory or from an old snippet.
+## Sources of truth
+Never answer Claude API shapes, model IDs, prices or limits from memory. In order: Claude Code's `/claude-api` skill; live docs (append `.md` to any platform.claude.com page; index `platform.claude.com/llms.txt`; Context7 `/websites/platform_claude_en`); the installed SDK's source and changelog.
 
-## Model Selection
-- Selection policy: `references/model-guide.md`. Start an unspecified substantial workload on the latest Opus at medium effort; latest Sonnet for clear bounded implementation; latest Haiku for measured mechanical/volume tasks; latest Fable for difficult reasoning and long autonomous work.
-- Validate quality, latency and cost on representative cases; keep a concise rationale where a choice is non-obvious. Do not impose historical model/effort defaults on current tasks.
+## Models
+- Unspecified substantial workload: latest Opus at `medium`; bounded implementation: Sonnet; measured mechanical/volume work: Haiku; hard reasoning or long autonomous runs: Fable. Validate quality, latency and cost on representative cases.
+- API model IDs are fixed snapshots with no `-latest` alias: resolve via `GET /v1/models?lifecycle=active` (`client.models.list()`), take the first entry whose `line` matches the family (read `line`/`capabilities`, never parse the ID), then pin it in config (env var or config file), never as scattered literals.
+- Upgrade deliberately (migration guide, evals, cost/latency); monitor `deprecated_at`/`retires_at` on a schedule; never invent IDs or assume Bedrock/Vertex/Foundry share first-party IDs.
+- Control depth with effort (fixed thinking budgets are rejected; Opus/Fable cannot turn thinking off); size `max_tokens` for thinking plus answer.
 
-## Model IDs in code
-Every Claude API model ID is a fixed snapshot (dateless IDs included); current models have no `-latest` alias. So "use the latest model" means *resolve it, then pin it in config*:
-- Resolve: `GET /v1/models?lifecycle=active` (SDK `client.models.list()`) lists newer releases first; take the first entry whose `line` equals the wanted family (`opus`, `sonnet`, `haiku`, `fable`). Read `line` and `capabilities`, never parse the ID. Newest is not automatically recommended — check the models overview for the family's intended use.
-- Pin: store the resolved ID in configuration (env var / config file), never as a literal scattered through code, so an upgrade is a one-line, reviewed change.
-- Upgrade deliberately: before switching, read the target's migration guide (via `/claude-api migrate` or the docs), re-run evals, and compare cost/latency. Monitor `lifecycle`, `deprecated_at` and `retires_at` from the Models API (e.g. a scheduled check) so retirement never surprises production.
-- Never invent date-suffixed IDs or assume a provider (Bedrock, Vertex, Foundry) serves the same ID as the first-party API.
+## Prompts
+Versioned named constants (e.g. `TRANSACTION_ANALYSIS_PROMPT_V2`), never inline template strings; XML-tagged sections; system prompt = behaviour, user prompt = data; each prompt has a golden test set.
 
-## Prompt Engineering Standards
-- Store prompts as versioned constants, not inline strings
-- Use XML tags for structured input sections (`<context>`, `<instructions>`, `<examples>`)
-- Include few-shot examples for complex output formats
-- Separate system prompt (behavioral instructions) from user prompt (task data)
-- Prompts must be testable — each prompt needs a golden test set
+## Cost
+- Explicit `max_tokens` on every call; per-user and per-service token budgets; log input/output tokens and cost per request.
+- Daily cost alert: $10 dev, $50 staging, $200 prod.
+- Prompt caching (`cache_control: {"type": "ephemeral"}`) for repeated system prompts and RAG documents above the minimum cacheable length; cache hit rate target > 80%. Batch API where latency allows.
 
-## Prompt Versioning
-```typescript
-// WRONG
-const prompt = `Analyze this transaction: ${data}`;
+## Evals
+Golden dataset ≥ 20 pairs per AI feature; metrics defined before implementation; evals run in CI on every prompt change; pass = no regression vs baseline and accuracy ≥ 85%.
 
-// RIGHT
-const TRANSACTION_ANALYSIS_PROMPT_V2 = `
-<instructions>
-Analyze the financial transaction and classify it.
-Return JSON with fields: category, risk_level, confidence.
-</instructions>
-<examples>...</examples>
-<transaction>{{TRANSACTION_DATA}}</transaction>
-`;
-```
+## Security and privacy
+- Sanitize user input before it enters a prompt; never execute model output — parse and validate (type, range, business rules); structured outputs or tool use for action-bearing responses.
+- Never send raw PII to an external LLM API; pseudonymize (`[USER_A]`) or use a VPC-hosted model.
+- Log interactions for audit with PII redacted; rate limit LLM endpoints at 60 requests/min per user.
 
-## Cost Guardrails
-- Set `max_tokens` explicitly on every API call — never rely on model default
-- Implement per-user and per-service token budgets
-- Log token usage with every request (input tokens, output tokens, cost estimate)
-- Alert when daily cost exceeds a threshold (starting defaults: $10 dev, $50 staging, $200 prod)
-- Use prompt caching for repeated context (system prompts, documents) — up to 90% cost reduction
-- Batch requests where latency allows (Anthropic Batch API)
-
-## Context Management
-- Context window is finite — design for it
-- For RAG: retrieve only what's needed, rank by relevance, limit to top-k chunks
-- For long documents: chunk and summarize rather than stuffing full content
-- For agents: keep prior turns/system/tools stable under preserved thinking; use documented compaction/edit controls for long sessions
-- For PII handling with LLMs: see `data-privacy-patterns.md` (LLM/AI Usage with PII section)
-
-## Adaptive Reasoning
-- Current models use adaptive reasoning. Control depth with documented effort; fixed thinking budgets are rejected on the current family.
-- Current Fable and Opus models cannot turn thinking off. Use lower effort for mechanical work where quality holds, instead of adding prose that asks the model not to think.
-- Keep request output budgets adequate for thinking plus response. Re-baseline quality/cost when changing models rather than copying prior-generation tuning.
-
-## Prompt Caching
-- Cache system prompts that are used repeatedly and exceed the model's minimum cacheable length (check the live prompt-caching docs)
-- Cache retrieved documents in RAG pipelines
-- Use `cache_control: {"type": "ephemeral"}` on cacheable blocks
-- Monitor cache hit rate (starting target: >80% for repeated prompts)
-
-## Evaluation Requirements
-- Every AI feature must have a golden dataset (starting default: ≥20 input/output pairs)
-- Define quality metrics before implementation (accuracy, F1, BLEU, human eval)
-- Run evals in CI on every prompt change
-- Minimum passing thresholds: no regression vs baseline; accuracy ≥85% as a starting default
-- Use promptfoo or custom eval harness — no vibes-based quality assessment
-
-## Security Rules
-- Sanitize all user input before embedding in prompts
-- Never execute LLM output directly — parse and validate first
-- Use structured outputs (JSON mode, tool use) for action-bearing responses
-- Implement output validation: type checking, range checking, business rule validation
-- Log all LLM interactions for audit (but redact PII before logging)
-- Rate limit LLM endpoints per user (starting default: 60 requests/minute)
-
-## Error Handling
-Let the SDK retry: the client retries rate-limit, timeout and 5xx errors with backoff up to its max-retries setting. Set that setting on the client (verify the option name and default in the installed SDK) instead of writing a manual retry loop, which can retry without a cap.
-
-```typescript
-// Required error handling pattern
-const anthropic = new Anthropic({ maxRetries: 3 }); // bounded SDK retries with backoff
-
-try {
-  const response = await anthropic.messages.create({ ... });
-  return parseAndValidate(response);
-} catch (error) {
-  if (error instanceof Anthropic.RateLimitError) {
-    // SDK retries are exhausted — degrade instead of retrying again
-    logger.warn('LLM rate limited after retries', { correlationId });
-    return fallback();
-  }
-  if (error instanceof Anthropic.APIError && error.status >= 500) {
-    // Service error — fail gracefully
-    logger.error('LLM service error', { error, correlationId });
-    return fallback();
-  }
-  throw error; // Unknown errors bubble up
-}
-```
-
-## Agent Design
-- Define clear tool interfaces — ambiguous tool descriptions cause errors
-- Implement max iteration limits (starting default: 10 turns)
-- Implement token budget limits per agent run
-- Use structured tool outputs (JSON) — never free-form text for actions
-- Log tool names, status, latency and usage; redact sensitive arguments/results before diagnostic capture
-- Design for partial failure — agents must handle tool errors gracefully
+## Errors and agents
+- Bounded SDK retries (`maxRetries: 3`) instead of manual retry loops; after exhaustion degrade to a fallback on rate-limit and 5xx; rethrow unknown errors.
+- Agents: clear tool descriptions, max 10 turns, token budget per run, JSON tool outputs, tolerate tool failures; log tool name, status, latency, usage with sensitive arguments redacted.
 
 ## Observability
-- Trace every LLM call with correlation ID linking to user request
-- Emit metrics: latency P50/P95/P99, token counts, cost, cache hit rate, error rate
-- Use the project observability stack in `observability-patterns.md`; introduce another vendor only within the approved architecture/security scope
-- Alert on error rate, P99 latency and daily cost (starting defaults: >5%, >10s, the cost threshold above)
+Correlation ID on every LLM call; metrics: latency P50/P95/P99, tokens, cost, cache hit rate, error rate. Alerts: error rate > 5%, P99 > 10 s, daily cost threshold. Use the project's telemetry stack.

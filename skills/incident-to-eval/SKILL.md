@@ -5,12 +5,12 @@ description: Turn a revert, rollback or production incident caused by a merged c
 
 # Incident to eval
 
-0. If the reverted commit never reached a shared branch, stop: there is no incident (say so in one line).
-1. Identify the change: PR or commit, the defect, and when it was introduced.
-2. Record why review missed it: not caught by tests, absent from `REVIEW.md`, or misread by the reviewer. If unknown, say so.
-3. Add one case to the project's review eval location (for example `evals/review/`, following that repository's test conventions). Input is the offending diff or a minimal fixture; expected is the finding or a pass. Redact PII, credentials and raw request bodies (`${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`). If the project has no review eval set, add the miss to `REVIEW.md` under "Known misses" instead, skip step 5 and say that no baseline exists.
-4. Close the gap: the reviewer prompt, `REVIEW.md`, or a test.
-5. Run the full case set and compare with the previous baseline. A reviewer, prompt or tool change must not lower the pass rate.
-6. Report the case path (or the `REVIEW.md` entry), baseline and new pass rates when an eval set exists, and the path of the command output.
+0. Reverted commit never reached a shared branch → no incident; say so in one line.
+1. Identify the PR or commit, the defect and when it was introduced.
+2. Why review missed it: no test, absent from `REVIEW.md`, or misread; "unknown" if so.
+3. Add one case to the project's review eval set (e.g. `evals/review/`, its conventions): input = offending diff or minimal fixture, expected = the finding or a pass. Redact PII, credentials and request bodies (`${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`). No eval set → add the miss to `REVIEW.md` "Known misses", skip step 5, say no baseline exists.
+4. Close the gap: reviewer prompt, `REVIEW.md` or a test.
+5. Run the full case set against the previous baseline; a reviewer, prompt or tool change must not lower the pass rate.
+6. Report the case path (or `REVIEW.md` entry), baseline and new pass rates, and the output path.
 
-Scope: review quality on product code. Agent and command asset quality is measured by `/eval-upgrade`.
+Scope: review quality on product code; agent and command assets are measured by `/eval-upgrade`.
