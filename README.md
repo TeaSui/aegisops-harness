@@ -122,8 +122,8 @@ Agents use **family aliases**, so they always run on the latest release of that 
 
 | Agent | Responsibility | Model | Effort |
 |---|---|---|---|
-| `tea-sdlc:security-engineer-subagent` | Threat model (STRIDE, OWASP), numbered security rules before implementation | opus | high |
-| `tea-sdlc:code-reviewer` | Read-only, independent review against plan, contract and standards | opus | medium |
+| `tea-sdlc:security-engineer-subagent` | Threat model (STRIDE, OWASP), numbered security rules before implementation | sonnet | high |
+| `tea-sdlc:code-reviewer` | Read-only, independent review against plan, contract and standards | sonnet | medium |
 | `tea-sdlc:ui-ux-designer-subagent` | Flows, wireframes, component states, accessibility specs | sonnet | medium |
 | `tea-sdlc:backend-engineer-subagent` | APIs, business logic, databases, integrations, LLM/RAG/agent features with evals | sonnet | high |
 | `tea-sdlc:frontend-engineer-subagent` | Web UI, accessibility, client performance | sonnet | high |
