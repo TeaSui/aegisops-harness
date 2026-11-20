@@ -90,7 +90,8 @@ def judge_run(suite, case, run_dir, plugin_dir):
     result = stream['result']
     return stream, {
         'suite': suite['name'], 'case': case['id'], 'pass': bool(verdict.get('pass')), 'score': verdict.get('score'),
-        'judge': verdict, 'cost_usd': result.get('total_cost_usd'), 'duration_ms': result.get('duration_ms'),
+        'judge': verdict, 'infra_error': harness.infra_error(stream),
+        'cost_usd': result.get('total_cost_usd'), 'duration_ms': result.get('duration_ms'),
         'num_turns': result.get('num_turns'), 'session_error': result.get('is_error'),
         'terminal_reason': result.get('terminal_reason') or result.get('subtype'),
         'claude_version': stream['init'].get('claude_code_version'), 'model': stream['init'].get('model'),
@@ -129,7 +130,8 @@ def execute(suite, case, index, args, claude):
     record['duration_ms'] = int((time.time() - started) * 1000)
     if error:
         record['error'] = error
-    print('%-5s %-10s %-16s r%d  %s  $%.3f %4.0fs' % ('PASS' if record['pass'] else ('ERR' if error else 'FAIL'),
+    outcome = 'INFRA' if record.get('infra_error') else ('PASS' if record['pass'] else ('ERR' if error else 'FAIL'))
+    print('%-5s %-10s %-16s r%d  %s  $%.3f %4.0fs' % (outcome,
                                                       suite['name'], case['id'], index,
                                                       (record['judge'] or {}).get('summary', '')[:80],
                                                       record['cost_usd'] or 0, record['duration_ms'] / 1000),

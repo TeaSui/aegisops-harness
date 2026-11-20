@@ -303,6 +303,26 @@ class StreamAndJudgeTest(unittest.TestCase):
         self.assertIn('tea-sdlc-autopilot', parsed['notes'][0])
         self.assertEqual(harness.read_stream(TESTDATA / 'missing.jsonl')['calls'], [])
 
+    def test_infra_errors_are_recognised(self):
+        # Seen for real: three lifecycle runs cut off together by the account's usage limit were scored as FAIL.
+        self.assertIn('limit', harness.infra_error(stream('limit_hit.jsonl')))
+        self.assertIsNone(harness.infra_error(stream('passive_miss.jsonl')))
+        self.assertIsNone(harness.infra_error(stream('passive_hit.jsonl')))
+        self.assertIn('no result', harness.infra_error(harness.parse_stream([])))
+        for text in ('API Error: 529 Overloaded', 'Credit balance is too low', 'Rate limit reached for requests'):
+            parsed = harness.parse_stream([json.dumps({'type': 'result', 'is_error': True, 'result': text})])
+            self.assertIsNotNone(harness.infra_error(parsed), text)
+
+    def test_summary_excludes_infra_errors(self):
+        runs = [{'case': 'a', 'pass': True}, {'case': 'b', 'pass': False},
+                {'case': 'c', 'pass': False, 'infra_error': 'usage limit'}]
+        summary = harness.summarize(runs)
+        self.assertEqual((summary['passed'], summary['total'], summary['infra_errors']), (1, 2, 1))
+        empty = harness.summarize([{'case': 'c', 'pass': False, 'infra_error': 'usage limit'}])
+        self.assertEqual(empty['total'], 0)
+        verdict = harness.compare({'x': empty}, {'suites': {'x': {'passed': 3, 'total': 3}}})['x']
+        self.assertFalse(verdict['regression'])
+
     def test_passive_judge(self):
         self.assertTrue(passive_judge.judge({'expect': ['expert-lens']}, stream('passive_hit.jsonl'))['pass'])
         agent = passive_judge.judge({'expect': ['fintech-security', 'security-engineer-subagent']},

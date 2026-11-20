@@ -5,6 +5,7 @@ No model calls here; run.py drives the `claude` CLI. Everything in this module i
 import datetime
 import json
 import math
+import re
 import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -27,10 +28,11 @@ def parse_stream(lines):
 
     Returns a dict with `calls` (tool uses in order, each with name, input, result text, is_error), `skills`
     (Skill tool `skill` inputs), `agents` (Agent/Task `subagent_type`), `result` (the final result event or {}),
-    `init` (the system init event or {}) and `notes` (hook additionalContext strings seen in hook_response events).
+    `results` (every result event: a session that waits on background agents emits several), `init` (the system init
+    event or {}) and `notes` (hook additionalContext strings seen in hook_response events).
     Unparseable lines are skipped.
     """
-    calls, by_id, skills, agents, notes = [], {}, [], [], []
+    calls, by_id, skills, agents, notes, results = [], {}, [], [], [], []
     result, init = {}, {}
     for line in lines:
         line = line.strip()
@@ -68,7 +70,27 @@ def parse_stream(lines):
                         call['is_error'] = bool(part.get('is_error'))
         elif kind == 'result':
             result = message
-    return {'calls': calls, 'skills': skills, 'agents': agents, 'result': result, 'init': init, 'notes': notes}
+            results.append(message)
+    return {'calls': calls, 'skills': skills, 'agents': agents, 'result': result, 'results': results, 'init': init,
+            'notes': notes}
+
+
+# A session the account or the API cut short says nothing about the plugin: its run is excluded, not failed.
+INFRA = re.compile(r"hit your .{0,40}limit|usage limit|rate limit|overloaded|api error|credit balance|"
+                   r"quota|internal server error|connection error|request timed out", re.I)
+
+
+def infra_error(stream):
+    """A short reason when the session ended for an account/API reason rather than by itself, else None."""
+    results = stream.get('results') or ([stream['result']] if stream.get('result') else [])
+    if not results:
+        return 'no result event (session crashed, was killed or never started)'
+    for event in results:
+        text = str(event.get('result') or event.get('error') or '')
+        found = INFRA.search(text)
+        if found:
+            return 'cut off by %s: %s' % (found.group(0).lower(), text.strip()[:120])
+    return None
 
 
 def read_stream(path):
@@ -101,6 +123,8 @@ def wilson(passed, total, z=1.96):
 
 def summarize(runs):
     """Aggregate run records of one suite."""
+    infra = [r for r in runs if r.get('infra_error')]
+    runs = [r for r in runs if not r.get('infra_error')]  # cut off by the account or the API: no signal
     total = len(runs)
     passed = sum(1 for r in runs if r.get('pass'))
     low, high = wilson(passed, total)
@@ -111,7 +135,8 @@ def summarize(runs):
             'wilson95': [round(low, 3), round(high, 3)],
             'mean_score': round(sum(scores) / len(scores), 3) if scores else None,
             'cost_usd': round(sum(costs), 4), 'mean_duration_s': round(sum(durations) / total / 1000, 1) if total else 0,
-            'cases': sorted({r['case'] for r in runs}), 'errors': sum(1 for r in runs if r.get('error'))}
+            'cases': sorted({r['case'] for r in runs}), 'errors': sum(1 for r in runs if r.get('error')),
+            'infra_errors': len(infra)}
 
 
 def compare(current, baseline, tolerance=0.10, noise_guard=True):
@@ -174,21 +199,21 @@ def markdown_report(results):
                                                              meta.get('plugin_dir', '?'),
                                                              meta.get('plugin_version') or ''),
              '- Runs per case: %s; parallel: %s' % (meta.get('runs'), meta.get('parallel')), '',
-             '| Suite | Passed | Rate | Wilson 95% | Mean score | Baseline | Verdict | Cost (USD) | Mean duration |',
-             '|---|---|---|---|---|---|---|---|---|']
+             '| Suite | Passed | Rate | Wilson 95% | Mean score | Baseline | Verdict | Cost (USD) | Mean duration | Excluded (infra) |',
+             '|---|---|---|---|---|---|---|---|---|---|']
     for suite, summary in results.get('suites', {}).items():
         verdict = (results.get('compare') or {}).get(suite, {})
-        lines.append('| %s | %d/%d | %s | %s–%s | %s | %s | %s | %.2f | %.0f s |' % (
+        lines.append('| %s | %d/%d | %s | %s–%s | %s | %s | %s | %.2f | %.0f s | %d |' % (
             suite, summary['passed'], summary['total'], _pct(summary['rate']), _pct(summary['wilson95'][0]),
             _pct(summary['wilson95'][1]), '-' if summary.get('mean_score') is None else summary['mean_score'],
             verdict.get('baseline', '-'), verdict.get('status', 'not compared')
             + ('' if not verdict.get('notes') else ' (' + '; '.join(verdict['notes']) + ')'),
-            summary['cost_usd'], summary['mean_duration_s']))
+            summary['cost_usd'], summary['mean_duration_s'], summary.get('infra_errors', 0)))
     for suite, runs in results.get('runs', {}).items():
         lines += ['', '## %s' % suite, '', '| Case | Run | Outcome | Score | Cost (USD) | Duration | Detail |',
                   '|---|---|---|---|---|---|---|']
         for r in runs:
-            outcome = 'ERROR' if r.get('error') else ('PASS' if r.get('pass') else 'FAIL')
+            outcome = 'INFRA' if r.get('infra_error') else ('ERROR' if r.get('error') else ('PASS' if r.get('pass') else 'FAIL'))
             detail = (r.get('judge') or {}).get('summary') or r.get('error') or ''
             lines.append('| %s | %d | %s | %s | %.3f | %.0f s | %s |' % (
                 r['case'], r['run'], outcome, '-' if r.get('score') is None else '%.2f' % r['score'],
