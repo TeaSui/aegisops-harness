@@ -11,15 +11,20 @@ jobs:
   checks:
     name: checks (python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    # Official Python images: the hooks must run on Python 3.9 (macOS ships /usr/bin/python3 3.9), and
+    # actions/setup-python no longer builds 3.9 for current Ubuntu runners.
+    container: python:${{ matrix.python }}-bookworm
     strategy:
       fail-fast: false
       matrix:
         python: ["3.9", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
+      - name: Tools (ruby parses YAML frontmatter and contracts when PyYAML is absent)
+        run: |
+          apt-get update -qq && apt-get install -y -qq ruby > /dev/null
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          python3 --version
       - name: Unit tests
         run: python3 -m unittest discover -s tests
       - name: Plugin structure
