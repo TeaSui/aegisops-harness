@@ -235,7 +235,7 @@ Evaluations ([`evals/README.md`](evals/README.md)):
 python3 evals/routing/run.py                       # 144 router cases, free, also in CI
 python3 evals/descriptions/run.py                  # description lint + collision check, free, also in CI
 python3 evals/headless/run.py --suite passive,tdd --runs 3 --compare   # real Claude sessions, paid
-python3 evals/headless/run.py --suite lifecycle --runs 2               # spec → ship end to end, paid
+python3 evals/headless/run.py --suite lifecycle --runs 2               # full mode spec → ship, and lean mode by outcome; paid
 ```
 
 `.github/workflows/ci.yml` runs the unit tests, `check-setup.py` and the free evals on Python 3.9 and 3.12 for every push and PR; `evals.yml` runs the paid suites weekly or on demand and fails on a regression against `evals/headless/baseline.json`. A change to a skill description, the router or the bootstrap must not lower a suite's score.
