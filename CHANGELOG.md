@@ -54,9 +54,20 @@ AIDLC: a full-workflow change now moves through **spec → plan → build → te
   - Both sessions passed five gates through `aidlc advance` (`proposed → … → reviewed`), with 7 and 8 keyed requirements, 14 and 15 spec guesses closed, and 4 and 7 rulings.
   - Both stopped at `reviewed` because no CI existed. One session wrote `ship.md` and recorded "no CI" instead of inventing a result.
 - After hardening (default model, one run per case unless noted):
-  - `tdd` 8/8, baseline 12/12.
-  - `passive` 14/18, baseline 16/18; within noise.
-  - **`lifecycle` 0/3: a regression to investigate before release.** All three sessions stopped at about 938 s, at stages building, building and verified. One plausible cause, not yet confirmed: the stricter gates (code must be committed, fresh JUnit) and the fake-gh fixture. Records: scratchpad `final/lifecycle/`.
+  - `tdd` 8/8 (baseline 12/12).
+  - `passive` 13/17, one run excluded as a cutoff; baseline 16/18; within noise. The misses (02, 09, 14, 16) did the right work without loading the skill (fixed the bug from the test output, wrote and ran the query, re-ran the suite to prove it, confirmed eight problems by script).
+  - `lifecycle` **3/3, every run 6/6 stages, score 1.0, $29 for three runs, 23–44 min each**. From a prompt that names no skill, stage or command, each session did all of the following:
+    - wrote keyed requirements (7–8) and closed every blind-spec-check guess;
+    - planned a task graph;
+    - built with `task-done`;
+    - verified on a fingerprint;
+    - ran a two-axis review plus QA;
+    - opened a PR through `gh`, waited for CI that really runs the tests, wrote `ship.md` and passed the `shipped` gate through `aidlc advance`.
+
+    `aidlc trace` shows every requirement covered by a task and a passing test. No session merged: the prompt asked for "ready to ship", and the shipping skill merges only when the request covers delivery.
+- The road there, recorded because each step was a real defect:
+  - The first post-hardening run scored 0/3. All three sessions had hit the account's 5-hour usage limit at the same moment, and the harness counted that as failure. It now excludes runs that a limit or the API cut short, using short system notices only, so a model's summary that mentions rate limits does not count.
+  - The next run scored 3/3 once the judge ignored the template's commented example guess. One session there stopped before opening a PR because the remote "looked local"; `shipping` now decides from what `gh` answers. The rerun above opened a PR in every session.
 
 ## 2.9.0 — 2026-11-19
 

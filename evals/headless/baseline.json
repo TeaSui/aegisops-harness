@@ -2,17 +2,69 @@
   "_comment": "Last accepted headless scores. Update with run.py --update-baseline after a deliberate change; see evals/README.md. Seeded from the 2.9.0 measurements recorded in CHANGELOG.md (pre-productized harness, same cases and judges).",
   "suites": {
     "passive": {
-      "passed": 16, "total": 18, "rate": 0.889, "mean_score": null,
-      "cases": ["01-feature", "02-failing", "03-expert", "04-reframe", "05-vague", "06-prd", "07-metrics", "08-kafka", "09-sql",
-                "10-docs", "11-incident", "12-goal", "13-review-in", "14-prove", "15-validate", "16-threat", "17-review-out", "18-plan"],
-      "runs_per_case": 1, "model": "CLI default", "claude_version": "2.1.319", "plugin_version": "2.9.0", "cost_usd": null,
+      "passed": 16,
+      "total": 18,
+      "rate": 0.889,
+      "mean_score": null,
+      "cases": [
+        "01-feature",
+        "02-failing",
+        "03-expert",
+        "04-reframe",
+        "05-vague",
+        "06-prd",
+        "07-metrics",
+        "08-kafka",
+        "09-sql",
+        "10-docs",
+        "11-incident",
+        "12-goal",
+        "13-review-in",
+        "14-prove",
+        "15-validate",
+        "16-threat",
+        "17-review-out",
+        "18-plan"
+      ],
+      "runs_per_case": 1,
+      "model": "CLI default",
+      "claude_version": "2.1.319",
+      "plugin_version": "2.9.0",
+      "cost_usd": null,
       "accepted": "2026-11-19"
     },
     "tdd": {
-      "passed": 12, "total": 12, "rate": 1.0, "mean_score": 1.0,
-      "cases": ["T1-feature", "T2-behavior", "T3-validation", "T4-red"],
-      "runs_per_case": 3, "model": "CLI default", "claude_version": "2.1.319", "plugin_version": "2.9.0", "cost_usd": 5.93,
+      "passed": 12,
+      "total": 12,
+      "rate": 1.0,
+      "mean_score": 1.0,
+      "cases": [
+        "T1-feature",
+        "T2-behavior",
+        "T3-validation",
+        "T4-red"
+      ],
+      "runs_per_case": 3,
+      "model": "CLI default",
+      "claude_version": "2.1.319",
+      "plugin_version": "2.9.0",
+      "cost_usd": 5.93,
       "accepted": "2026-11-19"
+    },
+    "lifecycle": {
+      "passed": 3,
+      "total": 3,
+      "rate": 1.0,
+      "mean_score": 1.0,
+      "cases": [
+        "L1-refund"
+      ],
+      "runs_per_case": 3,
+      "model": "CLI default (claude-opus-5-5)",
+      "claude_version": "2.1.319",
+      "plugin_version": "3.0.0",
+      "cost_usd": 29.01,
+      "accepted": "2026-11-20"
     }
   }
 }

@@ -108,6 +108,8 @@ python3 scripts/aidlc.py trace refunds --write
 
 The session runs these itself; the session-start snapshot shows each active spec's stage, its blockers and its next batch.
 
+Measured (`evals/headless --suite lifecycle`, 3 real sessions, Claude Code 2.1.319): from one prompt asking for wallet refunds "all the way to a change that is ready to ship", naming no skill, stage or command, every session wrote keyed requirements, closed its blind spec check, planned a task graph, built and verified on a fingerprint, ran a two-axis review with QA, opened a PR, waited for CI that runs the tests, wrote `ship.md` and passed the `shipped` gate — 3/3, every stage, every requirement traced to a passing test.
+
 ---
 
 ## 🤖 Subagents (`agents/`)
