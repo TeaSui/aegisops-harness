@@ -47,7 +47,7 @@ External contract change = HTTP/RPC API, event, shared schema or public library 
 ## Mid-execution promotion
 Re-classify when scope grows; promotion is mandatory.
 - Fast path hits a trust boundary → stop. Full mode: `aidlc init`, run from `proposed` (cite done work in the plan), dispatch Security on the unmerged work and apply its rules before more code. Lean: do the security pass on the work so far first.
-- Full workflow gains a domain → add its tasks, `aidlc check <feature> --to planned`, reuse Security output, re-run the contract gate if the contract grows; new requirements go back through spec check and approval.
+- Full workflow gains a domain → add its tasks, `aidlc check <feature> --to planned`, reuse Security output, re-run the contract gate if the contract grows; new requirements get one blind spec-check pass over the new requirements only, then approval.
 
 ## Escape hatch (full mode)
 A trust-boundary change may take the fast path with TDD only if ALL hold:

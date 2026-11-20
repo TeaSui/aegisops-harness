@@ -22,6 +22,6 @@ For each open `- [ ] G<n>: …`:
 
 A guess needing a product decision gets your most reasonable answer, written into the spec, marked resolved and listed for the user at the approval point (`tea-sdlc:brainstorming` §4). Do not stop to ask per guess. Never delete a guess or reword it.
 
-No second blind run, even after large closing edits: close the guesses directly in the spec.
+No second blind run, even after large closing edits: close the guesses directly in the spec. Exception: requirements added mid-execution get one pass over the new requirements only.
 
 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" check <feature> --to accepted` lists any guess still open. Report one line: guesses found, resolved, accepted as risk.

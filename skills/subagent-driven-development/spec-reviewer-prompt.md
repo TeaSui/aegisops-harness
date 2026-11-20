@@ -5,6 +5,7 @@ Send to `tea-sdlc:code-reviewer` (or `general-purpose`). Fill every `[…]`.
 ```
 description: "Spec compliance review T<n>"
 prompt: |
+  AXIS: spec
   Check whether the implementation matches what was requested: nothing missing, nothing extra.
 
   ## Requested

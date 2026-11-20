@@ -20,12 +20,16 @@ prompt: |
 
   ## Ownership
   Change only: [task files; (new) = create]. Need another file → return BLOCKED with the scope change. Do not commit.
+  Never edit docs/specs/** (contracts/, plan.md, ledger.md, review.md, README.md belong to the main session); a contract that looks wrong or a failing contract gate → NEEDS_CONTEXT. Never revert, reset or delete work you did not write.
+  Out of scope: [what this task must not touch or decide]
+  Bailout: [when to stop and return BLOCKED instead of pressing on]; 2 failed fix attempts on the same issue → BLOCKED, no third.
 
   ## Exit criteria
   - [one line per acceptance criterion]
   - `[exit test command]` passes (the main session reruns it with aidlc task-done)
 
   ## Rules
+  - TDD: write the ID-named test, run it, show it failing for the expected reason, then the code (RED-GREEN-REFACTOR).
   - Build exactly the task and its criteria; follow the plan's file structure and existing patterns; no restructuring beyond the task. A file growing past the plan's intent → DONE_WITH_CONCERNS, do not split it yourself.
   - Routine choice the spec leaves open (naming, which existing pattern) → take what the code points to and report it under Choices. NEEDS_CONTEXT only when the answer changes behavior a requirement describes; BLOCKED when it needs an architectural decision or restructuring the plan did not foresee. Bad work is worse than none.
   - Before reporting: every criterion has an ID-named test that checks behavior, not a mock; only your files changed (git status).

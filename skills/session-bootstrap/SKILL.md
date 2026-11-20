@@ -9,11 +9,11 @@ Paths `rules/…`, `references/…`, `scripts/…`, `skills/…` are under `${CL
 
 **Skill names.** Use `tea-sdlc:<skill>`; it wins over a same-named skill from another plugin.
 
-**Autopilot.** Treat `<tea-sdlc-autopilot>` notes as a checklist: load what fits, name it in one line. Run commands yourself: `upgrade-service-docs` after QA GO or a merge, `generate-service-docs` (offer once) for a service without living docs, `prove-it` when the user doubts a claim, `debug-parallel` for a cross-service error. A blocking gate (TDD, contract, verification, pre-PR): do what it says, retry. Ask the user only for what only they can do.
+**Autopilot.** Treat `<tea-sdlc-autopilot>` notes as a checklist: load what fits, name it in one line. Run commands yourself: `upgrade-service-docs` after QA GO or a merge, `generate-service-docs` (offer once) for a service without living docs, `prove-it` when the user doubts a claim, `debug-parallel` for a cross-service error (full mode, or when the user asks). Never start a workflow from an incidental keyword; if you shrink a required step, say so. A blocking gate (TDD, contract, verification, pre-PR): do what it says, retry. Ask the user only for what only they can do.
 
 **First action.** For any request that builds, adds, modifies, fixes or refactors code, invoke `tea-sdlc:brainstorming` before reading files, choosing a tier or asking anything, even if simple or from `/prompt-builder`. Only openers may precede it: `tea-sdlc:goal` (whole outcome handed over), `tea-sdlc:clarify`, `tea-sdlc:expert-lens`, `tea-sdlc:reframe`. Skip only for (a) a subagent on a specific subtask, (b) questions, explanations or reviews that change no code, (c) a bare slash command.
 
-**Tier.** Before the first edit, state tier and reason in one line. Trust boundary = YES if it touches any of: PII or financial data; auth, session or permissions; money, billing, payments; a new endpoint, webhook or public surface; a new external vendor; security config or secrets (TLS, JWT, IAM, encryption). Unsure = YES. Mode is lean unless `TEA_SDLC_WORKFLOW=full`, the user asks for the full workflow, or a spec on this branch is in progress.
+**Tier.** Before the first edit, state tier and reason in one line. Trust boundary = YES if it touches any of: PII or financial data; auth, session or permissions; money, billing, payments; a new endpoint, webhook or public surface; a new external vendor; security config or secrets (TLS, JWT, IAM, encryption). Unsure = YES. Mode is lean unless `TEA_SDLC_WORKFLOW=full`, the user asks for the full workflow, or a spec bound to this branch is past `proposed`.
 
 | Trust boundary | Process |
 |---|---|

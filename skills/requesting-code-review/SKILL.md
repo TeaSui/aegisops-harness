@@ -27,7 +27,7 @@ Exclude unrelated user or other-agent changes from the claimed work.
 
 `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`, `<f>` = spec folder or slug; you run it. Format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 `review.md`.
 
-a. `aidlc status` shows the spec at `verified`. Commit the code first (the pre-PR record is tied to `HEAD`).
+a. `aidlc status` shows the spec at `verified`. Commit the code first (the pre-PR record is tied to `HEAD`). **Re-entry** (`review.md` already exists: back from `building --back`, a NO-GO or a CI fix): skip b; run ONE diff-only review of the changes since the last review stamp (`tea-sdlc:code-reviewer`, `AXIS: both`, next free IDs), append its lines under the axes, then d–f.
 
 b. **One message, parallel, each axis exactly once:**
 
@@ -35,7 +35,7 @@ b. **One message, parallel, each axis exactly once:**
 |---|---|
 | `tea-sdlc:code-reviewer`, `AXIS: spec` | `requirements.md`, `design.md`, `contracts/`, output of `aidlc trace <f>`, the scope |
 | `tea-sdlc:code-reviewer`, `AXIS: standards` | `security.md`, project `REVIEW.md` and conventions, the scope |
-| `tea-sdlc:qa-subagent` | `plan.md`, `aidlc trace <f>`, the scope; its verdict fills `## QA` |
+| `tea-sdlc:qa-subagent` | `plan.md`, `aidlc trace <f>`, the scope, the running target / base URL when a service is up (authorizes live API checks); its verdict fills `## QA` |
 
 Both reviewers get the template `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`; they run on `sonnet` (effort medium; high for a large or trust-boundary diff).
 

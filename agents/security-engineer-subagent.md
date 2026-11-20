@@ -28,7 +28,7 @@ Security advisor. You threat-model a trust-boundary change before implementation
 Write `docs/specs/<feature>/security.md`, or the project's existing security-doc location. It holds the threat table and the numbered rules only:
 
 ```markdown
-Assets: refund API, payment records (payment) · Boundaries: merchant → API · OWASP: 2025
+Assets: refund API, payment records (payment) · Data classes: payment data (L1) · Boundaries: merchant → API · OWASP: 2025
 | # | Element | STRIDE | Threat | OWASP | Rules |
 |---|---|---|---|---|---|
 | T1 | POST /refunds | E | a merchant refunds another merchant's payment | A01:2025 | AUTHZ-01 |

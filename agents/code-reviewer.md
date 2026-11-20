@@ -37,4 +37,4 @@ Never merge, re-rank or drop findings to fit another reviewer's list.
 
 **Re-review:** there is at most one, and it covers only the diff. Check your earlier findings and the diff the fixes added, covering both axes if the dispatch says so, and continue the numbering for anything new. Never run a full second round.
 
-**Status:** `DONE` when the review is clean or has only nits, `DONE_WITH_CONCERNS` for any `should`, `BLOCKED` for any `must`.
+**Status:** `DONE` when the review is clean or has only nits, `DONE_WITH_CONCERNS` for any `should`, `BLOCKED` for any `must`, `NEEDS_CONTEXT` when the scope or inputs are missing.

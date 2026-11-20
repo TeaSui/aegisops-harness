@@ -5,7 +5,7 @@ The fast path has no review loops: one pre-PR pass plus one diff-only re-review.
 ## Per task in the build stage
 - Max 2 fix rounds per review (spec compliance, code quality); max 4 review iterations per task in total.
 - Round 2 still failing usually means a deeper problem: check that before patching again.
-- At the limit the same implementer gets no further round. Re-dispatch the task once to a fresh implementer one model tier up (haiku → sonnet → opus → fable) with the findings and the failed approaches. If that fails too → split the task or ask the user.
+- At the limit the same implementer gets no further round. Re-dispatch the task once to a fresh implementer one model tier up (haiku → sonnet → opus → fable) with the findings and the failed approaches. If that fails too → stop and escalate (below); wait for the user's decision.
 
 ## Review stage
 Spec and Standards once each (in parallel with QA), then at most ONE diff-only re-review of the fixes by a single tea-sdlc:code-reviewer with `AXIS: both`.

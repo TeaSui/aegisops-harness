@@ -79,7 +79,7 @@ README frontmatter is the only lifecycle metadata in the folder:
 status: proposed        # stage or side state; set only by `aidlc advance`
 key: RFD                # 2-6 capital letters, unique per repository; prefixes every requirement ID
 branch: feat/<slug>     # written by `aidlc advance building`
-security: required      # or: not-applicable — <reason> (escape hatch only)
+security: required      # or: not-applicable — <reason> (non-trust change run through the full workflow)
 scope: <service> | system
 affects: [<service-or-module>, ...]
 accepted_by: <name> (<date>)        # explicit approval only, or `<name> (delegated in request)`

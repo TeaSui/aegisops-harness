@@ -12,7 +12,7 @@ README `status:` holds the stage; active = `proposed`…`shipped`. Only `aidlc a
 
 | Target | Gate |
 |---|---|
-| `accepted` | README `key:` unique in repo; ≥1 requirement, IDs `<KEY>-<n>` unique, each with ≥1 acceptance bullet and valid `Verify:`; `spec-check.md` has ≥1 guess line or `Checked:` line and no open guess; `security.md` exists unless README `security: not-applicable — <reason>`; contract gate passes when `contract: external`; `accepted_by:` set |
+| `accepted` | README `key:` unique in repo; ≥1 requirement, IDs `<KEY>-<n>` unique, each with ≥1 acceptance bullet and valid `Verify:`; `spec-check.md` has ≥1 guess line or `Checked:` line and no open guess; `security.md` exists unless README `security: not-applicable — <reason>` (a non-trust change the user chose to run through this workflow; reason required); contract gate passes when `contract: external`; `accepted_by:` set |
 | `planned` | `plan.md` parses; unique `T<n>`; `depends` targets exist, no cycle; every requirement covered; every task covers ≥1 requirement or `covers: none — <reason>`; every task has `owner` and `files`; tasks with no dependency path between them share no file |
 | `building` | README `branch:` = current branch, not the default branch |
 | `verified` | `planned` checks still pass; every task `[x]` with a green `task-done` event; every `Verify: test` requirement referenced by ≥1 test file; latest `verify` green (exit 0, code unchanged during run, fingerprint = current; with JUnit: every `Verify: test` requirement has a passing test, none failed) |
@@ -22,7 +22,7 @@ README `status:` holds the stage; active = `proposed`…`shipped`. Only `aidlc a
 
 `ship-gate` blocks `gh pr merge` on a spec-bound branch until `shipped` passes.
 
-- **Code fingerprint:** over all non-ignored files except `docs/**`, `*.md`, `CHANGELOG*`, `LICENSE*`. Code, config or manifest edits invalidate a test run — bump a manifest version **before** `verify`. Prefixes match only at ≥12 hex chars.
+- **Code fingerprint:** over all non-ignored files except `docs/**`, `**/docs/specs/**`, `*.md`, `CHANGELOG*`, `LICENSE*`. Code, config or manifest edits invalidate a test run — bump a manifest version **before** `verify`. Prefixes match only at ≥12 hex chars.
 - **Evidence chain:** latest `verify` green on F, review stamped on F, working tree = F with no uncommitted code (so HEAD = F).
 - **Traceability:** a test references `RFD-1` by the exact upper-case token, or an identifier starting `test` containing `_rfd_1` (any case). Test files: code on a test path or `.feature`. JUnit matches `classname`/`name`; stale or empty reports count as missing.
 

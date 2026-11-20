@@ -16,7 +16,7 @@ Trust boundary = YES if the change touches any of: (1) PII or financial data, (2
 | Routine fix, no trust boundary | 2-3 lines: outcome, acceptance evidence, approach; continue. Bug or failing test → `tea-sdlc:systematic-debugging` next. |
 | Feature or behavior change, no trust boundary | Add constraints, and 2-3 approaches only when the tradeoff is real; recommend one. |
 | Trust boundary, lean mode (default) | 3-6 lines before the first edit: approach, assets touched, threats (STRIDE / OWASP), controls kept or added (`tea-sdlc:fintech-security` as catalogue; honour an existing `security.md`). Then tests for the security behaviour (authz denied, input rejected, no PII in logs, idempotent money movement); `check-contract.py` if an external contract changes; the pre-PR pass covers security and the PR lists threats checked. No spec, no subagents. |
-| Trust boundary or new system, full mode (`TEA_SDLC_WORKFLOW=full`, the user asked for it, or a spec on the branch is in progress) | Spec per AIDLC (§3-§4). |
+| Trust boundary or new system, full mode (`TEA_SDLC_WORKFLOW=full`, the user asked for it, or a spec bound to the branch is past `proposed`) | Spec per AIDLC (§3–§4 below). |
 
 ## 2. Clarify
 
@@ -31,7 +31,7 @@ Visual decision the user should compare (layouts, mockups, diagrams) → browser
 `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run it yourself. Formats: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 (`requirements.md`, README frontmatter); folder placement: `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` §4 (reuse the project's existing locations).
 
 1. Stable kebab-case slug; a 2-6 letter key unused by other specs (`aidlc status`). `aidlc init <feature> --key <KEY>` (pass a folder path when the spec is not in the repository's own `docs/specs/`).
-2. `README.md`: summary, file index, frontmatter `scope`, `affects`, `contract: none|external`, `security: required` (or `not-applicable — <reason>` only under the small-change escape hatch of `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`).
+2. `README.md`: summary, file index, frontmatter `scope`, `affects`, `contract: none|external`, `security: required` (or `not-applicable — <reason>` only for a non-trust change the user chose to run through the full workflow).
 3. `requirements.md`: keyed requirements only, no narrative: `### <KEY>-<n>: <title>`, acceptance bullets under `Acceptance:` (Given/When/Then or EARS, one observable outcome each, unhappy paths included), a `Verify:` line.
 4. Dispatch `tea-sdlc:security-engineer-subagent` for `security.md` (threat table + numbered rules) and, when the UI needs design, `tea-sdlc:ui-ux-designer-subagent` for `ui-design.md`; they run while you write the design.
 5. Only when a contract or the architecture changes: `design.md` (≤ ~120 lines) and `contracts/`, following the security rules; an ADR per decision that outlives the change. `contract: external` → `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` until it passes.
