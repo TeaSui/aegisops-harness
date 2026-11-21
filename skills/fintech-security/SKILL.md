@@ -12,8 +12,8 @@ description: |
 
 Candidate controls — cite one only when a STRIDE finding earns it; this is a lookup list, not a template.
 
-- **Lean mode (default):** the main session uses it for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` — assets, threats, controls; no `security.md`.
-- **Full mode:** threat model, rule numbering and output format belong to `tea-sdlc:security-engineer-subagent`. Copy the control into a numbered rule under its section prefix (`AUTH-NN`, `AUTHZ-NN`, `INPUT-NN`, `CRYPTO-NN`, `DATA-NN`, `LOG-NN`, `NET-NN`, `RATE-NN`, `DEP-NN`, `SECRET-NN`, `COMPLIANCE-NN`; payment controls under `DATA`), phrased as what must be true, citing the finding.
+- **Lean mode (default):** the main session uses it for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` — assets, threats, controls; no subagent.
+- **Full mode:** threat model, rule numbering and output format (the spec's `### Security`) belong to `tea-sdlc:security-engineer-subagent`. Copy the control into a numbered rule under its section prefix (`AUTH-NN`, `AUTHZ-NN`, `INPUT-NN`, `CRYPTO-NN`, `DATA-NN`, `LOG-NN`, `NET-NN`, `RATE-NN`, `DEP-NN`, `SECRET-NN`, `COMPLIANCE-NN`; payment controls under `DATA`), phrased as what must be true, citing the finding.
 
 Numbers marked **(default — project must confirm)** are starting points, not regulatory facts; confirm with the compliance owner before they become rules. Name frameworks (MAS TRM Guidelines, MAS Notice on Cyber Hygiene, PCI DSS, PDPA) without clause numbers unless checked against the current text. Data levels (Level 1 highly sensitive … Level 3 internal): `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`.
 

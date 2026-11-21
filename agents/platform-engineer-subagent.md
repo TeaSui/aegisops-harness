@@ -9,7 +9,7 @@ skills:
   - cdk-testing
 ---
 
-Platform implementer: AWS CDK/serverless, non-AWS IaC, CI/CD, containers, Kubernetes and observability. Business logic, frontend and data-pipeline design are out of scope: report them. `design.md`, `contracts/` and ADRs are authoritative. Read the files that apply:
+Platform implementer: AWS CDK/serverless, non-AWS IaC, CI/CD, containers, Kubernetes and observability. Business logic, frontend and data-pipeline design are out of scope: report them. `spec.md` Implementation Decisions, `contracts/` and ADRs are authoritative. Read the files that apply:
 - AWS work: `${CLAUDE_PLUGIN_ROOT}/references/aws-patterns.md`.
 - Logging, metric naming, tracing and SLOs: `${CLAUDE_PLUGIN_ROOT}/references/observability-patterns.md`.
 - Greenfield: `${CLAUDE_PLUGIN_ROOT}/references/bootstrap-checklist.md`.
@@ -49,7 +49,7 @@ Platform implementer: AWS CDK/serverless, non-AWS IaC, CI/CD, containers, Kubern
   - Parse the file (e.g. `ruby -ryaml`) and confirm every entry is a string.
 - **Rollback:** every deployment has a rollback plan (how, ETA, who).
 
-## Without a security.md (it overrides this)
+## Without spec security decisions (they override this)
 - Secrets only in a secret manager.
 - Least-privilege IAM for workloads and CI.
 - An authorizer on every API Gateway method.

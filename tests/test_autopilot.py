@@ -191,6 +191,24 @@ class PromptRouterTest(HookCase):
         self.assertNotIn('tea-sdlc:debug-parallel', self.route(prompt))
         self.assertIn('tea-sdlc:debug-parallel', self.route(prompt, self.FULL))
 
+    HANDED = ('Do it with stages spec → plan → build:\n\nStatus: ready-for-agent\n\n# Refunds\n\n## Problem Statement\n'
+              'Support cannot undo a transfer.\n\n## Solution\nRefund by id.\n\n## User Stories\n\n'
+              '1. As a support agent, I want to refund a transfer, so that the sender gets the money back.\n')
+
+    def test_handed_over_spec_is_used_verbatim(self):
+        lean, full = self.route(self.HANDED), self.route(self.HANDED, self.FULL)
+        for ctx in (lean, full):
+            self.assertIn('tea-sdlc:brainstorming', ctx)
+            self.assertIn('Spec handed over (to-spec template)', ctx)
+            self.assertIn('no grilling', ctx)
+        self.assertIn('save it verbatim as docs/specs/<feature>/spec.md', full)
+        self.assertIn('no README, ledger or gates', lean)
+        self.assertNotIn('Spec handed over', self.route('Add a refund endpoint for transfers'))
+
+    def test_grill_me_loads_grilling_first(self):
+        ctx = self.route('Grill me on the refund design before we build it')
+        self.assertIn('tea-sdlc:grilling', ctx)
+
     def test_ui_bug_is_fast_path(self):
         ctx = self.route('Fix the bug where the Save button is misaligned')
         self.assertIn('tea-sdlc:systematic-debugging', ctx)
@@ -415,7 +433,7 @@ class SessionSnapshotTest(HookCase):
         result = subprocess.run(['/bin/bash', str(SESSION_START)], input=json.dumps({'cwd': str(self.repo / 'src')}),
                                 env=env, capture_output=True, text=True, timeout=20, cwd=str(self.repo / 'src'))
         ctx = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
-        self.assertIn('Spec docs/specs/refund at stage `accepted`, plan 1/2 tasks done', ctx)
+        self.assertIn('Spec docs/specs/refund at stage `accepted`, 1/2 tickets done', ctx)
         self.assertNotIn('src/docs', ctx)
 
     def test_workflow_mode_is_announced(self):

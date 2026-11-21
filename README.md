@@ -87,32 +87,32 @@ A full-workflow change lives in `docs/specs/<feature>/` and moves through stages
 
 | Stage | Artifact | Gate checks | Skill |
 |---|---|---|---|
-| **spec** → `accepted` | `requirements.md` with keyed IDs (`RFD-1`), acceptance criteria, `Verify:`; `security.md`; `spec-check.md` | IDs unique and keyed, every requirement has criteria, a blind spec check ran and every guess is closed, Security wrote its file, contract gate, one recorded approval | `brainstorming`, `spec-check` |
-| **plan** → `planned` | `plan.md` task graph (`covers`, `depends`, `owner`, `files`, `test`) | every requirement covered, no cycle, no file shared by tasks that may run in parallel | `writing-plans` |
+| **spec** → `accepted` | `spec.md`: Problem Statement, Solution, numbered User Stories (story n = `RFD-n`), Implementation Decisions with `### Security`, Testing Decisions, Out of Scope | every template section filled, story numbers unique, `Verify:` tags valid, security decisions present, any `spec-check.md` guess closed, contract gate, one recorded approval | `brainstorming`, `spec-check` |
+| **plan** → `planned` | `tickets.md`: tracer-bullet vertical slices (`Blocked by`, `Covers`, acceptance checkboxes, `Test`, `Files`) | every story covered, no cycle, no file shared by tickets that may run in parallel | `writing-plans` |
 | **build** → `building` | feature branch; `ledger.md` | branch recorded, not the default branch | `subagent-driven-development` |
-| **test** → `verified` | `aidlc task-done` / `aidlc verify` ledger events | every task ticked by a passing test command, every requirement referenced by a test, a green run whose **code fingerprint** matches the current code, no failing requirement test in JUnit | `subagent-driven-development`, `verification-before-completion` |
+| **test** → `verified` | `aidlc task-done` / `aidlc verify` ledger events | every ticket `done` by a passing test command, every story referenced by a test, a green run whose **code fingerprint** matches the current code, no failing story test in JUnit | `subagent-driven-development`, `verification-before-completion` |
 | **review** → `reviewed` | `review.md`: Spec axis, Standards axis, QA verdict | no open finding, QA GO, review stamped against the current code | `requesting-code-review`, `receiving-code-review` |
 | **ship** → `shipped` | `ship.md`: GO, rollback, post-release verification | CI green (`gh pr checks`), changelog has the version, code unchanged since review | `shipping` |
 | **promote** → `implemented` | living docs, README traceability table | traceability written | `/upgrade-service-docs` |
 
 What it gives you that a prose workflow cannot:
 
-- **Requirement → test traceability.** `aidlc trace <feature>` prints every requirement with the tasks that cover it, the tests that reference it and their last result; `--write` puts the table in the spec README.
-- **Parallel build without conflicts.** `aidlc next <feature>` returns the tasks whose dependencies are done, in batches that share no file; the build skill dispatches a batch at once.
+- **Requirement → test traceability.** `aidlc trace <feature>` prints every story with the tickets that cover it, the tests that reference it and their last result; `--write` puts the table in the spec README.
+- **Parallel build without conflicts.** `aidlc next <feature>` returns the tickets whose blockers are done, in batches that share no file; the build skill dispatches a batch at once.
 - **Decisions instead of stalls.** The session records `aidlc ruling` (decision, why, cost if wrong) and keeps going; the ledger is the decision record a reviewer reads.
 - **Evidence that cannot go stale silently.** Test runs and reviews are keyed to a fingerprint of the code; change one line and the gate asks for a fresh run.
 - **Hard stops where they matter.** `gh pr create` waits for the review stage, `gh pr merge` for the ship stage (`hooks/ship-gate.py`).
 
 ```bash
 python3 scripts/aidlc.py status                  # every spec, its stage, what blocks the next gate
-python3 scripts/aidlc.py next refunds            # tasks ready to build, in conflict-free parallel batches
+python3 scripts/aidlc.py next refunds            # tickets ready to build, in conflict-free parallel batches
 python3 scripts/aidlc.py check refunds --to verified
 python3 scripts/aidlc.py trace refunds --write
 ```
 
 The session runs these itself; the session-start snapshot shows each active spec's stage, its blockers and its next batch.
 
-Measured (`evals/headless --suite lifecycle`, 3 real sessions, Claude Code 2.1.319): from one prompt asking for wallet refunds "all the way to a change that is ready to ship", naming no skill, stage or command, every session wrote keyed requirements, closed its blind spec check, planned a task graph, built and verified on a fingerprint, ran a two-axis review with QA, opened a PR, waited for CI that runs the tests, wrote `ship.md` and passed the `shipped` gate — 3/3, every stage, every requirement traced to a passing test.
+Measured on the pre-3.3.0 spec format (`evals/headless --suite lifecycle`, 3 real sessions, Claude Code 2.1.319): from one prompt asking for wallet refunds "all the way to a change that is ready to ship", naming no skill, stage or command, every session wrote keyed requirements, closed its blind spec check, planned a task graph, built and verified on a fingerprint, ran a two-axis review with QA, opened a PR, waited for CI that runs the tests, wrote `ship.md` and passed the `shipped` gate — 3/3, every stage, every requirement traced to a passing test.
 
 ---
 
@@ -122,8 +122,8 @@ Agents use **family aliases**, so they always run on the latest release of that 
 
 | Agent | Responsibility | Model | Effort |
 |---|---|---|---|
-| `tea-sdlc:security-engineer-subagent` | Threat model (STRIDE, OWASP), numbered security rules before implementation | sonnet | high |
-| `tea-sdlc:code-reviewer` | Read-only, independent review against plan, contract and standards | sonnet | medium |
+| `tea-sdlc:security-engineer-subagent` | Threat model (STRIDE, OWASP), numbered security rules for the spec before implementation | sonnet | high |
+| `tea-sdlc:code-reviewer` | Read-only, independent review against spec, contract and standards | sonnet | medium |
 | `tea-sdlc:ui-ux-designer-subagent` | Flows, wireframes, component states, accessibility specs | sonnet | medium |
 | `tea-sdlc:backend-engineer-subagent` | APIs, business logic, databases, integrations, LLM/RAG/agent features with evals | sonnet | high |
 | `tea-sdlc:frontend-engineer-subagent` | Web UI, accessibility, client performance | sonnet | high |
@@ -144,29 +144,27 @@ One structure for every agent, command and skill, owned by [`references/document
 |---|---|---|
 | Living reference — what the system does now | `docs/*.md` per service; `docs/00-overview … 04-ai-friendly/` at system level | Rewritten to match verified code by `/generate-service-docs` and `/upgrade-service-docs` |
 | Change spec — what we are changing and why | `docs/specs/<feature>/` | AIDLC stages `proposed → accepted → planned → building → verified → reviewed → shipped → implemented` |
-| Decision record | `docs/adr/NNNN-<decision>.md` | Immutable once accepted |
-| Workflow state | `docs/specs/<feature>/plan.md`, `docs/plans/` | Disposable |
+| Decision record | `docs/adr/NNNN-<slug>.md`, only for a hard-to-reverse, surprising trade-off | Immutable once accepted |
+| Workflow state | `docs/specs/<feature>/tickets.md`, `docs/plans/` | Disposable |
 
 ```
 <service>/docs/
 ├── README.md  architecture.md  business-logic.md  api-contracts.md  data-model.md
 ├── events.md  security.md  configuration.md  troubleshooting.md  diagrams/
-├── adr/                      NNNN-<decision>.md (main session)
+├── adr/                      NNNN-<slug>.md (main session)
 └── specs/<feature>/
     ├── README.md             stage frontmatter (key, branch, status) + traceability (main session, aidlc)
-    ├── requirements.md       keyed requirements RFD-1 … with acceptance criteria (main session)
-    ├── spec-check.md         blind spec check: every guess closed (spec-check)
-    ├── security.md           security-engineer
-    ├── ui-design.md          ui-ux-designer
-    ├── design.md, contracts/ main session (contracts checked by scripts/check-contract.py)
+    ├── spec.md               stories RFD-1 …, decisions incl. Security (from security-engineer) and UI, testing seams
+    ├── spec-check.md         optional blind spec check: every guess closed (spec-check)
+    ├── contracts/            only for contract: external (checked by scripts/check-contract.py)
     ├── measurement.md        measurement-planning (when in scope)
-    ├── plan.md               task graph (writing-plans); ticked only by aidlc task-done
+    ├── tickets.md            vertical slices (writing-plans); Status: done set only by aidlc task-done
     ├── ledger.md             aidlc only: advances, task-done, verify, rulings, stamps
     ├── review.md             Spec + Standards axes + QA verdict
     └── ship.md               GO / NO-GO, rollback, post-release verification
 ```
 
-Existing projects keep their established locations; the layout file maps legacy folders (`docs/requirements/`, `docs/security/`, `docs/contracts/`, …) and nothing is migrated automatically.
+Project level: `GLOSSARY.md` (domain terms). Legacy specs (`requirements.md`, `plan.md`) still pass their pre-3.3.0 gates. Existing projects keep their established locations; the layout file maps legacy folders (`docs/requirements/`, `docs/security/`, `docs/contracts/`, …) and nothing is migrated automatically.
 
 ---
 
@@ -187,7 +185,7 @@ Existing projects keep their established locations; the layout file maps legacy 
 
 | Area | Skills |
 |---|---|
-| Workflow (AIDLC) | `session-bootstrap`, `brainstorming` (spec), `spec-check` (blind spec check), `measurement-planning`, `writing-plans` (task graph), `subagent-driven-development` (parallel build), `executing-plans`, `dispatching-parallel-agents`, `shipping` (ship stage), `goal` |
+| Workflow (AIDLC) | `session-bootstrap`, `brainstorming` (spec), `grilling` (decisions, `GLOSSARY.md`, ADRs), `spec-check` (optional blind spec check), `measurement-planning`, `writing-plans` (tickets), `subagent-driven-development` (parallel build), `executing-plans`, `dispatching-parallel-agents`, `shipping` (ship stage), `goal` |
 | Quality | `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `validate-feature`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `incident-to-eval` |
 | Grounding | `grounding-claims` (codebase and command facts), `find-docs` (library, SDK and CLI facts via Context7 or official docs) |
 | Thinking tools | `clarify` (ask only what changes the work), `expert-lens` (what the best practitioner would notice, do first, refuse), `reframe` (strongest case against the current view) — triggered by the situation or as `/clarify`, `/expert-lens`, `/reframe` |

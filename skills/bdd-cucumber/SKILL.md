@@ -16,7 +16,7 @@ description: |
 - One behaviour per scenario: exactly one When; at most two `And` under Then; split scenarios over ~10 steps.
 - Background when 3+ scenarios share Givens. Scenario Outline only with 2+ example rows.
 - Scenarios are independent: reset state in a `Before` hook.
-- Feature header names the spec: `# See: docs/specs/<feature>/requirements.md`.
+- Feature header names the spec: `# See: docs/specs/<feature>/spec.md`.
 
 ## Tags
 
@@ -28,7 +28,7 @@ description: |
 | `@wip` | Excluded from CI |
 | `@slow` | Nightly only |
 | `@<domain>` | Feature filter |
-| `@<KEY>-<n>` | Requirement this scenario covers, from `docs/specs/<feature>/requirements.md` (e.g. `@RFD-1`); the exact upper-case token counts as spec traceability |
+| `@<KEY>-<n>` | User story this scenario covers, from `docs/specs/<feature>/spec.md` (story 1 of key RFD = `@RFD-1`); the exact upper-case token counts as spec traceability |
 
 Tag from the first commit.
 

@@ -9,7 +9,7 @@ description: Use in the full workflow, or when the user asks for parallel invest
 
 ## Full-workflow build: batches come from `aidlc next`
 
-`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" next <f> --json` returns the ready tasks already grouped into batches that share no file. One message per batch, one Agent call per task: agent = the task's `owner`, owned files = its `files`, prompt = the implementer template of `tea-sdlc:subagent-driven-development`. Never move a task to an earlier batch or merge batches; a task that needs another task's file is a plan change (edit `plan.md`, rerun `aidlc check <f> --to planned`).
+`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" next <f> --json` returns the ready tickets already grouped into batches that share no file (only tickets declaring `Files:` share a batch). One message per batch, one Agent call per ticket: agent = the ticket's `Owner:` (else the domain agent for its files), owned files = its `Files:`, prompt = the implementer template of `tea-sdlc:subagent-driven-development`. Never move a ticket to an earlier batch or merge batches; a ticket that needs another ticket's file is a plan change (edit `tickets.md`, rerun `aidlc check <f> --to planned`).
 
 ## Parallel investigation
 

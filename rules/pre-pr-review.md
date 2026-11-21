@@ -11,7 +11,7 @@ Before opening a PR or handing a change to review, review it in a fresh context,
 
 ## Full workflow: the review stage
 1. Spec at `verified` (latest `aidlc verify` green and current).
-2. Spec axis (requirements.md, design.md, contracts/) and Standards axis (quality, security rules, conventions, `REVIEW.md` if present): two separate tea-sdlc:code-reviewer dispatches, once each, in parallel with tea-sdlc:qa-subagent. Findings go into `review.md` as returned, never merged or re-ranked.
+2. Spec axis (spec.md stories and decisions, ADRs, contracts/) and Standards axis (quality, the spec's security decisions, conventions, `REVIEW.md` if present): two separate tea-sdlc:code-reviewer dispatches, once each, in parallel with tea-sdlc:qa-subagent. Findings go into `review.md` as returned, never merged or re-ranked.
 3. Close each finding `fixed:` or `cleared:` with evidence.
 4. Re-run `aidlc verify`, then at most ONE diff-only re-review of the fixes by a single tea-sdlc:code-reviewer with `AXIS: both`; then `aidlc stamp <f> review`.
 5. `aidlc advance <f> reviewed` checks all of it and writes the pre-PR record for HEAD; no `mark-pr-review.py` call.

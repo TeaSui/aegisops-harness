@@ -13,7 +13,7 @@ Pick the best fit and say it. Ask one line only when the choice changes the audi
 
 ## 2. Routing
 
-This skill formats; it never turns trust-boundary work into fast path. If the document covers a trust-boundary item (auth, payments, PII, new endpoint/webhook, new vendor) and `tea-sdlc:security-engineer-subagent` has not run: label it **Working Draft**, add a `Routing / Required Review` section naming the missing gate, never label it Approved or implementation-ready, and save it only on request with `working-draft` in the filename or first heading. Labels: Working Draft → Security-Reviewed (review and any contract gate ran, evidence cited) → Approved (user/team accepted). Never write `security.md` (the Security agent's) or `ui-design.md` here.
+This skill formats; it never turns trust-boundary work into fast path. If the document covers a trust-boundary item (auth, payments, PII, new endpoint/webhook, new vendor) and `tea-sdlc:security-engineer-subagent` has not run: label it **Working Draft**, add a `Routing / Required Review` section naming the missing gate, never label it Approved or implementation-ready, and save it only on request with `working-draft` in the filename or first heading. Labels: Working Draft → Security-Reviewed (review and any contract gate ran, evidence cited) → Approved (user/team accepted). Never write a spec's `### Security` subsection here (the Security agent returns it).
 
 ## 3. Draft
 
@@ -21,7 +21,7 @@ Ground it in the conversation, code, existing `docs/` and upstream artifacts. Fi
 
 | Type | Sections |
 |---|---|
-| BRD | Introduction (Purpose, Scope, Definitions — link `glossary.md` if it exists, list only local terms), Business Background, Business Objectives (BO-n), Stakeholders, Functional Requirements (FR-n), Non-functional (NFR-n), Assumptions, Constraints, Risks, Success Metrics |
+| BRD | Introduction (Purpose, Scope, Definitions — link `GLOSSARY.md` if it exists, list only local terms), Business Background, Business Objectives (BO-n), Stakeholders, Functional Requirements (FR-n), Non-functional (NFR-n), Assumptions, Constraints, Risks, Success Metrics |
 | PRD | Overview, Problem Statement, Goals, User Personas, User Stories, User Flow, Functional Requirements, Edge Cases, Non-functional Requirements, Metrics, Rollout Plan, Risks |
 | FRD | Feature Overview, Business Rules, Inputs, Outputs, Validation Rules (field/required/rule table), Process Flow, Exception Cases (EX-n), Acceptance Criteria (AC-n) |
 | User story | `As a <role> I want <capability> So that <benefit>`; AC-n in Given/When/Then, each observable from outside; one capability per story; link each AC to its FR when derived |
@@ -30,14 +30,7 @@ Ground it in the conversation, code, existing `docs/` and upstream artifacts. Fi
 | Specification | Overview, Scope, Business Flow, User Flow, API Contract, Event Contract, Database Schema, Business Rules, Error Handling, Security, Rollout, Monitoring, Test Cases (TC-n), Open Questions. Contracts exact: field names, types, required, formats. Every HTTP endpoint shows request and both envelopes: `{"data":{…},"meta":{"timestamp":…}}` and `{"error":{"code","message","details":[]}}`; a vendor-forced shape is wrapped at ingress |
 | Concern report | Date, Scope; Summary (overall risk, biggest concern); table Concern / Status / Detail with Status `OK` (say how verified), `MISMATCH` (name the field, contract or consumer), `UNKNOWN` (not verified; never guess OK); Recommended actions, riskiest first, each tied to a row |
 
-**Change-spec requirements** (`docs/specs/<feature>/requirements.md`, parsed by `aidlc`): keyed requirements only, no narrative. `<KEY>` is the README `key:`; IDs are never reused. `US-n`/`AC-n`/`FR-n` are for standalone documents only.
-```
-### KYC-2: Reject unsupported ID image formats
-Acceptance:
-- Given the customer is on the KYC page, when they upload a .docx file, then the upload is rejected with UNSUPPORTED_FORMAT.
-Verify: test
-```
-`Verify:` is `test`, `check — <command or procedure>` or `manual — <reason>`. Criteria in Given/When/Then or EARS. Open questions are not left as markers at approval: `tea-sdlc:spec-check` turns them into guesses that are resolved or accepted as risk.
+**Change spec** (`docs/specs/<feature>/spec.md`, parsed by `aidlc`): the to-spec template in `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2. User story n is `<KEY>-n` (`<KEY>` = README `key:`); numbers are never reused. A story may end `(Verify: check — <command>)`, `(Verify: manual — <reason>)` or `(Verify: none — <reason>)`; default test. Acceptance criteria live on the tickets. `US-n`/`AC-n`/`FR-n` are for standalone documents only. Open questions are not left as markers at approval: grill them with the user (`tea-sdlc:grilling`), or `tea-sdlc:spec-check` turns them into guesses that are resolved or accepted as risk.
 
 ## 4. Save
 
@@ -45,10 +38,10 @@ Return it in the conversation unless it is a spec artifact of the current change
 
 | Type | Path |
 |---|---|
-| Change-spec requirements | `docs/specs/<feature>/requirements.md` |
-| BRD, PRD, FRD, stories | where the user asks; as a spec's `requirements.md`, rewrite as keyed requirements |
-| RFC, Specification | `docs/specs/<feature>/design.md` (≤ ~120 lines; machine contracts in `contracts/`) |
-| ADR | `docs/adr/NNNN-<decision>.md` |
+| Change spec | `docs/specs/<feature>/spec.md` |
+| BRD, PRD, FRD, stories | where the user asks; as a change spec, rewrite into the `spec.md` template |
+| RFC, Specification | where the user asks; for a change, its decisions go into `spec.md` Implementation Decisions (machine contracts in `contracts/`) |
+| ADR | `docs/adr/NNNN-<slug>.md`, only for a hard-to-reverse, surprising, real trade-off |
 | Concern report | `docs/specs/<feature>/concern-report.md` |
 
-Slugs are stable kebab-case, no dates or versions; an `implemented` spec gets a new slug. Lifecycle status lives only in the spec README frontmatter. A strategic subagent (Security, UI/UX) uses its own persistence path and returns the saved path, not the document.
+Slugs are stable kebab-case, no dates or versions; an `implemented` spec gets a new slug. Lifecycle status lives only in the spec README frontmatter. Security and UI/UX return their `spec.md` sections as text; the main session pastes them.

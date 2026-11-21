@@ -33,9 +33,9 @@ b. **One message, parallel, each axis exactly once:**
 
 | Dispatch | Inputs |
 |---|---|
-| `tea-sdlc:code-reviewer`, `AXIS: spec` | `requirements.md`, `design.md`, `contracts/`, output of `aidlc trace <f>`, the scope |
-| `tea-sdlc:code-reviewer`, `AXIS: standards` | `security.md`, project `REVIEW.md` and conventions, the scope |
-| `tea-sdlc:qa-subagent` | `plan.md`, `aidlc trace <f>`, the scope, the running target / base URL when a service is up (authorizes live API checks); its verdict fills `## QA` |
+| `tea-sdlc:code-reviewer`, `AXIS: spec` | `spec.md`, `tickets.md`, cited ADRs, `contracts/`, output of `aidlc trace <f>`, the scope |
+| `tea-sdlc:code-reviewer`, `AXIS: standards` | `spec.md` `### Security`, project `REVIEW.md` and conventions, `GLOSSARY.md`, the scope |
+| `tea-sdlc:qa-subagent` | `spec.md` Testing Decisions, `tickets.md`, `aidlc trace <f>`, the scope, the running target / base URL when a service is up (authorizes live API checks); its verdict fills `## QA` |
 
 Both reviewers get the template `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`; they run on `sonnet` (effort medium; high for a large or trust-boundary diff).
 
@@ -54,7 +54,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> reviewed
 
 On pass the pre-PR record for `HEAD` is written and `gh pr create` is allowed. Leave `review.md`, `README.md`, `ledger.md` uncommitted; `tea-sdlc:shipping` opens the PR from this `HEAD`, then commits them.
 
-g. **Still open after the re-review** → the gate blocks. A decision only the user can make (accept a risk, change a requirement): ask once with the finding and options; the answer closes it as `cleared: accepted by <name> — <reason>`. Real rework: `aidlc advance <f> building --back --reason "<finding>"`.
+g. **Still open after the re-review** → the gate blocks. A decision only the user can make (accept a risk, change a story): ask once with the finding and options; the answer closes it as `cleared: accepted by <name> — <reason>`. Real rework: `aidlc advance <f> building --back --reason "<finding>"`.
 
 Then `tea-sdlc:shipping`.
 

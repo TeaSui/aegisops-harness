@@ -83,12 +83,13 @@ Each suite is a folder in `headless/suites/` with four files: `suite.json` (turn
 - **passive.** A run passes when the session called the `Skill` tool with an expected skill, or the `Agent`/`Task` tool with an expected `subagent_type`. The `tea-sdlc:` prefix is ignored. Allowed tools are read-only, with a turn limit of 8. A tool call is counted even when permissions deny it.
 - **tdd.** The judge orders the tool calls into test edits, production edits (`src/`, not test files, including shell writes), red test runs and green test runs. An edit that a gate blocked counts as nothing. A run passes when a red run comes before the first production edit and a test run comes after the last edit. `score` gives half a point for each of the two conditions.
 - **lifecycle.** The judge scores six artifacts in the fixture's spec folder, one point each, against `references/aidlc.md`:
-  1. spec: a README with `key:`, and requirements with `KEY-n` IDs and acceptance bullets
-  2. `spec-check.md` with no open guess
-  3. a plan graph whose tasks all have covers, depends, owner and files
+  1. spec: a README with `key:`, and `spec.md` (to-spec template, ≥1 numbered user story)
+  2. no open guess: `spec-check.md` closed, or absent (optional for `spec.md`)
+  3. `tickets.md` whose `## T<n>` tickets all have `Covers` and `Blocked by`
   4. `task-done` and `verify … exit=0` ledger events
   5. `review.md` with `## Spec` and `## Standards`
   6. `ship.md` with `decision: GO`, a rollback section and a post-release verification section
+  Legacy `requirements.md`/`plan.md` specs score on the pre-3.3.0 rules.
 
   A run passes when its score reaches the case's `pass_score` (0.67). The judge also reports the stage from `python3 scripts/aidlc.py status --json --repo <fixture>`, the `advance` transitions in the ledger, and gate discipline, which is advances divided by the stages reached. When `scripts/aidlc.py` is missing or prints no JSON, the judge says so and scores from the files alone.
 

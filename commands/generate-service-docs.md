@@ -19,7 +19,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` first. It owns t
   - `docs/specs/`, `docs/adr/` and `docs/plans/`;
   - the legacy role folders (`docs/requirements/`, `docs/security/`, `docs/contracts/`, `docs/design/`, `docs/domain/`, `docs/decisions/`);
   - the authoritative contract source (`api/`, `openapi/`, `proto/`, …).
-- Mermaid for diagrams, `glossary.md` terms, scannable tables and bullets; state assumptions; no filler.
+- Mermaid for diagrams, `GLOSSARY.md` terms, scannable tables and bullets; state assumptions; no filler.
 
 ## 1. Service docs (`<service>/docs/`, layout §2)
 Write `README.md`, `architecture.md`, `business-logic.md`, `api-contracts.md`, `data-model.md`, `events.md`, `security.md`, `configuration.md`, `troubleshooting.md`, `diagrams/` and `adr/`.
@@ -32,12 +32,12 @@ Write `README.md`, `architecture.md`, `business-logic.md`, `api-contracts.md`, `
 - `security.md` describes the current posture and keeps the active security-rule register. Never invent rules; threat models live in specs.
 - `README.md` indexes `specs/` (with `status`) and `adr/` (number, title and status, or "none yet").
 - `adr/`: create it with a `.gitkeep` if it is missing, and remove the `.gitkeep` once real ADRs exist.
-  - Never write, rename or edit an ADR; the main session owns `NNNN-<decision>.md`.
+  - Never write, rename or edit an ADR; the main session owns `NNNN-<slug>.md`.
   - Leave legacy decision folders in place and link them from `README.md`.
   - Report decisions you notice in the code as "candidate ADRs"; never invent ADRs.
 
 ## 2. System docs (`<system-root>/docs/`, layout §3), only when a system root exists
-After all target services: relationships, end-to-end flows, and the master catalogs (APIs, events, topics/queues). Ensure `adr/` exists. `glossary.md` belongs to the main session: add only missing terms the code clearly evidences, and never redefine an entry.
+After all target services: relationships, end-to-end flows, and the master catalogs (APIs, events, topics/queues). Ensure `adr/` exists. `GLOSSARY.md` belongs to the main session: add only missing terms the code clearly evidences, and never redefine an entry.
 
 ## Output
 - The final folder tree.

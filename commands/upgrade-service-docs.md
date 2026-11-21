@@ -8,7 +8,7 @@ Promote a merged change into the living docs and close its spec: the AIDLC promo
 ## Ownership
 - **Change:** `$ARGUMENTS`. If it is missing, infer it from the autopilot note, the current branch, or the specs at `shipped` in `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" status`. Ask only if several remain.
 - **Layout:** read `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` first. It owns the trees (§2, §3), the spec folder (§4) and root resolution (§6.1).
-- **This command owns** the living files and the lifecycle fields of the spec's `README.md`. It never edits the spec's `requirements.md`, `security.md`, `design.md`, `ui-design.md`, `measurement.md`, `contracts/`, `plan.md`, `ledger.md`, `review.md`, `ship.md` or ADRs.
+- **This command owns** the living files and the lifecycle fields of the spec's `README.md`. It never edits the spec's `spec.md`, `tickets.md`, `measurement.md`, `contracts/`, `ledger.md`, `review.md`, `ship.md`, legacy files (`requirements.md`, `security.md`, `design.md`, `plan.md`) or ADRs.
 
 ## Steps
 1. **Resolve** the service root, the system root and the spec folder. With no spec (fast path), skip steps 2, 3 and 7 and compare the code changes with the living docs directly.
@@ -22,12 +22,12 @@ Promote a merged change into the living docs and close its spec: the AIDLC promo
    - `events.md`, `business-logic.md`.
    - `architecture.md`: change Code conventions or Test strategy only if a pattern, framework, runner command or test layout changed.
    - `data-model.md`.
-   - `security.md`: add the spec's implemented rules to the register as `<feature>/<RULE-ID>` with a link to the spec; retire the rules of any superseded spec.
+   - `security.md`: add the implemented rules from the spec's `### Security` (legacy: its `security.md`) to the register as `<feature>/<RULE-ID>` with a link to the spec; retire the rules of any superseded spec.
    - `configuration.md`.
    - `troubleshooting.md`: in Known concerns, add what the change introduced or left pending (from `DONE_WITH_CONCERNS`) and remove what it resolved.
    - `README.md`: the specs index and the ADR index.
 5. **System docs**, when a system root exists, in this order: `03-cross-cutting/all-apis-catalog.md`, `all-events-catalog.md`, `all-topics-and-queues.md`, `02-collaboration/end-to-end-flows.md`, `sequence-diagrams.md`, `integration-points.md`, `01-services/<service>.md`. Update `00-overview/service-map.md` only if service boundaries changed.
-6. **Style.** Use Mermaid for diagrams and terminology from `glossary.md`. Describe current behavior only; link open specs instead of narrating intent.
+6. **Style.** Use Mermaid for diagrams and terminology from `GLOSSARY.md`. Describe current behavior only; link open specs instead of narrating intent.
 7. **Close the spec.**
    - Set README `source_revision` to `<repo>@<sha>` for every affected repo, using a commit that contains the change.
    - Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <spec> implemented`, or `partially-implemented` if the table has pending requirements. Never hand-edit `status:` on an AIDLC spec.
@@ -35,7 +35,7 @@ Promote a merged change into the living docs and close its spec: the AIDLC promo
    - Never rewrite the spec's intent to match what shipped.
 8. **ADRs.**
    - Make sure `adr/` exists: create it with a `.gitkeep`, and at the system root too for a cross-service ADR.
-   - Confirm that every ADR `design.md` links exists. Report a missing one as a gap; never write it.
+   - Confirm that every ADR the spec links exists. Report a missing one as a gap; never write it.
    - Refresh the README ADR index (number, title, status). Record implementation status only in the index, never in the ADR.
    - List decisions you notice in the code that have no ADR as candidate ADRs.
 

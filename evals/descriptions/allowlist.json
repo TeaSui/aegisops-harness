@@ -31,13 +31,6 @@
     },
     {
       "pair": [
-        "spec-check",
-        "writing-plans"
-      ],
-      "reason": "consecutive full-workflow steps over the same spec files: spec-check runs before approval and lists guesses; writing-plans runs after approval and writes plan.md"
-    },
-    {
-      "pair": [
         "systematic-debugging",
         "test-driven-development"
       ],

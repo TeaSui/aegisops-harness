@@ -158,3 +158,4 @@
 {"id": "gap-validate-number", "prompt": "Validate the mobile number field in the signup form code", "forbid": ["validate-feature", "fintech-mobile"], "tags": ["false-friend", "fixed-gap"]}
 {"id": "gap-deploy-script", "prompt": "Fix the deploy script error", "expect": ["systematic-debugging"], "forbid": ["shipping"], "tags": ["false-friend", "fixed-gap"]}
 {"id": "gap-cloudwatch-errors", "prompt": "Add a CloudWatch alarm for Lambda errors", "forbid": ["systematic-debugging"], "tags": ["false-friend", "fixed-gap"]}
+{"id": "intent-grilling", "prompt": "Grill me on the refund design before we write the spec", "expect": ["grilling"], "tags": ["intent"]}

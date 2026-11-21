@@ -27,16 +27,16 @@ Several domains (backend, frontend, mobile, AWS/infra, data pipeline, AI/LLM, De
 
 ## Lean mode: fast path with a security pass
 In the main session, no dispatch:
-1. Before the first edit write 3-6 lines: assets touched, applicable threats (STRIDE / OWASP), controls kept or added. Control catalogue: `tea-sdlc:fintech-security`; honour an existing `docs/specs/<feature>/security.md`.
+1. Before the first edit write 3-6 lines: assets touched, applicable threats (STRIDE / OWASP), controls kept or added. Control catalogue: `tea-sdlc:fintech-security`; honour the security decisions of an existing `docs/specs/<feature>/spec.md`.
 2. Test the security behaviour (authZ denied, input rejected, no PII in logs, idempotent money movement), not only the happy path.
 3. External contract change → `python3 scripts/check-contract.py` on the drafted contract.
 4. The pre-PR review covers security explicitly; the PR description lists the threats checked and any left to the human reviewer.
 
 ## Full workflow (full mode, trust boundary)
 The session runs `python3 scripts/aidlc.py` itself; a stage is entered only via `aidlc advance` when its gate passes. Read only the current stage's part of `references/aidlc.md` (§1 gates, §2 formats, §3 CLI).
-1. **accepted:** clarify; `requirements.md` (acceptance bullets + `Verify:` only); `security.md` (threat table + numbered rules) from tea-sdlc:security-engineer-subagent; `design.md` (≤ ~120 lines) + `contracts/` + `python3 scripts/check-contract.py docs/specs/<feature>` only when a contract or the architecture changes; ONE blind spec check, guesses closed in the spec; one user approval.
-2. **planned:** task graph; every requirement covered; parallel tasks share no file.
-3. **building:** feature branch; `subagent-driven-development` dispatches `aidlc next` batches; `aidlc task-done`; decisions taken instead of asking → `aidlc ruling`.
+1. **accepted:** `spec.md` in the to-spec template (a handed-over one is used verbatim): grill open decisions (`tea-sdlc:grilling`, `GLOSSARY.md`, ADRs only for hard-to-reverse trade-offs); user stories = requirement IDs; Implementation Decisions with a `### Security` subsection from tea-sdlc:security-engineer-subagent; Testing Decisions = the agreed seams (fewest, ideally one); `contracts/` + `python3 scripts/check-contract.py docs/specs/<feature>` only for an external contract; a blind spec check only for an ungrilled spec you wrote; one user approval.
+2. **planned:** `tickets.md`, tracer-bullet vertical slices with `Blocked by`; every story covered; parallel tickets declare disjoint `Files:`.
+3. **building:** feature branch; `subagent-driven-development` builds the `aidlc next` batches (a lone ticket in this session, a disjoint batch dispatched); `aidlc task-done`; decisions taken instead of asking → `aidlc ruling`.
 4. **verified:** `aidlc verify` green at the current fingerprint.
 5. **reviewed:** Spec and Standards axes once each, in parallel with tea-sdlc:qa-subagent; `review.md` = finding lines, each fixed or cleared; then at most ONE diff-only re-review by a single tea-sdlc:code-reviewer with `AXIS: both`, never a second full round.
 6. **shipped:** PR, CI green, `ship.md` (required sections only).
@@ -47,14 +47,14 @@ External contract change = HTTP/RPC API, event, shared schema or public library 
 ## Mid-execution promotion
 Re-classify when scope grows; promotion is mandatory.
 - Fast path hits a trust boundary → stop. Full mode: `aidlc init`, run from `proposed` (cite done work in the plan), dispatch Security on the unmerged work and apply its rules before more code. Lean: do the security pass on the work so far first.
-- Full workflow gains a domain → add its tasks, `aidlc check <feature> --to planned`, reuse Security output, re-run the contract gate if the contract grows; new requirements get one blind spec-check pass over the new requirements only, then approval.
+- Full workflow gains a domain → add its stories and tickets, `aidlc check <feature> --to planned`, extend the Security subsection, re-run the contract gate if the contract grows; new stories get one approval (and one blind pass over them only when not grilled).
 
 ## Escape hatch (full mode)
 A trust-boundary change may take the fast path with TDD only if ALL hold:
 1. ≤ 30 lines of production code across ≤ 3 files (tests excluded).
 2. No new endpoint, external surface, dependency, schema or migration.
 3. The trigger is a touch, not a new decision (renaming a field already classified as PII, not adding one).
-4. An existing Security rule or threat model covers the path; cite it (default `docs/specs/<feature>/security.md`).
+4. An existing Security rule or threat model covers the path; cite it (default the `### Security` subsection of `docs/specs/<feature>/spec.md`).
 
 Commit message: `Escape hatch applied: <cite rule>`. Any condition fails → full workflow. This wins over any other skip list for Security.
 

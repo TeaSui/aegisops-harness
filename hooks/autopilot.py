@@ -117,6 +117,7 @@ INTENTS = (
     ('goal', rx(r'(^|\s)/goal\b|\bend[- ]to[- ]end\b|\bhandle (it|everything|the whole)\b|\buntil (it\'?s )?done\b|'
                 r'\bautonomous(ly)?\b')),
     ('clarify', rx(r'\bask me (\w+ )?(questions )?first\b|\bclarifying questions\b')),
+    ('grilling', rx(r'\bgrill(ing)? (me|it|this|the \w+)\b|\bgrill-?me\b|\binterview me\b')),
     ('expert-lens', rx(r'\bwhat would (an? )?(expert|senior|staff|principal|top \w+)\b|\bhow do the best\b')),
     ('reframe', rx(r'\b(devil\'?s advocate|challenge (this|my)|what am i missing|poke holes|second opinion)\b')),
     ('writing-software-docs', rx(r'\b(write|draft|create|prepare)\b[^.\n→]{0,25}'
@@ -147,10 +148,12 @@ INTENTS = (
                                           r'|\bmerge (it|this|the branch)\b')),
     ('prove-it', rx(r'\b(are you sure|really (done|fixed|working)|prove it|double[- ]check)\b')),
 )
+# A spec in the to-spec template pasted into the prompt (references/aidlc.md §2 spec.md).
+HANDED_SPEC = re.compile(r'^\W{0,4}problem statement\W*$(?s:.*)^\W{0,4}user stories\W*$', re.I | re.M)
 LIFECYCLE_STATUS = rx(r'\b(where are we|what\'?s next|what is next|which stage|status of (the|this) (feature|spec|change))\b')
 
 # Intents that frame the whole task run before brainstorming; the others follow the change workflow.
-OPENERS = ('goal', 'clarify', 'expert-lens', 'reframe')
+OPENERS = ('goal', 'clarify', 'grilling', 'expert-lens', 'reframe')
 # Intents that still apply when the prompt is a question; the rest ask for work to be done.
 CONVERSATIONAL = OPENERS + ('prove-it', 'find-docs')
 
@@ -193,6 +196,8 @@ def route(prompt, rules_dir):
         change = match_word(CHANGE, text)
         if not is_code_work(text, debug):
             change = None
+        if not change and HANDED_SPEC.search(text):
+            change = 'a spec to build'
         if change or debug:
             trust = [(label, hit) for label, pattern in TRUST if (hit := match_word(pattern, text))]
     status_question = bool(LIFECYCLE_STATUS.search(text))
@@ -233,6 +238,15 @@ def route(prompt, rules_dir):
     if full and any(name == 'fintech-security' for name, _ in domains):
         lines.append('Threat models are produced by tea-sdlc:security-engineer-subagent (Full workflow); the skill is its '
                      'rule catalogue, not a replacement for that dispatch.')
+    if (change or debug) and HANDED_SPEC.search(text):
+        ready = 'ready-for-agent' in text.lower()
+        lines.append('Spec handed over (to-spec template): it is the spec. '
+                     + ('Full mode: save it verbatim as docs/specs/<feature>/spec.md, change only what the accepted '
+                        'gate rejects, no rewrite into other files. ' if full else
+                        'Lean: save it verbatim as docs/specs/<feature>/spec.md (no README, ledger or gates) and '
+                        'build from it. ')
+                     + 'Slice tickets from its stories, test at its Testing Decisions seams, do not re-ask what it '
+                       'decides' + ('; Status ready-for-agent: no grilling.' if ready else '.'))
     if 'finishing-a-development-branch' in chain:
         lines.append(f'Before the PR: the single pass in {rules_dir}/pre-pr-review.md, recorded with '
                      f'{PLUGIN_ROOT}/scripts/mark-pr-review.py.')
@@ -394,6 +408,16 @@ def stop(payload, session, cwd):
 # ---------------------------------------------------------------------------------------------------------------
 
 def plan_progress(path):
+    """(done, total) tickets in tickets.md (`Status: done`), or ticked tasks in a legacy plan.md."""
+    tickets = path.parent / 'tickets.md' if path.name == 'plan.md' else path
+    try:
+        text = tickets.read_text(errors='replace')
+        total = len(re.findall(r'^##\s+T\d+\b', text, re.M))
+        done = len(re.findall(r'^\s*\**Status\**\s*:\**\s*done\b', text, re.M | re.I))
+        if total:
+            return min(done, total), total
+    except OSError:
+        pass
     try:
         text = path.read_text(errors='replace')
     except OSError:
@@ -405,12 +429,12 @@ def plan_progress(path):
 
 # What each stage needs next, and the skill that does it (references/aidlc.md).
 NEXT_STEP = {
-    'proposed': 'finish the spec (keyed requirements, security, design/contracts), run tea-sdlc:spec-check, get the '
-                'one approval, then `aidlc advance <spec> accepted`',
-    'accepted': 'plan the task graph with tea-sdlc:writing-plans, then `aidlc advance <spec> planned`',
+    'proposed': 'finish spec.md (the template: stories, decisions incl. Security, testing seams), get the one '
+                'approval, then `aidlc advance <spec> accepted`',
+    'accepted': 'slice tickets.md with tea-sdlc:writing-plans, then `aidlc advance <spec> planned`',
     'planned': '`aidlc advance <spec> building` on a feature branch, then build the `aidlc next` batches '
                '(tea-sdlc:subagent-driven-development)',
-    'building': 'build the `aidlc next` batches; finish tasks with `aidlc task-done`; then `aidlc verify` and advance',
+    'building': 'build the `aidlc next` batches; finish tickets with `aidlc task-done`; then `aidlc verify` and advance',
     'verified': 'two-axis review + QA into review.md (tea-sdlc:requesting-code-review), `aidlc stamp <spec> review`, '
                 'then advance',
     'reviewed': 'ship stage (tea-sdlc:shipping): PR, CI, ship.md, `aidlc advance <spec> shipped`, merge',
@@ -481,7 +505,7 @@ def spec_lines(root):
         rel = display_path(str(path), root)
         stage = row['stage']
         progress = plan_progress(path / 'plan.md')
-        detail = f', plan {progress[0]}/{progress[1]} tasks done' if progress else ''
+        detail = f', {progress[0]}/{progress[1]} tickets done' if progress else ''
         if row.get('legacy'):
             detail += ' (legacy: no key, not gated)'
         elif row.get('blockers'):

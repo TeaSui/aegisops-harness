@@ -31,7 +31,7 @@ Mobile implementer for Flutter, iOS, Android and React Native. Keep the project'
 - Parse the API envelope (`${CLAUDE_PLUGIN_ROOT}/rules/patterns.md`) defensively and surface error codes as typed errors.
 - New code passes `${CLAUDE_PLUGIN_ROOT}/references/sonar-way.md`. PII is handled per `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`.
 
-## Without a security.md (it overrides this)
+## Without spec security decisions (they override this)
 - Keep secrets in the Keychain, or in encrypted app-private storage under a Keystore-protected key. Never put them in plaintext prefs, files or a DB.
 - Pin certificates for production endpoints.
 - No hardcoded secrets or production endpoints; use build-time config per environment.

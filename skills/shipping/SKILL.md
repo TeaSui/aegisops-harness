@@ -53,7 +53,7 @@ Only the required sections:
 Real CI failure, QA `NO-GO`, code changed after review, or a conflict needing code:
 1. `decision: NO-GO` with the reason in `## Checks`.
 2. `aidlc advance <f> building --back --reason "<why>"`.
-3. Fix via `tea-sdlc:subagent-driven-development` (new work = new `plan.md` task), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`tea-sdlc:requesting-code-review` §2a re-entry), stamp, advance `reviewed`, return here.
+3. Fix via `tea-sdlc:subagent-driven-development` (new work = new `tickets.md` ticket), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`tea-sdlc:requesting-code-review` §2a re-entry), stamp, advance `reviewed`, return here.
 
 ## Report
 
