@@ -1,6 +1,8 @@
 ---
 name: build
-description: Use in the full workflow once the spec is `planned` (tickets.md passes its gate), to run the build stage in this session — dispatch each ready batch of tickets from `aidlc next` (in parallel when they declare disjoint files), review every ticket, finish tickets only through `aidlc task-done`, then record the full test run with `aidlc verify` and advance the spec to `verified`. Also when resuming saved tickets or a docs/plans/*.md plan after a new session, /clear or compaction, without redoing finished work.
+description: Stage 3 of the backend lifecycle — build the tickets of a planned spec test-first at the spec's seams, a lone ticket in this session and disjoint batches through tea-sdlc:backend-engineer-subagent, finishing each through aidlc task-done; also resumes a build after /clear or in a new session.
+argument-hint: "[spec slug]"
+disable-model-invocation: true
 ---
 
 # Build stage: build the tickets
@@ -11,7 +13,7 @@ description: Use in the full workflow once the spec is `planned` (tickets.md pas
 
 Resuming: keep the original goal, constraints and decisions; never redo a ticket at `Status: done`. `aidlc status` (or the session-start snapshot) gives the stage and the next-gate blockers; at `building`, go straight to §2.
 
-1. `aidlc status`: spec at `planned`, `building` gate passing; otherwise run the missing stage first (`tea-sdlc:spec`, `tea-sdlc:plan`).
+1. `aidlc status`: spec at `planned`, `building` gate passing; otherwise run the missing stage first (`/tea-sdlc:spec`, `/tea-sdlc:plan`).
 2. On a feature branch, not the default (`git switch -c feat/<slug>` if needed; no need to ask).
 3. `aidlc advance <f> building`.
 
@@ -19,8 +21,8 @@ Resuming: keep the original goal, constraints and decisions; never redo a ticket
 
 Until `aidlc next <f> --json` returns no ticket:
 
-- **Batch of one** (a ticket without `Files:`, the common case): build it yourself in this session with `tea-sdlc:test-driven-development` at the spec's seams, unless its `Owner:` names an agent.
-- **Wider batch** (tickets declaring disjoint `Files:`): dispatch it in ONE message, one Agent call per ticket. Agent = the ticket's `Owner:`, else the domain agent for its files (`${CLAUDE_PLUGIN_ROOT}/rules/agents.md`).
+- **Batch of one** (a ticket without `Files:`, the common case): build it yourself in this session: Read `${CLAUDE_PLUGIN_ROOT}/skills/test-driven-development/SKILL.md` and the stack skills `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` names for this repository, then test-first at the spec's seams, unless its `Owner:` names an agent.
+- **Wider batch** (tickets declaring disjoint `Files:`): dispatch it in ONE message, one Agent call per ticket. Agent = the ticket's `Owner:`, else `tea-sdlc:backend-engineer-subagent`.
 - **Prompt:** `${CLAUDE_PLUGIN_ROOT}/skills/build/implementer-prompt.md` with the ticket verbatim, the covered stories copied from `spec.md`, the paths of `spec.md` (Implementation and Testing Decisions, `### Security`), `GLOSSARY.md`, cited ADRs and `contracts/`, the matching rulings from `ledger.md`, and the exit command (`Test:`).
 - Owned paths = the ticket's `Files:`. Tests are named with the story ID they prove (`RFD-1 rejects over-capture`) so the gate and `aidlc trace` find them. Each acceptance checkbox is ticked when a test shows it.
 
@@ -57,22 +59,14 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" ruling <f> --task T<n> \
 
 Ask the user only for: changing a story or decision, accepting a security risk, a new vendor or paid dependency, a scope change, anything irreversible in production. List every ruling in the final report.
 
-## 4. Verify and advance
+## 4. Done
 
-1. No ticket left → bump the release version if a manifest holds it (`package.json`, `pyproject.toml`, `plugin.json`, `VERSION`; semver from the change; skip when release tooling owns it). Do it now: a manifest change after `verify` invalidates the evidence.
-2. Run the full suite through the CLI (`--junit` when the runner writes JUnit XML, so the gate sees failing story tests), then advance:
+Every ticket `Status: done` and committed → `/tea-sdlc:verify` (inside `/tea-sdlc:aidlc`: continue). Do not run `aidlc verify` here.
 
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full test suite>" --junit "<junit glob>"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> verified
-```
+## 5. Rules for every batch
 
-3. Gate fails → `aidlc check <f> --to verified` names it (open ticket or criterion, `Verify: test` story no test references, failing story test, code changed after `verify`). Fix (code fixes go to the owning agent) and retry.
-
-Then the review stage: `tea-sdlc:review`, then `tea-sdlc:ship`.
-
-## 5. Plans outside a spec (`docs/plans/*.md`)
-
-Continue from the first open `- [ ] Task N:` in dependency order; tick `- [x]` when its exit check passes. Full mode dispatches as in §2; lean mode implements here. Deliver as already authorized (`tea-sdlc:finishing-a-development-branch`). Bound fix and review attempts per `${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`.
+- Never move a ticket to an earlier batch or merge batches; a ticket that needs another ticket's file is a plan change (edit `tickets.md`, `aidlc check <f> --to planned`).
+- After a parallel batch: check the agents did not edit the same code, run the affected tests, spot-check the diffs (agents make systematic errors), then integrate.
+- Open questions an implementer returns as NEEDS_CONTEXT: answer through `references/aidlc.md` §0 (files, Rovo, recorded ruling), then re-dispatch. Bound fix and review attempts per `${CLAUDE_PLUGIN_ROOT}/rules/review-loop-limits.md`.
 
 Use an isolated checkout only when needed and supported; preserve user changes; never init a repository or commit generated files unasked. Missing runtime or gates are reported as concerns or blockers, not replaced by static inspection. Report outcome, gate output and ledger events, rulings, next stage.

@@ -3,27 +3,6 @@
   "pairs": [
     {
       "pair": [
-        "fintech-mobile",
-        "frontend-react"
-      ],
-      "reason": "same fintech UI vocabulary (KYC, transactions, secure display) on different platforms: frontend-react says web/browser and excludes React Native; fintech-mobile says Flutter/iOS/Android apps and excludes mobile-number fields in web code"
-    },
-    {
-      "pair": [
-        "dispatching-parallel-agents",
-        "build"
-      ],
-      "reason": "both dispatch subagents: dispatching-parallel-agents runs independent investigations or ad-hoc parallel tasks and points to build for the full-workflow build; build owns the build stage of a planned spec"
-    },
-    {
-      "pair": [
-        "review",
-        "build"
-      ],
-      "reason": "consecutive AIDLC stages sharing aidlc verbs: build ends at `verified`; review starts when a spec reaches `verified` (or on a review request) and ends at `reviewed`"
-    },
-    {
-      "pair": [
         "generate-service-docs",
         "upgrade-service-docs"
       ],
@@ -38,10 +17,17 @@
     },
     {
       "pair": [
-        "finishing-a-development-branch",
-        "ship"
+        "aidlc",
+        "spec"
       ],
-      "reason": "both deliver a branch (PR, merge, 'ship it'); they split by tier and each description points to the other: ship owns a reviewed full-workflow spec (ship.md, ship gate), finishing-a-development-branch owns fast-path or non-spec work. The router sends a bare 'ship it' to ship only, while finishing-a-development-branch still lists 'ship it' as a trigger phrase"
+      "reason": "aidlc runs every stage and starts with spec; both take a request or a pasted to-spec spec. aidlc says whole lifecycle and resume by slug; spec says stage 1 and ends at accepted."
+    },
+    {
+      "pair": [
+        "ship",
+        "upgrade-service-docs"
+      ],
+      "reason": "consecutive steps around a merge: ship opens the PR and reaches shipped (merge on request); upgrade-service-docs runs after the merge and moves the spec to implemented."
     }
   ]
 }

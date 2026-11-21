@@ -1,15 +1,16 @@
 ---
 name: ship
-description: Use when a reviewed full-workflow change is ready to release, merge or deploy, or the user says ship it, release or deploy — opens the PR if none is open, waits for CI, confirms the version and writes the changelog per the project's convention, writes ship.md (GO/NO-GO, rollback, post-release verification), advances the spec to `shipped`, merges through the ship gate, runs the post-release verification and promotes the spec with upgrade-service-docs. Fast-path or non-spec work goes to finishing-a-development-branch.
+description: Stage 6 of the backend lifecycle (/tea-sdlc:ship, run by /tea-sdlc:aidlc) — for a spec at reviewed, opens the PR, waits for CI, writes the changelog per the project's convention and ship.md (GO/NO-GO, rollback, post-release verification), advances to shipped, merges through the ship gate on request and promotes the spec with /tea-sdlc:upgrade-service-docs. no-spec.md delivers /tea-sdlc:fix work.
+disable-model-invocation: true
 ---
 
 # Ship stage
 
 `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run every step yourself. Gate and `ship.md` format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §1 (`shipped` row) and §2 `ship.md`.
 
-**Applies** when `aidlc status` shows the branch's spec at `reviewed` (or `shipped`, to resume). Earlier stage → `tea-sdlc:review` first. No spec or fast path → `tea-sdlc:finishing-a-development-branch`.
+**Applies** when `aidlc status` shows the branch's spec at `reviewed` (or `shipped`, to resume). Earlier stage → `/tea-sdlc:review` first. No spec (`/tea-sdlc:fix`) → `skills/ship/no-spec.md`.
 
-**User consent.** Merge and deploy only when the request covers delivery ("ship it", "merge", "release", "deploy", a `tea-sdlc:goal` hand-off). Otherwise stop after step 5 and ask once whether to merge.
+**User consent.** Merge and deploy only when the request covers delivery ("ship it", "merge", "release", "deploy", a `/tea-sdlc:aidlc` hand-off). Otherwise stop after step 5 and ask once whether to merge.
 
 ## 1. PR
 
@@ -45,15 +46,15 @@ Only the required sections:
 
 1. Merge with the repository's method (`gh pr merge <pr> --squash` or as configured). The `ship-gate` hook blocks until the `shipped` gate passes; fix what it reports and retry.
 2. Release through the project's deploy path; wait for and read its result.
-3. Run each post-release check and append results (command, outcome, time) under `## Post-release verification`. On failure, tell the user what failed and the rollback; roll back production only on their word unless `ship.md` makes it automatic. After a rollback load `tea-sdlc:incident-to-eval`.
-4. On the merge target branch, run `upgrade-service-docs` (traceability, spec → `implemented` or `partially-implemented`).
+3. Run each post-release check and append results (command, outcome, time) under `## Post-release verification`. On failure, tell the user what failed and the rollback; roll back production only on their word unless `ship.md` makes it automatic. After a rollback, add a regression test for the defect with `/tea-sdlc:fix`.
+4. On the merge target branch, follow `${CLAUDE_PLUGIN_ROOT}/commands/upgrade-service-docs.md` (traceability, spec → `implemented` or `partially-implemented`).
 
 ## 7. NO-GO
 
 Real CI failure, QA `NO-GO`, code changed after review, or a conflict needing code:
 1. `decision: NO-GO` with the reason in `## Checks`.
 2. `aidlc advance <f> building --back --reason "<why>"`.
-3. Fix via `tea-sdlc:build` (new work = new `tickets.md` ticket), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`tea-sdlc:review` §2a re-entry), stamp, advance `reviewed`, return here.
+3. Fix via `/tea-sdlc:build` (new work = new `tickets.md` ticket), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`/tea-sdlc:review` §2a re-entry), stamp, advance `reviewed`, return here.
 
 ## Report
 

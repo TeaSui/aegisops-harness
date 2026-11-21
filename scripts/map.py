@@ -4,10 +4,9 @@
   python3 scripts/map.py           write HOW-IT-WORKS.md
   python3 scripts/map.py --check   exit 1 when HOW-IT-WORKS.md is stale (scripts/check-setup.py runs this)
 
-Sources: skills/*/SKILL.md, agents/*.md and commands/*.md frontmatter, hooks/hooks.json, the router tables in
-hooks/autopilot.py. PHASES below is the only hand-kept grouping; check-setup fails when a skill is in no phase.
+Sources: skills/*/SKILL.md, agents/*.md and commands/*.md frontmatter. COMMANDS and SUPPORT below are the only
+hand-kept grouping; check-setup fails when a skill is in neither.
 """
-import importlib.util
 import json
 import pathlib
 import re
@@ -16,52 +15,65 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / 'HOW-IT-WORKS.md'
 
-# Phase → skills, in lifecycle order (the stages of references/aidlc.md, the order work actually happens in).
-PHASES = (
-    ('Define', 'what to build and why', (
-        'spec', 'grilling', 'clarify', 'goal', 'expert-lens', 'reframe', 'spec-check', 'writing-software-docs',
-        'measurement-planning')),
-    ('Plan', 'slices and order', ('plan',)),
-    ('Build', 'code, test-first', (
-        'test-driven-development', 'build', 'build', 'dispatching-parallel-agents')),
-    ('Verify', 'prove it works', (
-        'verification-before-completion', 'systematic-debugging', 'validate-feature', 'grounding-claims', 'find-docs')),
-    ('Review', 'a second pair of eyes', ('review', 'receiving-code-review')),
-    ('Ship', 'PR, release, learn', ('ship', 'finishing-a-development-branch', 'incident-to-eval')),
-    ('Domain', 'loaded when the stack shows up', (
-        'fintech-security', 'fintech-mobile', 'backend-languages', 'database-patterns', 'messaging-patterns',
-        'data-pipeline-patterns', 'frontend-react', 'api-contract-testing', 'bdd-cucumber', 'cdk-testing',
-        'observability')),
-    ('Meta', 'always on', ('session-bootstrap',)),
+# Situation → command → what it loads. The only hand-kept part; check-setup fails when a skill is in no row.
+COMMANDS = (
+    ('New backend feature or behaviour change (a request or a pasted to-spec spec)', 'aidlc',
+     ('spec', 'plan', 'build', 'verify', 'review', 'ship')),
+    ('Open decisions; interview me before the spec', 'grilling', ()),
+    ('Stage 1: spec.md, security, the one approval', 'spec', ('fintech-security',)),
+    ('Stage 2: tickets (vertical slices)', 'plan', ()),
+    ('Stage 3: build the tickets test-first', 'build', ('test-driven-development', 'systematic-debugging')),
+    ('Stage 4: full suite, trace, placeholders → verified', 'verify', ()),
+    ('Stage 5: Spec + Standards review and QA → reviewed', 'review', ()),
+    ('Stage 6: PR, CI, ship.md → shipped (merge on request)', 'ship', ()),
+    ('Bug fix or small change with no new decision', 'fix',
+     ('systematic-debugging', 'test-driven-development', 'verify', 'review', 'ship')),
+    ('Review comments arrived', 'receiving-code-review', ('test-driven-development', 'verify')),
+    ('Challenge a plan or a belief', 'reframe', ()),
+    ('What a top practitioner would do', 'expert-lens', ()),
+)
+# Support skills: never invoked by name; a stage Reads them when the repository (or the change) calls for them.
+SUPPORT = (
+    ('test-driven-development', 'build, fix: before any production code'),
+    ('systematic-debugging', 'fix; build when a test fails for an unexplained reason or a fix fails twice'),
+    ('grounding-claims', 'every stage: before a factual claim'),
+    ('find-docs', 'every stage: before relying on a library or cloud-service detail'),
+    ('fintech-security', 'spec and fix: when the trust-boundary check says yes'),
+    ('backend-languages', 'build.gradle, pom.xml, go.mod, Cargo.toml or a Python web framework'),
+    ('database-patterns', 'SQL migrations, ORM entities, DynamoDB or Redis clients'),
+    ('messaging-patterns', 'Kafka, RabbitMQ, SQS, SNS or EventBridge clients, an outbox table'),
+    ('api-contract-testing', 'OpenAPI, AsyncAPI, proto files or Pact'),
+    ('bdd-cucumber', '*.feature files, Cucumber or godog'),
+    ('cdk-testing', 'cdk.json'),
+    ('observability', 'dd-trace, dd-java-agent or DogStatsD dependencies'),
+    ('session-bootstrap', 'injected at every session start by hooks/session-start'),
 )
 
 # Hook script → what it does to the session (one line each; the script's docstring has the detail).
 GATES = (
-    ('session-start', 'SessionStart', 'injects the bootstrap (tier rules, mode, open specs)'),
-    ('autopilot.py', 'UserPromptSubmit', 'reads the prompt, names the skills to load, the tier and the mode'),
-    ('autopilot.py', 'Stop, SubagentStart, PostToolUse', 'follow-up notes: verify before "done", docs after merge'),
+    ('session-start', 'SessionStart', 'injects the command list and the stage + next command of every open spec'),
+    ('autopilot.py', 'SubagentStart', 'the rules every dispatched subagent follows'),
+    ('autopilot.py', 'Stop', 'code changed since the last test run → run the tests (once per change set)'),
     ('tdd-gate.py', 'Edit / Write', 'first production edit needs a failing test run first (asks once)'),
     ('contract-gate.py', 'Edit / Write / Bash', 'external API contract must pass check-contract.py (advisory)'),
     ('security-gate.py', 'git commit / push', 'blocked while gitleaks finds a secret'),
     ('pr-review-gate.py', 'gh pr create', 'blocked until the pre-PR review is recorded for HEAD with 0 open findings'),
-    ('ship-gate.py', 'gh pr merge', 'blocked until the branch\'s spec passes the `shipped` gate (full mode)'),
+    ('ship-gate.py', 'gh pr merge', 'blocked until the branch\'s spec passes the `shipped` gate'),
 )
 
 GLOSSARY = (
-    ('Trust boundary', 'PII or money, auth/session/permissions, a new public endpoint, a new vendor, secrets or '
-                       'security config. Unsure counts as yes.'),
-    ('Lean mode', 'default. Everything in the main session, no subagents; a trust boundary gets a security pass.'),
-    ('Full mode', '`TEA_SDLC_WORKFLOW=full` or asked for: the AIDLC lifecycle with gates and specialist agents.'),
-    ('Fast path', 'TDD + verification + one pre-PR review. No spec files.'),
-    ('Security pass', '3-6 lines of assets, threats, controls before the first edit; tests for them; threats in the PR.'),
+    ('Command', 'the only way tea-sdlc starts: `/tea-sdlc:<name>`. Every skill has `disable-model-invocation: true`.'),
     ('AIDLC', 'proposed → accepted → planned → building → verified → reviewed → shipped → implemented; '
               '`scripts/aidlc.py advance` moves a stage only when its gate passes.'),
+    ('Trust boundary', 'PII or money, auth/session/permissions, a new public endpoint, a new vendor, secrets or '
+                       'security config. Unsure counts as yes.'),
+    ('Rovo first', 'a business question goes to files, then Atlassian Rovo, then a recorded assumption; a person only '
+                   'for risk, money/regulatory, irreversible or contradictory cases (`references/aidlc.md` §0).'),
     ('spec.md', 'the to-spec template: Problem, Solution, numbered User Stories, Implementation Decisions '
-                '(incl. Security), Testing Decisions, Out of Scope, Further Notes.'),
+                '(incl. Security), Testing Decisions, Out of Scope, Further Notes (Sources, Assumptions).'),
     ('Story ID', 'user story n of a spec with `key: RFD` is `RFD-n`; tests name it so `aidlc trace` can find them.'),
     ('Ticket', 'one tracer-bullet vertical slice in tickets.md, with Blocked by, Covers and acceptance checkboxes.'),
     ('Seam', 'the public interface tests go through; the fewer the better, agreed in Testing Decisions.'),
-    ('Grilling', 'one-question-at-a-time interview; terms go to GLOSSARY.md, hard-to-reverse decisions to ADRs.'),
     ('Gate', 'a hook or `aidlc` check that blocks the next step until its evidence exists.'),
 )
 
@@ -92,92 +104,60 @@ def gist(description, limit=120):
     return text if len(text) <= limit else text[:limit].rsplit(' ', 1)[0] + ' …'
 
 
-def router_names():
-    spec = importlib.util.spec_from_file_location('autopilot_map', ROOT / 'hooks' / 'autopilot.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    names = {name: 'keyword' for name, _ in module.INTENTS}
-    names.update({name: 'stack keyword' for name, _ in module.DOMAINS})
-    names.update({name: 'every code change' for name in ('spec', 'test-driven-development')})
-    names['systematic-debugging'] = 'bug or error'
-    names['session-bootstrap'] = 'session start'
-    return names
-
-
 def unphased():
-    phased = {s for _, _, skills in PHASES for s in skills}
+    listed = {name for _, cmd, loads in COMMANDS for name in (cmd, *loads)} | {name for name, _ in SUPPORT}
     present = {p.parent.name for p in (ROOT / 'skills').glob('*/SKILL.md')}
-    return sorted(present - phased), sorted(phased - present)
+    return sorted(present - listed), sorted(listed - present)
 
 
 def render():
-    auto = router_names()
     skills = {p.parent.name: frontmatter(p) for p in sorted((ROOT / 'skills').glob('*/SKILL.md'))}
     agents = {p.stem: frontmatter(p) for p in sorted((ROOT / 'agents').glob('*.md'))}
     commands = {p.stem: frontmatter(p) for p in sorted((ROOT / 'commands').glob('*.md'))}
     out = ['# How tea-sdlc works', '',
            '<!-- Generated by scripts/map.py from the plugin sources. Do not edit; run `python3 scripts/map.py`. -->',
-           '', 'One page for people. The skills themselves are written for the model: short, imperative, loaded only '
-           'when needed. Start here, open a skill only when you want its exact rules.', '',
-           '## One request, end to end', '', '```text',
-           'you type a request',
-           '  │  UserPromptSubmit hook (autopilot.py): skills to load, tier, mode',
-           '  ▼',
-           'Define   spec ────────── trust boundary? ── no ──▶ fast path: TDD → verify → one review → PR',
-           '  │                          │ yes',
-           '  │                lean (default): security pass, still one session, no subagents',
-           '  │                full: spec.md (grilling, Security) ── approval',
-           '  ▼',
-           'Plan     tickets.md: vertical slices                       (full)',
-           'Build    TDD at the seams, one ticket at a time            (gate: failing test first)',
-           'Verify   aidlc verify: full suite green on this code',
-           'Review   spec axis + standards axis, findings closed       (gate: gh pr create)',
-           'Ship     PR, CI green, ship.md                             (gate: gh pr merge)',
+           '', 'tea-sdlc starts only from a slash command. No prompt keyword starts anything, and the model cannot load '
+           'a tea-sdlc skill on its own. Inside a command, each stage is a fixed file and support skills are chosen from '
+           'the repository\'s files.', '',
+           '## The lifecycle', '', '```text',
+           '/tea-sdlc:aidlc <request or pasted spec>     (or each stage on its own)',
+           '  spec     spec.md: stories, decisions, Security, seams      ── one approval (skipped: ready-for-agent)',
+           '  plan     tickets.md: vertical slices                        gate: every story covered',
+           '  build    TDD at the seams, ticket by ticket                 gate: failing test before code',
+           '  verify   full suite at this code, stories traced           gate: aidlc verify green',
+           '  review   Spec + Standards axes, QA                          gate: gh pr create',
+           '  ship     PR, CI green, ship.md                             gate: gh pr merge',
+           'questions on the way: files → Atlassian Rovo → recorded assumption → (rarely) you',
            '```', '',
-           '## Two modes', '',
-           '| | Lean (default) | Full (`TEA_SDLC_WORKFLOW=full`, or "full workflow" in the prompt) |',
-           '|---|---|---|',
-           '| Who works | the main session only | the main session plus specialist agents |',
-           '| Trust boundary | security pass, threats listed in the PR | AIDLC lifecycle with a gate at every stage |',
-           '| Files per task | none (a handed-over spec is saved as `spec.md`) | `docs/specs/<feature>/` below |',
-           '| Typical cost | about $1 per feature | about $6-8 per feature |', '',
-           '## Skills by phase', '',
-           '| Phase | Skill | Use it for | Loads by itself on |', '|---|---|---|---|']
-    for phase, purpose, names in PHASES:
-        first = True
-        for name in names:
-            meta = skills.get(name)
-            if meta is None:
-                continue
-            label = f'**{phase}** · {purpose}' if first else ''
-            out.append(f'| {label} | `{name}` | {gist(meta.get("description", ""))} | '
-                       f'{auto.get(name, "named by another skill")} |')
-            first = False
-    out += ['', '## Agents (full mode only)', '', '| Agent | Job |', '|---|---|']
+           '## Situation → command → what it loads', '',
+           '| Situation | Command | Loads, in order |', '|---|---|---|']
+    for situation, cmd, loads in COMMANDS:
+        out.append(f'| {situation} | `/tea-sdlc:{cmd}` | {" → ".join(f"`{x}`" for x in loads) or "—"} |')
+    out += [f'| {gist(meta.get("description", ""), 90)} | `/tea-sdlc:{name}` | — |' for name, meta in commands.items()]
+    out += ['', '## Support skills (never invoked by name)', '', '| Skill | Read when |', '|---|---|']
+    out += [f'| `{name}` | {when} |' for name, when in SUPPORT if name in skills]
+    out += ['', '## Agents', '', '| Agent | Job |', '|---|---|']
     out += [f'| `tea-sdlc:{name}` ({meta.get("model", "inherit")}) | {gist(meta.get("description", ""), 110)} |'
             for name, meta in agents.items()]
-    out += ['', '## Commands (optional shortcuts; the autopilot runs them for you)', '', '| Command | Does |',
-            '|---|---|']
-    out += [f'| `/{name}` | {gist(meta.get("description", ""), 110)} |' for name, meta in commands.items()]
-    out += ['', '## Gates', '', '| Hook | Fires on | Effect |', '|---|---|---|']
+    out += ['', '## Gates (on in every session)', '', '| Hook | Fires on | Effect |', '|---|---|---|']
     out += [f'| `hooks/{script}` | {event} | {effect} |' for script, event, effect in GATES]
-    out += ['', '## Files one full-mode task leaves behind', '', '| File | Read it? | What |', '|---|---|---|',
-            '| `docs/specs/<feature>/spec.md` | yes | what and why: stories, decisions, security, seams |',
+    out += ['', '## Files one feature leaves behind', '', '| File | Read it? | What |', '|---|---|---|',
+            '| `docs/specs/<feature>/spec.md` | yes | what and why: stories, decisions, security, seams, sources |',
             '| `docs/specs/<feature>/tickets.md` | when planning | the slices and their order |',
             '| `GLOSSARY.md`, `docs/adr/` | when a term or decision is unclear | domain words; hard-to-reverse choices |',
             '| the pull request | yes | the change, the threats checked, the review |',
             '| `README.md`, `ledger.md`, `review.md`, `ship.md` in the spec folder | no | evidence the gates check |',
             '', '## Words', '', '| Term | Meaning |', '|---|---|']
     out += [f'| {term} | {meaning} |' for term, meaning in GLOSSARY]
-    out += ['', 'Exact rules: `rules/workflow-routing.md` (tiers), `references/aidlc.md` (lifecycle formats and gates), '
-            '`skills/session-bootstrap/SKILL.md` (what every session starts with).', '']
+    out += ['', 'Exact rules: `rules/workflow-routing.md` (fix or aidlc, trust boundary, stack skills), '
+            '`references/aidlc.md` (questions, lifecycle formats and gates), `skills/session-bootstrap/SKILL.md`.', '']
     return '\n'.join(out)
 
 
 def main(argv):
     missing, unknown = unphased()
     if missing or unknown:
-        print(f'map.py: skills in no phase: {missing}; phases naming missing skills: {unknown}', file=sys.stderr)
+        print(f'map.py: skills in no phase: {missing}; rows naming missing skills: {unknown}', file=sys.stderr)
         return 1
     text = render()
     if '--check' in argv:

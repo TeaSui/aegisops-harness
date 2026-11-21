@@ -1,6 +1,8 @@
 ---
 name: systematic-debugging
-description: Use when a bug, failing test, error or unexpected behavior appears, before proposing or making a fix — reproduce it, trace the root cause, test one hypothesis at a time, then fix it with a failing test first (tea-sdlc — follows the routing tiers and hook gates)
+description: Root-cause debugging before any fix — reproduce, trace to the source, test one hypothesis at a time, then fix with a failing test first; Read by /tea-sdlc:fix, and by build when a test fails for an unexplained reason or a fix fails twice.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Systematic Debugging
@@ -16,7 +18,6 @@ No fix, and no proposed fix, before the root cause is found. Applies to every fa
    - Regression with a known-good commit → `git bisect`.
    - A test leaves files or state behind → `bash "${CLAUDE_PLUGIN_ROOT}/skills/systematic-debugging/find-polluter.sh" '<path that appears>' '<test glob>'`. It runs each test file alone with `npm test <file>` (adapt that line for other runners); exit 0 = no polluter, 1 = found, 2 = no test matched or the path existed before the first run.
    - Several components (CI → build → signing, API → service → DB) → one probe per boundary, one run, then investigate the boundary that breaks. Probes log presence, counts and safe IDs only: never raw env values, secrets, PII, auth headers, payloads or absolute user paths. In tests use `console.error` (loggers may be suppressed) and log before the dangerous operation.
-   - Error crosses ≥2 services → in full mode run the `debug-parallel` command yourself with the error text (lean mode: only when the user asks).
 5. Trace backward from the bad value (what called this with it?) to the original trigger. Fix at the source, never where the symptom appears. Cannot trace by reading → log a sanitized stack (`new Error().stack`, project-relative frames only) just before the failing operation.
 
 ## 2. Pattern
@@ -29,9 +30,9 @@ Write one hypothesis: "X is the root cause because Y". Test it with the smallest
 
 ## 4. Fix
 
-1. Regression test first (`tea-sdlc:test-driven-development`): show it failing for this bug. Prose/config defect → the structural or isolated check that detects it. Preserve pre-existing, user and other-agent changes.
+1. Regression test first (`skills/test-driven-development/SKILL.md`): show it failing for this bug. Prose/config defect → the structural or isolated check that detects it. Preserve pre-existing, user and other-agent changes.
 2. One change at the root cause; no bundled refactors or "while I'm here" edits.
-3. Verify: the test passes, nothing else breaks, the symptom is gone (`tea-sdlc:verification-before-completion` before claiming it).
+3. Verify: the test passes, nothing else breaks, the symptom is gone (`/tea-sdlc:verify` before claiming it).
 4. When invalid data caused it, validate at each layer it crosses: entry point, business logic, environment guard (e.g. refuse destructive operations outside tmpdir under test), debug logging.
 5. Fix failed → back to §1 with the new evidence. **After 3 failed fixes, stop before a fourth** and question the architecture (each fix exposes new shared state or coupling, or symptoms move elsewhere). A subagent stops earlier: 2 failed attempts on the same issue → return BLOCKED. If the next step is the user's decision (change the architecture, accept a workaround, drop the requirement), ask once, listing the tested hypotheses and open evidence; otherwise choose the next approach and continue.
 

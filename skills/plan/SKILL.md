@@ -1,11 +1,12 @@
 ---
 name: plan
-description: Use after spec acceptance, or when the user asks for an implementation plan, a breakdown or tickets — slices the user stories into tracer-bullet vertical slices with Blocked-by edges, written beside the spec, and advances it to planned. Fast-path work does not need one.
+description: Stage 2 of the backend lifecycle (/tea-sdlc:plan, run by /tea-sdlc:aidlc) — slice an accepted spec's user stories into tracer-bullet vertical slices with Blocked-by edges in tickets.md beside the spec, then advance it to planned.
+disable-model-invocation: true
 ---
 
 # Tickets
 
-Fast path: an in-context checklist, no file. Full workflow: `docs/specs/<feature>/tickets.md` after the spec is accepted. A plan tied to no feature: `docs/plans/YYYY-MM-DD-<topic>.md`, or where the user says. No git init, worktree or commit just to save a plan.
+`/tea-sdlc:fix` writes no plan. A spec: `docs/specs/<feature>/tickets.md` after it is accepted. A plan tied to no feature: `docs/plans/YYYY-MM-DD-<topic>.md`, or where the user says. No git init, worktree or commit just to save a plan.
 
 ## Spec tickets
 
@@ -23,4 +24,4 @@ Leave every `Status: ready-for-agent`; only `aidlc task-done` sets `done`. Then 
 
 ## Then
 
-Check for uncovered stories, invented blockers, horizontal slices and vague criteria. If implementation is authorized, continue with `tea-sdlc:build` without asking (it also resumes a saved plan).
+Check for uncovered stories, invented blockers, horizontal slices and vague criteria. If implementation is authorized, continue with `/tea-sdlc:build` without asking (it also resumes a saved plan).

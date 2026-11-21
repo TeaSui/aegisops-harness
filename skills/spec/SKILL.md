@@ -1,55 +1,32 @@
 ---
 name: spec
-description: Use first, before reading files or editing, whenever a request builds, adds, modifies, fixes or refactors code (after an opener skill such as goal or clarify when one applies). Runs the trust-boundary check, clarifies the outcome, constraints and acceptance evidence, compares approaches when the tradeoff matters, writes the spec for full-workflow work and ends with the routing tier. Scales from three lines (routine fix) to a full design (trust-boundary or new system).
+description: Stage 1 of the backend lifecycle — turn a request or a pasted to-spec spec into docs/specs/<feature>/spec.md (stories, decisions incl. security, testing seams), get the one approval and advance the spec to accepted.
+argument-hint: "[feature request | pasted spec]"
+disable-model-invocation: true
 ---
 
-# Design clarification
+# Stage 1: spec
 
-Runs first for code-changing work, after any opener skill that applies (`tea-sdlc:goal`, `tea-sdlc:clarify`, `tea-sdlc:expert-lens`, `tea-sdlc:reframe`). It scales with the change and is never a reason to stop.
+`aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run it yourself. Format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 (`spec.md`, README frontmatter). Open questions: §0 (files, then Rovo, then a recorded assumption). Input: `$ARGUMENTS`, else the request in the conversation.
 
-## 1. Trust-boundary check
+## 1. Folder
+Stable kebab-case slug; a 2-6 letter key unused by other specs (`aidlc status`). `aidlc init <feature> --key <KEY>` (a folder path when the spec does not belong in the repository's own `docs/specs/`). README frontmatter: `scope`, `affects`, `contract: none|external`, `security: required` (or `not-applicable — <reason>` when the trust-boundary check in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` is all NO).
 
-Trust boundary = YES if the change touches any of: (1) PII or financial data, (2) auth, session or permission rules, (3) money, billing or payments, (4) a new endpoint, webhook or public surface, (5) a new external vendor, (6) security config or secrets (TLS, JWT, IAM, encryption). Unsure = YES.
+## 2. spec.md
+- **Pasted spec in the to-spec template:** save it verbatim as `spec.md`; change only what the `accepted` gate rejects (say each change in one line). Do not re-derive it into other files and do not re-ask what it decides.
+- **Otherwise write it:** read the code, `GLOSSARY.md`, ADRs and living docs, then Rovo (§0) for the business rules, terms and existing decisions the request names. Problem Statement and Solution from the user's side; a long numbered list of user stories (`As a <actor>, I want <feature>, so that <benefit>`) covering every behaviour incl. unhappy paths; Implementation Decisions (modules, interfaces, schema, contracts, architecture; no file paths or code); Testing Decisions (the highest existing seam, else the fewest new ones, ideally one; external behaviour only; prior art); Out of Scope; Further Notes with `Sources:` (Rovo pages and issues used) and `Assumptions:` (what no source settled). Glossary terms throughout; respect ADRs. A story this repository does not deliver → `(Verify: none — <owner>)`.
+- New domain term settled → add it to `GLOSSARY.md`. A decision that is hard to reverse, surprising and a real trade-off → an ADR in `docs/adr/`.
 
-| Change | Depth |
-|---|---|
-| Routine fix, no trust boundary | 2-3 lines: outcome, acceptance evidence, approach; continue. Bug or failing test → `tea-sdlc:systematic-debugging` next. |
-| Feature or behavior change, no trust boundary | Add constraints, and 2-3 approaches only when the tradeoff is real; recommend one. |
-| Trust boundary, lean mode (default) | 3-6 lines before the first edit: approach, assets touched, threats (STRIDE / OWASP), controls kept or added (`tea-sdlc:fintech-security` as catalogue; honour the security decisions of an existing spec). Then tests for the security behaviour (authz denied, input rejected, no PII in logs, idempotent money movement); `check-contract.py` if an external contract changes; the pre-PR pass covers security and the PR lists threats checked. No AIDLC folder, no subagents (a handed-over spec is still saved as `spec.md`). |
-| Trust boundary or new system, full mode (`TEA_SDLC_WORKFLOW=full`, the user asked for it, or a spec bound to the branch is past `proposed`) | Spec per AIDLC (§3–§4 below). |
-| Spec handed over in the to-spec template (any mode) | It is the spec: save it verbatim as `docs/specs/<feature>/spec.md` (full mode: plus README, §3); build from its stories, seams and decisions; ask only what it leaves open and a test would observe. `Status: ready-for-agent` → no grilling. |
+## 3. Security
+Trust boundary → Read `${CLAUDE_PLUGIN_ROOT}/skills/fintech-security/SKILL.md`, dispatch `tea-sdlc:security-engineer-subagent` on the draft spec, and put its returned assets, threats and numbered controls under `### Security` in Implementation Decisions (a pasted spec's own Security section is kept and extended, not replaced). It runs while you finish the rest.
 
-## 2. Clarify
+## 4. Contract
+External contract change (HTTP/RPC API, event, shared schema; tighter validation on an existing endpoint is not one) → `contracts/` and `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` until it passes.
 
-Request already carries goals, acceptance criteria and a tier (e.g. a `/prompt-builder` prompt) → confirm in one line, state assumptions, continue. Non-interactive, or choices delegated → answer your own questions with the most reasonable assumption and say so.
+## 5. Blind check
+Only for a spec you wrote that was not grilled with the user: dispatch one fresh `general-purpose` agent with `${CLAUDE_PLUGIN_ROOT}/skills/spec/checker-prompt.md` (absolute spec folder, first guess number 1). It appends guesses to `spec-check.md`. Close each in spec.md: `— resolved: <where>` (Rovo first for business answers) or `— accepted risk: <why>`. No second run.
 
-Read project context and existing sources before asking. Identify outcome, constraints, acceptance evidence, material unknowns. Ask one concise question only when the answer changes the design. Compare 2-3 approaches when the tradeoff matters; recommend one with cost, risk, validation. Keep domain conventions and security controls. Size the design to the change: a config change is a few sentences; a new system states interfaces, ownership, data flow, failure behavior. Challenge a significant architecture decision once; record unresolved concerns.
+## 6. One approval
+Present once: summary, stories, decisions incl. security, seams, contract result, assumptions and sources. Skip asking when the input delegated it or the pasted spec says `Status: ready-for-agent`; record `accepted_by: <name> (<date>)`, `<name> (delegated in request)` or `<name> (handed over ready-for-agent)`. Then `aidlc advance <feature> accepted`; fix what the gate lists and rerun (not a new approval unless the fix changes what was approved). Approval never authorizes destructive actions, external publishing or bypassing native controls.
 
-Visual decision the user should compare (layouts, mockups, diagrams) → browser companion: `${CLAUDE_PLUGIN_ROOT}/skills/spec/visual-companion.md` (its `skills/spec/scripts/…` run from `${CLAUDE_PLUGIN_ROOT}`). Not for text questions.
-
-## 3. Spec (full workflow only)
-
-`aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run it yourself. Format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 (`spec.md`, README frontmatter); folder placement: `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` §4.
-
-1. Stable kebab-case slug; a 2-6 letter key unused by other specs (`aidlc status`). `aidlc init <feature> --key <KEY>` (pass a folder path when the spec is not in the repository's own `docs/specs/`). README frontmatter: `scope`, `affects`, `contract: none|external`, `security: required` (or `not-applicable — <reason>` only for a non-trust change run through the full workflow).
-2. Decisions not yet settled with the user → `tea-sdlc:grilling` first (skip when choices were delegated or the spec was handed over).
-3. `spec.md` in the template: Problem Statement and Solution from the user's side; a long numbered list of user stories (`As a <actor>, I want <feature>, so that <benefit>`) covering every behaviour incl. unhappy paths; Implementation Decisions (modules, interfaces, schema, contracts, architecture; no file paths or code) with a `### Security` subsection; Testing Decisions (the agreed seams, external behaviour only, prior art); Out of Scope; Further Notes. Glossary terms throughout; respect ADRs. Story not built in this repo → `(Verify: none — <owner>)`.
-4. Security (trust boundary): dispatch `tea-sdlc:security-engineer-subagent` on the draft spec; put its returned assets, threats and numbered controls under `### Security`. It runs while you write the rest.
-5. External contract → `contracts/` and `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` until it passes.
-6. Spec not grilled with the user and written by you → one `tea-sdlc:spec-check` pass; close every guess in spec.md.
-
-Do not commit or scaffold an existing repository just because a template says so.
-
-## 4. One approval point (full workflow only)
-
-Present once: summary, stories, decisions incl. security, seams, contract result, choices made closing guesses. Approval is the user's; skip asking only when the request explicitly delegated it ("end to end without checking in"). Record `accepted_by: <name> (<date>)` or `<name> (delegated in request)` in the README, then `aidlc advance <feature> accepted` (never set `status:` by hand). Gate findings → fix and rerun; that is not a new approval round unless the fix changes what was approved (say so in one line). No other confirmation rounds. Approval never authorizes destructive actions, external publishing or bypassing native controls.
-
-Fast path: no approval gate, no spec folder.
-
-## 5. Tier line
-
-End with exactly one line:
-
-`Tier: fast path | fast path + security pass | full workflow — <trust-boundary items hit, or none>`
-
-Then: fast path (with or without security pass) → `tea-sdlc:test-driven-development` in this session, no subagent dispatch, single pre-PR pass before a PR. Full workflow → `tea-sdlc:plan` (tickets) on the accepted spec.
+Next: `/tea-sdlc:plan` (inside `/tea-sdlc:aidlc`: continue).

@@ -1,4 +1,4 @@
-"""Unit tests for the deterministic parts of evals/: routing runner, description lint, statistics, baseline
+"""Unit tests for the deterministic parts of evals/: description lint, statistics, baseline
 comparison, headless judges on recorded stream-json, and the headless runner driven by a fake `claude` binary.
 No test calls the real claude CLI or a model."""
 import contextlib
@@ -28,7 +28,6 @@ def load(path, name):
     return module
 
 
-routing = load(EVALS / 'routing' / 'run.py', 'eval_routing_run')
 descriptions = load(EVALS / 'descriptions' / 'run.py', 'eval_descriptions_run')
 harness = load(HEADLESS / 'harness.py', 'harness')
 runner = load(HEADLESS / 'run.py', 'eval_headless_run')
@@ -48,89 +47,15 @@ def stream(name):
     return harness.read_stream(TESTDATA / name)
 
 
-class RoutingRunnerTest(unittest.TestCase):
-    NOTE = ('Signals: code change ("add"); trust boundary: money ("transfer"), new public surface ("endpoint").\n'
-            'Load in this order, without waiting for the user to name them: tea-sdlc:spec → '
-            'tea-sdlc:test-driven-development.\nRouting: trust-boundary signal → walk the six-item check; any YES → '
-            'Full workflow (Security first).\nThreat models are produced by security-engineer-subagent.')
-
-    def test_parse_note_reads_skills_agents_and_trust_labels(self):
-        emitted, trust = routing.parse_note(self.NOTE)
-        self.assertEqual(emitted, {'spec', 'test-driven-development', 'security-engineer-subagent'})
-        self.assertEqual(trust, {'money', 'new public surface'})
-
-    def test_check_reports_each_kind_of_miss(self):
-        self.assertEqual(routing.check({'expect': ['spec'], 'trust': ['money'], 'tier': 'full'}, self.NOTE), [])
-        problems = routing.check({'expect': ['goal'], 'forbid': ['spec'], 'trust': ['auth'],
-                                  'forbid_trust': ['money'], 'tier': 'fast', 'expect_text': ['aidlc.py'],
-                                  'forbid_text': ['Full workflow']}, self.NOTE)
-        self.assertEqual(len(problems), 7, problems)
-        self.assertEqual(routing.check({'silent': True}, ''), [])
-        self.assertTrue(routing.check({'silent': True}, self.NOTE))
-        self.assertTrue(routing.check({'forbid': ['goal']}, ''))  # silence needs allow_silent
-        self.assertEqual(routing.check({'forbid': ['goal'], 'allow_silent': True}, ''), [])
-        self.assertTrue(routing.check({'forbid_trust': True}, self.NOTE))
-
-    def test_metrics_count_labelled_outcomes_only(self):
-        rows = routing.metrics([
-            ({'expect': ['a']}, {'a', 'b'}),
-            ({'expect': ['a']}, set()),
-            ({'forbid': ['a']}, {'a'}),
-            ({'silent': True}, {'b'}),
-        ])
-        self.assertEqual((rows['a']['tp'], rows['a']['fp'], rows['a']['fn']), (1, 1, 1))
-        self.assertAlmostEqual(rows['a']['precision'], 0.5)
-        self.assertAlmostEqual(rows['a']['recall'], 0.5)
-        self.assertEqual((rows['b']['fp'], rows['b']['unlabelled']), (1, 1))
-
-    def run_cases(self, lines, *extra):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = pathlib.Path(tmp) / 'cases.jsonl'
-            path.write_text('# comment\n' + '\n'.join(json.dumps(line) for line in lines) + '\n')
-            return quiet(routing.main, ['--cases', str(path), '--no-coverage', *extra])
-
-    def test_runner_passes_and_fails_through_the_real_hook(self):
-        good = [{'id': 'small-talk', 'prompt': 'thanks!', 'silent': True},
-                {'id': 'feature', 'prompt': 'Add a function clamp(value, min, max) to src/math.js.',
-                 'expect': ['test-driven-development']}]
-        code, out = self.run_cases(good)
-        self.assertEqual(code, 0, out)
-        self.assertIn('2 passed', out)
-        code, out = self.run_cases(good + [{'id': 'wrong', 'prompt': 'thanks!', 'expect': ['goal']}])
-        self.assertEqual(code, 1)
-        self.assertIn('FAILED: wrong', out)
-
-    def test_xfail_never_fails_and_xpass_is_reported(self):
-        code, out = self.run_cases([{'id': 'gap', 'prompt': 'thanks!', 'expect': ['goal'], 'xfail': 'known'},
-                                    {'id': 'fixed', 'prompt': 'thanks!', 'silent': True, 'xfail': 'was a gap'}])
-        self.assertEqual(code, 0, out)
-        self.assertIn('XPASS', out)
-        self.assertIn('fixed', out)
-
-    def test_subagent_mode_and_environment(self):
-        code, out = self.run_cases([
-            {'id': 'explore', 'mode': 'subagent', 'agent_type': 'Explore', 'silent': True},
-            {'id': 'off', 'prompt': 'Fix the login bug', 'env': {'TEA_SDLC_AUTOPILOT': 'off'}, 'silent': True}])
-        self.assertEqual(code, 0, out)
-
-    def test_duplicate_ids_are_rejected(self):
-        with self.assertRaises(SystemExit):
-            self.run_cases([{'id': 'x', 'prompt': 'a', 'silent': True}, {'id': 'x', 'prompt': 'b', 'silent': True}])
-
-    def test_seed_cases_file_is_large_and_covers_every_category(self):
-        cases = routing.load_cases(EVALS / 'routing' / 'cases.jsonl')
-        self.assertGreaterEqual(len(cases), 60)
-        tags = {tag for case in cases for tag in case.get('tags', [])}
-        for tag in ('chain', 'trust', 'intent', 'domain', 'silence', 'false-friend', 'question'):
-            self.assertIn(tag, tags)
-
-
 class DescriptionLintTest(unittest.TestCase):
-    def make(self, root, files):
+    def make(self, root, files, flag=True):
         for rel, text in files.items():
             path = root / rel
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(textwrap.dedent(text).lstrip())
+            text = textwrap.dedent(text).lstrip()
+            if flag and text.startswith('---\n'):  # tea-sdlc skills and commands are slash-command only
+                text = '---\ndisable-model-invocation: true\n' + text[4:]
+            path.write_text(text)
 
     BASE = {
         'skills/alpha/SKILL.md': '''
@@ -202,16 +127,16 @@ class DescriptionLintTest(unittest.TestCase):
                 'skills/short/SKILL.md': '---\nname: short\ndescription: Use when short.\n---\n',
                 'skills/wrongname/SKILL.md': '---\nname: other\ndescription: Use when the folder and the name '
                                              'differ, which breaks namespaced invocation of this skill entirely.\n---\n',
-                'skills/notrigger/SKILL.md': '---\nname: notrigger\ndescription: A long description that only '
-                                             'says what this does, and never says in which situation it applies.\n---\n',
+                'skills/noflag/SKILL.md': '---\nname: noflag\ndescription: A long description that only '
+                                          'says what this does, and leaves the model free to load it by itself.\n---\n',
                 'skills/nofront/SKILL.md': 'no frontmatter\n',
                 'commands/long.md': '---\ndescription: Use when ' + 'x' * 1100 + '\n---\n',
-            })
+            }, flag=False)
             errors, warnings, _ = descriptions.lint(root, descriptions.collect(root), None)
             text = '\n'.join(errors)
             self.assertIn('skills/short/SKILL.md: description is', text)
             self.assertIn('does not match the folder', text)
-            self.assertIn('skills/notrigger/SKILL.md: description does not say when', text)
+            self.assertIn('skills/noflag/SKILL.md: needs disable-model-invocation: true', text)
             self.assertIn('skills/nofront/SKILL.md: missing frontmatter', text)
             self.assertIn('commands/long.md: description is', text)
             self.assertTrue(any('YAML parsing skipped' in w for w in warnings))
@@ -346,6 +271,8 @@ class StreamAndJudgeTest(unittest.TestCase):
         agent = passive_judge.judge({'expect': ['fintech-security', 'security-engineer-subagent']},
                                     stream('passive_agent.jsonl'))
         self.assertTrue(agent['pass'])
+        self.assertFalse(passive_judge.judge({'silent': True}, stream('passive_hit.jsonl'))['pass'])
+        self.assertIn('activated: tea-sdlc:', passive_judge.judge({'silent': True}, stream('passive_agent.jsonl'))['summary'])
         miss = passive_judge.judge({'expect': ['review']}, stream('passive_miss.jsonl'))
         self.assertFalse(miss['pass'])
         self.assertIn('code-review', miss['summary'])
@@ -542,8 +469,7 @@ class HeadlessRunnerTest(unittest.TestCase):
 class WorkflowFilesTest(unittest.TestCase):
     def test_ci_runs_the_deterministic_evals(self):
         ci = (ROOT / '.github' / 'workflows' / 'ci.yml').read_text()
-        for command in ('unittest discover -s tests', 'scripts/check-setup.py', 'evals/routing/run.py',
-                        'evals/descriptions/run.py'):
+        for command in ('unittest discover -s tests', 'scripts/check-setup.py', 'evals/descriptions/run.py'):
             self.assertIn(command, ci)
         evals = (ROOT / '.github' / 'workflows' / 'evals.yml').read_text()
         self.assertIn('ANTHROPIC_API_KEY', evals)

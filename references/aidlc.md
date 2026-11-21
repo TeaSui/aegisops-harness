@@ -2,6 +2,17 @@
 
 Read only the section for the current stage. `scripts/aidlc.py` wins over this file. Gates check that evidence exists and is current, not that it is good.
 
+## 0. Open questions (every stage)
+
+A question about business rules, domain terms, existing behaviour, limits, owners or product intent. Take the first step that settles it:
+
+1. **Files:** the spec, `GLOSSARY.md`, ADRs, contracts, the code and its tests, git history.
+2. **Atlassian Rovo MCP** (the Atlassian server, whatever its prefix, e.g. `mcp__plugin_operations_atlassian__*`): `search` (Rovo search over Confluence and Jira) with the glossary term, the feature name and any Jira key, then `fetch` / `getConfluencePage` / `getJiraIssue` on the best hits; `searchConfluenceUsingCql` / `searchJiraIssuesUsingJql` to narrow. Record what settled it (page title + URL, or issue key): in `spec.md` Further Notes under `Sources:`, or in the ruling. Sources disagree → the newer and more specific one wins; record the conflict.
+3. **Recorded assumption:** still open → take the most reasonable answer and continue; at the spec stage write it into spec.md (story or decision, listed for the approval), later `aidlc ruling … --why "<no source; reasoning>"`.
+4. **Ask the user** only when no safe default exists and the answer is one of: accepting a security or compliance risk, money movement or regulatory behaviour with no source, an irreversible or production action, sources that contradict each other on observable behaviour. One batched question, each with your recommended answer.
+
+Rovo not connected or failing → say so once in the stage report and go on with 3–4. Subagents have no Rovo: they return NEEDS_CONTEXT, the main session answers through this order. Never ask what steps 1–2 answer.
+
 ## 1. Stages
 
 ```

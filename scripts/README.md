@@ -4,7 +4,7 @@ Headless Claude Code scripts for non-interactive tasks.
 
 ## validate.sh
 
-Starts a headless Claude session using `skills/validate-feature/SKILL.md`.
+Starts a headless Claude session using `skills/verify/SKILL.md` (§2, §3).
 By default it validates pending staged, unstaged and untracked work. An explicit
 task target takes precedence; it never silently falls back to a previous commit.
 

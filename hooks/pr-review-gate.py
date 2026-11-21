@@ -59,7 +59,7 @@ def spec_review(top, cwd):
         if problems:
             return False, ('pr-review-gate: this branch carries a full-workflow spec whose review stage is not done.\n  '
                            + '\n  '.join(problems)
-                           + f'\nFinish it (skill tea-sdlc:review), then `python3 "{PLUGIN_ROOT}/scripts/'
+                           + f'\nFinish it (/tea-sdlc:review, or the pass in rules/pre-pr-review.md), then `python3 "{PLUGIN_ROOT}/scripts/'
                              'aidlc.py" advance <spec> reviewed`, then retry.')
         return True, None
     except Exception:

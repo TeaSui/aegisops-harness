@@ -1,11 +1,8 @@
 ---
 name: bdd-cucumber
-description: |
-  BDD with Cucumber: writing Gherkin feature files, step definitions for Java (Cucumber-JVM) and Go (godog),
-  scenario outlines, data tables, hooks, and linking features to acceptance criteria.
-  Use when: writing Cucumber tests, creating Gherkin feature files, implementing step definitions,
-  setting up BDD test infrastructure, or converting acceptance criteria to scenarios.
-  Triggers on: Cucumber, Gherkin, BDD, feature file, .feature, step definitions, scenario outline, godog.
+description: BDD with Cucumber — Gherkin feature files, step definitions for Cucumber-JVM and godog, scenario outlines, data tables, hooks and scenarios linked to story IDs; Read before the first edit in that area when the repository has .feature files, Cucumber or godog.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # BDD Cucumber

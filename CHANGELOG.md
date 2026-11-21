@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.0.0 — 2026-11-21
+
+Command-driven backend lifecycle. Nothing in tea-sdlc starts from a keyword or the model's own choice.
+
+### Breaking
+- **Slash commands only.** Every skill and command has `disable-model-invocation: true` (check-setup and the description lint fail without it). The keyword router (`UserPromptSubmit`) and the passive follow-up notes (debugging after red runs, incident after a revert, docs after a merge, superpowers twins, goal state) are removed. Support skills (TDD, debugging, stack patterns, security catalogue, grounding, docs lookup) are also `user-invocable: false`: stage files Read them by path, chosen from repository files (`rules/workflow-routing.md`).
+- **Commands:** `/tea-sdlc:aidlc` (whole lifecycle, resume by slug, no argument = status), stage commands `spec`, `plan`, `build`, `verify` (new: full suite, trace, placeholders → `verified`), `review`, `ship`, plus `fix` (bug or small change without a spec), `grilling`, `receiving-code-review`, `upgrade-service-docs`, `generate-service-docs`, `reframe`, `expert-lens`.
+- **No modes.** `TEA_SDLC_WORKFLOW`, lean/full mode and the fast-path tier are gone: `/tea-sdlc:aidlc` is the spec-driven lifecycle, `/tea-sdlc:fix` the no-spec path (trust boundary only under the escape hatch, with a security pass).
+- **Backend only.** Removed agents: data-engineer, frontend-engineer, mobile-engineer, platform-engineer, ui-ux-designer (kept: security-engineer, backend-engineer, code-reviewer, qa). Removed skills: clarify, goal, incident-to-eval, measurement-planning, writing-software-docs, frontend-react, fintech-mobile, data-pipeline-patterns. Merged: verification-before-completion + validate-feature → `verify`; finishing-a-development-branch → `ship/no-spec.md`; dispatching-parallel-agents → `build`; spec-check → `spec` §5. Removed commands: debug-parallel, eval-upgrade (and `tools/eval-upgrade` with its auto-trigger hook), prompt-builder, prove-it.
+
+### Added
+- **Rovo first** (`references/aidlc.md` §0): a business or domain question goes to the files, then Atlassian Rovo MCP (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption; the user is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or contradictory sources. Sources and assumptions go into spec.md Further Notes and the final report. Subagents return NEEDS_CONTEXT instead of guessing a business rule.
+- The bootstrap is a situation → command table; the session-start snapshot names the next command for each open spec.
+
+### Evals
+- `routing/` removed (there is no router). The `passive` suite now checks silence: natural prompts must invoke no tea-sdlc skill or agent. tdd and lifecycle prompts start with `/tea-sdlc:fix` and `/tea-sdlc:aidlc`.
+
 ## 3.3.0 — 2026-11-21
 
 The spec format is the to-spec template; stage skills are named by stage; one generated page explains the plugin.

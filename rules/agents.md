@@ -1,14 +1,11 @@
-# Agent delegation (full workflow only)
+# Agent delegation
 
-Only the main session dispatches, and only in the full workflow; the fast path never dispatches.
+Only the main session dispatches, and only inside the lifecycle commands; `/tea-sdlc:fix` dispatches only the fallback reviewer of `skills/review/SKILL.md` §3. Four agents, all backend:
 
 ## Registry
-- **No spec-authoring agent:** the main session writes `spec.md`, `tickets.md`, `contracts/`, ADRs, `GLOSSARY.md`, `measurement.md`; `scripts/check-contract.py` checks contracts.
-- **tea-sdlc:security-engineer-subagent:** reviews the draft `spec.md`, returns its `### Security` subsection (the main session pastes it under Implementation Decisions). Skipped only under the full-mode escape hatch.
-- **tea-sdlc:ui-ux-designer-subagent:** before frontend work that needs visual design; returns UI decisions for `spec.md` (or writes the project's design doc).
-- **tea-sdlc:backend-engineer-subagent:** APIs, business logic, databases, LLM features (prompts, RAG, agent tools, evals, AI cost controls).
-- **tea-sdlc:frontend-engineer-subagent:** UI. **tea-sdlc:mobile-engineer-subagent:** Flutter/Dart, iOS, Android, React Native. **tea-sdlc:data-engineer-subagent:** ETL, pipelines, warehouses.
-- **tea-sdlc:platform-engineer-subagent:** AWS CDK/serverless, other IaC, CI/CD, containers, Kubernetes, observability.
+- **No spec-authoring agent:** the main session writes `spec.md`, `tickets.md`, `contracts/`, ADRs, `GLOSSARY.md`; `scripts/check-contract.py` checks contracts.
+- **tea-sdlc:security-engineer-subagent:** reviews the draft `spec.md`, returns its `### Security` subsection (the main session pastes it under Implementation Decisions). Only for a spec that crosses a trust boundary.
+- **tea-sdlc:backend-engineer-subagent:** implements a ticket of a parallel batch (tickets declaring disjoint `Files:`): APIs, business logic, databases, messaging, IaC the service owns. A lone ticket is built in the main session.
 - **tea-sdlc:code-reviewer:** read-only. Build stage: reviews each ticket. Review stage: one dispatch per axis (Spec, Standards); returns `review.md` finding lines.
 - **tea-sdlc:qa-subagent:** required; review stage, parallel to the reviews; reads `tickets.md` and `aidlc trace`, reports per requirement ID; verdict → `## QA`. Live API validation when an authorized service runs. Deployment-heavy risk → run again on the release candidate.
 
@@ -20,4 +17,4 @@ Only the main session dispatches, and only in the full workflow; the fast path n
 1. `plan` writes `tickets.md` after the spec's security decisions and gated contracts (tickets cite contract paths).
 2. `build` runs the build stage in this session (`aidlc next` batches, `aidlc task-done`), and resumes it in a new session or after `/clear`/compaction.
 
-No full-workflow execution without a plan that passes the `planned` gate. The fast path writes no plan.
+No build without a plan that passes the `planned` gate; `/tea-sdlc:fix` writes no plan.

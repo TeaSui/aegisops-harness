@@ -1,19 +1,16 @@
 ---
 name: fintech-security
-description: |
-  Reference for drafting or reviewing security rules in fintech code (Spring Boot, Go, AWS serverless):
-  candidate controls for auth, payments, KYC documents, crypto/keys, logging, network, rate limits and secrets,
-  mapped onto the security agent's rule prefixes. In lean mode the main session uses it for its own security pass;
-  in full mode threat models are produced by tea-sdlc:security-engineer-subagent.
-  Triggers on: payment security, KYC document handling, MAS/PDPA control lookup, fintech security review.
+description: Fintech security control catalogue (Spring Boot, Go, AWS serverless) — candidate controls for auth, payments, KYC documents, crypto and keys, logging, network, rate limits and secrets under the security rule prefixes; Read by tea-sdlc:security-engineer-subagent in /tea-sdlc:spec and by /tea-sdlc:fix for its security pass when the trust-boundary check says yes.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Fintech Security Control Catalogue
 
 Candidate controls — cite one only when a STRIDE finding earns it; this is a lookup list, not a template.
 
-- **Lean mode (default):** the main session uses it for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` — assets, threats, controls; no subagent.
-- **Full mode:** threat model, rule numbering and output format (the spec's `### Security`) belong to `tea-sdlc:security-engineer-subagent`. Copy the control into a numbered rule under its section prefix (`AUTH-NN`, `AUTHZ-NN`, `INPUT-NN`, `CRYPTO-NN`, `DATA-NN`, `LOG-NN`, `NET-NN`, `RATE-NN`, `DEP-NN`, `SECRET-NN`, `COMPLIANCE-NN`; payment controls under `DATA`), phrased as what must be true, citing the finding.
+- **`/tea-sdlc:fix` (escape hatch):** the main session uses it for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` — assets, threats, controls; no subagent.
+- **`/tea-sdlc:spec`:** threat model, rule numbering and output format (the spec's `### Security`) belong to `tea-sdlc:security-engineer-subagent`. Copy the control into a numbered rule under its section prefix (`AUTH-NN`, `AUTHZ-NN`, `INPUT-NN`, `CRYPTO-NN`, `DATA-NN`, `LOG-NN`, `NET-NN`, `RATE-NN`, `DEP-NN`, `SECRET-NN`, `COMPLIANCE-NN`; payment controls under `DATA`), phrased as what must be true, citing the finding.
 
 Numbers marked **(default — project must confirm)** are starting points, not regulatory facts; confirm with the compliance owner before they become rules. Name frameworks (MAS TRM Guidelines, MAS Notice on Cyber Hygiene, PCI DSS, PDPA) without clause numbers unless checked against the current text. Data levels (Level 1 highly sensitive … Level 3 internal): `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`.
 
@@ -97,7 +94,7 @@ Numbers marked **(default — project must confirm)** are starting points, not r
 - MAS TRM / Cyber Hygiene: MFA, session controls, audit trail, notification for every financial transaction, customer-configurable limits.
 - PCI DSS: tokenization, no CVV/full PAN, scoped cardholder-data environment.
 - PDPA: purpose limitation, consent before Level 1/2 collection, retention/deletion per data-privacy-patterns.md.
-- Unclear compliance scope → escalate (full mode: the security agent), never guess.
+- Unclear compliance scope → escalate (in a spec: `tea-sdlc:security-engineer-subagent`; in `/tea-sdlc:fix`: stop and name `/tea-sdlc:aidlc`), never guess.
 
 ## AWS serverless checks
 

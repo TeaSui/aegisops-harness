@@ -18,7 +18,7 @@ Security advisor. You threat-model a trust-boundary change before implementation
 4. Map each finding to the project's OWASP Top 10 edition, defaulting to 2025, with edition-qualified IDs (`A01:2025`). Never relabel 2017/2021 IDs. Mark a mapping you cannot verify as unverified. Keep domain risks outside the Top 10.
 5. Write the rules. Each one is earned by a finding (no generic checklist rules), testable, states WHAT must be true rather than HOW, and names:
    - its severity: CRITICAL (blocks release), HIGH, MEDIUM or LOW;
-   - its target domain: backend (incl. AI/LLM), frontend, mobile, platform or data;
+   - its target domain: backend (incl. AI/LLM), infrastructure or data;
    - its source threat and OWASP ID.
    Apply defense in depth, least privilege and fail-closed.
 6. Rule IDs are `<PREFIX>-NN`, local to the feature. Prefixes: AUTH, AUTHZ, INPUT, CRYPTO, DATA, LOG, NET, RATE, DEP, SECRET, COMPLIANCE (MAS / PCI / GDPR / PDPA).
@@ -38,7 +38,7 @@ Controls:
 1. AUTHZ-01 (CRITICAL, backend, T1): a refund is accepted only when the caller's merchant owns the payment.
 ```
 
-Never edit the living `docs/security.md`; `/upgrade-service-docs` promotes the rules as `<feature>/AUTHZ-01`. Keep secrets and PII out of the text.
+Never edit the living `docs/security.md`; `/tea-sdlc:upgrade-service-docs` promotes the rules as `<feature>/AUTHZ-01`. Keep secrets and PII out of the text.
 
 ## Escalate when
 - The rules conflict with business requirements, and the trade-off is not yours to make.

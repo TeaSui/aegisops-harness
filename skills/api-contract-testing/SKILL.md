@@ -1,14 +1,8 @@
 ---
 name: api-contract-testing
-description: |
-  API contract testing, OpenAPI validation, and structured test analysis for
-  microservices. Consumer-driven contracts (Pact for Spring Boot, Go), OpenAPI
-  spec compliance, baseline regression comparison, and report generation.
-  Use when: validating API contracts between services, checking OpenAPI spec
-  compliance, comparing test results against baselines, or generating structured
-  test reports.
-  Triggers on: contract test, Pact, OpenAPI validation, API regression,
-  test baseline, test report, consumer-driven, provider verification.
+description: API contract testing for microservices — consumer-driven contracts (Pact for Spring Boot, Go), OpenAPI compliance, baseline regression comparison and structured test reports; Read before the first edit in that area when the repository has OpenAPI, AsyncAPI, proto files or Pact.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # API Contract Testing
@@ -17,7 +11,7 @@ Static structure/compatibility of `docs/specs/<f>/contracts/` is the contract ga
 
 | Scenario | Approach |
 |---|---|
-| Frontend → backend, service → service | Consumer-driven contracts (Pact) |
+| Client → backend, service → service | Consumer-driven contracts (Pact) |
 | Public API with OpenAPI spec | Response validation against the spec + contract tests |
 | Endpoint regression | Baseline comparison |
 | Pre-release | Smoke + contract + baseline |

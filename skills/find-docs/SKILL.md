@@ -1,6 +1,8 @@
 ---
 name: find-docs
-description: Use when an answer or code you are about to write depends on a library, framework, SDK, CLI or cloud-service detail not verified for the project's version (syntax, flags, config keys, support for a feature, migration), or the user asks for the source — looks it up via Context7 or official/installed docs and cites it.
+description: Look up a library, framework, SDK, CLI or cloud-service detail not verified for the project's version (syntax, flags, config keys, feature support, migration) via Context7 or official or installed docs, and cite it; Read by every stage before relying on such a detail.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Documentation lookup

@@ -1,12 +1,8 @@
 ---
 name: database-patterns
-description: |
-  Database query and design patterns: CTE-first query approach for MySQL/PostgreSQL, indexing strategies,
-  zero-downtime migrations, DynamoDB single-table access pattern design, and Redis caching/data structures.
-  Use when: writing SQL queries, designing database indexes, planning migrations, modeling DynamoDB access patterns,
-  implementing Redis caching, or optimizing query performance.
-  Triggers on: SQL, CTE, common table expression, query, index, migration, DynamoDB access pattern,
-  single-table design, Redis, cache, PostgreSQL, MySQL, database performance.
+description: Database query and design patterns — CTE-first MySQL/PostgreSQL queries, indexing, zero-downtime migrations, DynamoDB single-table access patterns and Redis caching; Read before the first edit in that area when the repository has SQL migrations, ORM entities, DynamoDB or Redis clients.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Database Patterns

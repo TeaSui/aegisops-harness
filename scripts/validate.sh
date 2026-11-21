@@ -6,7 +6,7 @@ set -euo pipefail
 FILTER="${1:-}"
 PLUGIN_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
-PROMPT="Read ${PLUGIN_ROOT}/skills/validate-feature/SKILL.md and follow its validation workflow.
+PROMPT="Read ${PLUGIN_ROOT}/skills/verify/SKILL.md and follow §2 and §3 (validation without a spec).
 
 Target: current pending work, including staged, unstaged and untracked files.
 Optional literal path filter: ${FILTER:-none supplied}

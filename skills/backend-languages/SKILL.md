@@ -1,9 +1,8 @@
 ---
 name: backend-languages
-description: >
-  Use when writing or reviewing backend service code in Go, Spring Boot (Java), Python/FastAPI
-  or Rust/axum — by the main session on the fast path or by tea-sdlc:backend-engineer-subagent.
-  Routes to the matching language reference.
+description: Backend service conventions for Go, Spring Boot (Java), Python/FastAPI and Rust/axum, routed to the matching language reference; Read by /tea-sdlc:build, /tea-sdlc:fix and tea-sdlc:backend-engineer-subagent when the repository has build.gradle, pom.xml, go.mod, Cargo.toml or a Python web framework.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Backend Language References

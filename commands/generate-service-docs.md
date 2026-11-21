@@ -1,6 +1,7 @@
 ---
-description: Use when a service or system has no living docs (no docs/ folder), when the user asks to document a service or codebase, or when docs are missing sections a task needs. Builds production-grade, AI-readable living reference docs from the source code. Offer it once before running; it reads the whole service.
+description: Build living reference docs for a service or system that has none — production-grade, AI-readable docs/ from the source code; it reads the whole service, so it runs only when the user starts it.
 argument-hint: "[service-name]"
+disable-model-invocation: true
 ---
 
 Build or refresh the **living reference docs** of `$ARGUMENTS` from source code. If no service is named, use the current repo as the single service, or every service root under a detected system root, and state the choice. Ask only if no service root can be identified.

@@ -1,19 +1,20 @@
 ---
-description: Use right after a full-workflow change is shipped and merged (spec stage `shipped`), whenever a spec under docs/specs/ is still `shipped` (or, for a spec from before the AIDLC lifecycle, `accepted`) after its code merged, or when the user says the docs are outdated — promotes the change into the living service and system docs, writes the traceability table and moves the spec to `implemented`. Run it yourself at the end of the ship stage; the user does not need to type it.
+description: After the merge, promote a shipped spec into the living service and system docs — writes the traceability table and moves the spec to implemented (a pre-AIDLC spec from accepted). /tea-sdlc:ship runs it as its last step; by hand for a spec still at shipped after its merge or docs gone stale.
 argument-hint: "[service-name] [feature-slug or short description]"
+disable-model-invocation: true
 ---
 
 Promote a merged change into the living docs and close its spec: the AIDLC promote stage, `shipped` → `implemented` (`${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` § 1. Stages). Source code is the only source of truth for living docs; specs are inputs, not facts.
 
 ## Ownership
-- **Change:** `$ARGUMENTS`. If it is missing, infer it from the autopilot note, the current branch, or the specs at `shipped` in `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" status`. Ask only if several remain.
+- **Change:** `$ARGUMENTS`. If it is missing, infer it from the current branch or the specs at `shipped` in `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" status`. Ask only if several remain.
 - **Layout:** read `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md` first. It owns the trees (§2, §3), the spec folder (§4) and root resolution (§6.1).
-- **This command owns** the living files and the lifecycle fields of the spec's `README.md`. It never edits the spec's `spec.md`, `tickets.md`, `measurement.md`, `contracts/`, `ledger.md`, `review.md`, `ship.md`, legacy files (`requirements.md`, `security.md`, `design.md`, `plan.md`) or ADRs.
+- **This command owns** the living files and the lifecycle fields of the spec's `README.md`. It never edits the spec's `spec.md`, `tickets.md`, `contracts/`, `ledger.md`, `review.md`, `ship.md`, legacy files (`requirements.md`, `security.md`, `design.md`, `plan.md`) or ADRs.
 
 ## Steps
-1. **Resolve** the service root, the system root and the spec folder. With no spec (fast path), skip steps 2, 3 and 7 and compare the code changes with the living docs directly.
+1. **Resolve** the service root, the system root and the spec folder. With no spec (`/tea-sdlc:fix`), skip steps 2, 3 and 7 and compare the code changes with the living docs directly.
 2. **Confirm the ship.** The spec is at `shipped` and its commits are on the target branch (merge or squash). Run promotion on that branch, never in an implementation worktree.
-   - Spec at an earlier stage: finish that stage first (`tea-sdlc:ship`).
+   - Spec at an earlier stage: finish that stage first (`/tea-sdlc:ship`).
    - Change not merged: stop with `NEEDS_CONTEXT`.
    - Pre-AIDLC spec (no `key:`): QA `GO` or the merge is enough, and steps 3 and 7 are done by hand.
 3. **Trace.** Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" trace <spec> --write`, which writes README `## Traceability`. Compare the actual code changes (classes, endpoints, events, tables, config) with the table and the contract delta. A requirement shown as pending or failing stays pending.

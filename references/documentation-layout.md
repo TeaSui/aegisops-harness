@@ -13,7 +13,7 @@ No role-based trees (`docs/requirements/`, `docs/security/`, `docs/contracts/`, 
 
 ## 2. Service scope — `<service>/docs/`
 
-Living files are written only by `/generate-service-docs` (build/normalize) and `/upgrade-service-docs` (promote); workflow agents read them.
+Living files are written only by `/tea-sdlc:generate-service-docs` (build/normalize) and `/tea-sdlc:upgrade-service-docs` (promote); workflow agents read them.
 
 ```
 <service>/docs/
@@ -56,21 +56,20 @@ Same owners as §2.
 
 `<feature>`: stable kebab-case slug for **one change** (`auth-login`, later `auth-login-mfa`); no numbers, dates or `-v2`. Reuse the folder only while active; afterwards a new slug links back. Create with `scripts/aidlc.py init`.
 
-The integrating (main) session writes every file except `spec-check.md` (blind checker, skill `spec-check`; the session closes guesses) and `ledger.md` (`aidlc` only, append-only). `aidlc advance` edits README `status`/`updated`/`branch`; `Status: done` in `tickets.md` only via `aidlc task-done`; `aidlc stamp review` writes review.md `fingerprint:`. Format: `references/aidlc.md` §2.
+The integrating (main) session writes every file except `spec-check.md` (blind checker, `skills/spec/checker-prompt.md`; the session closes guesses) and `ledger.md` (`aidlc` only, append-only). `aidlc advance` edits README `status`/`updated`/`branch`; `Status: done` in `tickets.md` only via `aidlc task-done`; `aidlc stamp review` writes review.md `fingerprint:`. Format: `references/aidlc.md` §2.
 
 | File | Content | When |
 |---|---|---|
-| `README.md` | frontmatter, one-line index, `## Traceability` | full workflow |
-| `spec.md` | the to-spec template: Problem Statement, Solution, User Stories (story n = `<KEY>-n`), Implementation Decisions (incl. `### Security`, UI flows and states when a UI changes), Testing Decisions (seams), Out of Scope, Further Notes | full workflow; lean when a spec is handed over or written |
+| `README.md` | frontmatter, one-line index, `## Traceability` | every spec |
+| `spec.md` | the to-spec template: Problem Statement, Solution, User Stories (story n = `<KEY>-n`), Implementation Decisions (incl. `### Security`), Testing Decisions (seams), Out of Scope, Further Notes | every spec; a pasted one is saved verbatim |
 | `contracts/` | machine-readable deltas (OpenAPI, AsyncAPI, JSON Schema, proto) | external contract change |
 | `spec-check.md` | guesses a spec-only reader would make, each resolved or accepted risk | ungrilled spec written by the session |
-| `measurement.md` | metrics, funnel, analytics event taxonomy, experiments, consent (skill `measurement-planning`) | must be measurable |
 | `concern-report.md` | existing vs required compatibility | optional |
-| `tickets.md` | tracer-bullet vertical slices (skill `plan`); exempt from freezing | full workflow |
+| `tickets.md` | tracer-bullet vertical slices (skill `plan`); exempt from freezing | every spec |
 | `ledger.md` | transitions, ticket completions, rulings, test runs, review stamps | from `accepted` |
 | `review.md` / `ship.md` | finding lines / GO-NO-GO, version, checks, rollback, post-release verification (skill `ship`) | before `reviewed` / `shipped` |
 
-Specs from before 3.3.0 (`requirements.md`, `security.md`, `design.md`, `ui-design.md`, `plan.md`) stay as they are; the engine still gates them.
+Specs from before 3.3.0 (`requirements.md`, `security.md`, `plan.md`) stay as they are; the engine still gates them.
 
 README frontmatter is the only lifecycle metadata in the folder:
 
@@ -79,7 +78,7 @@ README frontmatter is the only lifecycle metadata in the folder:
 status: proposed        # stage or side state; set only by `aidlc advance`
 key: RFD                # 2-6 capital letters, unique per repository; user story n is RFD-n
 branch: feat/<slug>     # written by `aidlc advance building`
-security: required      # or: not-applicable — <reason> (non-trust change run through the full workflow)
+security: required      # or: not-applicable — <reason> (no trust boundary)
 scope: <service> | system
 affects: [<service-or-module>, ...]
 accepted_by: <name> (<date>)        # explicit approval only, or `<name> (delegated in request)`
@@ -92,16 +91,14 @@ updated: YYYY-MM-DD
 ---
 ```
 
-`writing-software-docs` labels (`Working Draft` / `Agent-Reviewed` / `Approved`) are review provenance, not lifecycle status.
-
 ## 5. Lifecycle
 
 Only `aidlc advance` changes `status:`; never edit it by hand.
-1. **Propose.** `aidlc init`; strategic agents write their own files.
+1. **Propose.** `aidlc init`; the main session writes the spec.
 2. **Accept.** Only explicit user/team approval, recorded in `accepted_by`. Implementers use `accepted`+ specs (`proposed` only if the dispatch says so).
 3. **Decide.** A decision that outlives the change → ADR, linked from the spec. A smaller build-time decision → ruling in `ledger.md`.
-4. **Implement.** Implementers apply the accepted `contracts/` delta to the authoritative contract source (§6.4). They never rewrite strategic files; contradictions found in code → `DONE_WITH_CONCERNS`.
-5. **Promote.** After merge, `/upgrade-service-docs <service> <feature>` folds verified behaviour into living files, appends active security rules to the living register as `<feature>/AUTH-01`, writes `## Traceability`, sets `source_revision` (must contain the change: `git merge-base --is-ancestor`), advances to `implemented` or `partially-implemented`. Never rewrite intent to match what shipped. Not merged yet → keep status, report it.
+4. **Implement.** Implementers apply the accepted `contracts/` delta to the authoritative contract source (§6.4). They never rewrite spec files; contradictions found in code → `DONE_WITH_CONCERNS`.
+5. **Promote.** After merge, `/tea-sdlc:upgrade-service-docs <service> <feature>` folds verified behaviour into living files, appends active security rules to the living register as `<feature>/AUTH-01`, writes `## Traceability`, sets `source_revision` (must contain the change: `git merge-base --is-ancestor`), advances to `implemented` or `partially-implemented`. Never rewrite intent to match what shipped. Not merged yet → keep status, report it.
 6. **Supersede.** New slug; old README gets `superseded_by`; its rules are retired in the register.
 
 ## 6. Resolution rules
@@ -111,7 +108,7 @@ Only `aidlc advance` changes `status:`; never edit it by hand.
 3. **One writer per file** (§2–§4); everyone else reads and cites. External contract → `scripts/check-contract.py` passes on `contracts/` before implementation.
 4. **Authoritative contract source.** Contract-first: the schema folder the build consumes (`api/`, `openapi/`, `proto/`). Code-first (springdoc, NestJS, FastAPI): the code, with `api-contracts.md` linking the generated spec. Prose links, never re-types, schemas.
 5. **Glossary.** Top-scope `GLOSSARY.md` (system root, or repo root for single repos; an existing `glossary.md` or `CONTEXT.md` is it): domain terms only, written during grilling. ADRs in `docs/adr/NNNN-<slug>.md`, only for hard-to-reverse, surprising, real trade-offs. Per-service entities in `data-model.md`; cross-service in `03-cross-cutting/shared-concepts.md`.
-6. **Fast path** creates no spec folder; if it changes documented behaviour, update the living file in the same change.
+6. **`/tea-sdlc:fix`** creates no spec folder; if it changes documented behaviour, update the living file in the same change.
 7. **Docs are tracked.** If `git check-ignore -q docs/specs/x.md` succeeds (often a personal `core.excludesFile`), add `!/docs/` and `!/docs/**` to the repo `.gitignore`. `scripts/check-setup.py` warns about this.
 
 ## 7. Staleness

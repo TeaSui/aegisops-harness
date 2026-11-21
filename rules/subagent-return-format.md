@@ -17,7 +17,7 @@ The final message of every dispatched subagent carries three things, in any shap
 - A check that ran and found nothing is `DONE`; a tool failure is not an empty result.
 - Every count names what was counted and the command that produced it (e.g. `20 baseline entries — grep -vc '^#' baseline.txt`).
 - Implementers also list the requirement IDs covered and the tests proving each; test names carry the ID (e.g. `RFD-1 rejects over-capture`).
-- Strategic agents (security, UI/UX) persist their artifact and cite its path; never paste a threat model or contract into the return.
+- tea-sdlc:security-engineer-subagent returns only its `### Security` subsection (it writes no files); never paste a contract into a return.
 
 ## Dispatcher
 - Read every cited path (missing → `BLOCKED` whatever the claim), the decisive results and open concerns. Report what the subagent said, unreshaped.

@@ -9,7 +9,7 @@ Review this change on axis {AXIS}. Read-only: do not commit, reset or rewrite fi
 |---|---|---|
 | spec | the change against spec.md (stories, Implementation and Testing Decisions), cited ADRs, contracts/: unmet stories or ticket criteria; each has a test named with its story ID that checks the behavior through the agreed seam; status codes, shapes, error codes, events match decisions and contracts; nothing built that no story asks for or Out of Scope excludes; breaking changes documented | S |
 | standards | separation of concerns, error handling, type safety, duplication, edge cases; the spec's `### Security` controls and rules/patterns.md (input validated at boundaries, no secrets or PII in logs, least privilege); tests check logic, not mocks; migration and backward compatibility; project conventions, REVIEW.md, references/sonar-way.md | Q |
-| both | both rows (fast path, ad-hoc, or the single diff-only re-review) | S and Q |
+| both | both rows (`/tea-sdlc:fix`, ad-hoc, or the single diff-only re-review) | S and Q |
 
 Another reviewer may cover the other axis; stay on yours and never rank against it.
 

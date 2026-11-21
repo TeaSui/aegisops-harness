@@ -1,6 +1,8 @@
 ---
 name: test-driven-development
-description: Use before writing production code for a new behavior or a bug fix — write the test, run it and show it failing for the expected reason, then make it pass; prose and config changes get proportionate structural checks instead (tea-sdlc — follows the routing tiers and hook gates)
+description: Red-green-refactor before any production code — the new test run and shown failing for the expected reason, then made to pass; prose and config changes get proportionate structural checks. Read by /tea-sdlc:build, /tea-sdlc:fix and /tea-sdlc:receiving-code-review.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Test-Driven Development

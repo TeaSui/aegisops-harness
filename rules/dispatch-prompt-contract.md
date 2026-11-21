@@ -1,6 +1,6 @@
 # Dispatch prompt contract
 
-Applies to every `Task` dispatch (main session, full workflow only).
+Applies to every `Task` dispatch by the main session.
 
 ## Prompt shape
 Implementation dispatch: these fields in this order, as XML tags or headings.
@@ -26,7 +26,7 @@ Agent frontmatter sets model and effort; override only when the task differs: im
 - Worktrees: cited instruction files (CLAUDE.md, `.claude/rules/*.md`, docs) may be absent if ignored or uncommitted; then cite the main checkout's absolute paths.
 
 ## Parallel dispatch
-All independent `Task` calls in one message, non-overlapping file ownership; never across a dependency edge (UI/UX before frontend; contract before backend and frontend).
+All independent `Task` calls in one message, non-overlapping file ownership; never across a dependency edge (contract before its implementation).
 
 ## Re-dispatch
 On `NEEDS_CONTEXT`, `BLOCKED` or rejection: read the return, diagnose (context, scope, spec, tool/environment), amend or split; never resend an identical prompt. Max 2 fix rounds per review, then one re-dispatch one model tier up, then split or ask the user.

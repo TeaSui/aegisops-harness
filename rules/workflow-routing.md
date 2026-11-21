@@ -1,7 +1,12 @@
 # Workflow routing
 
+tea-sdlc starts only from a command (`skills/session-bootstrap/SKILL.md` lists them). This file decides what runs inside one.
+
+## /tea-sdlc:fix or /tea-sdlc:aidlc
+`/tea-sdlc:fix` takes a bug fix or small change with no new decision. It stops and names `/tea-sdlc:aidlc` (one line, why) when the change: adds an endpoint, event, schema or migration, or a dependency; needs more than one user story; or crosses a trust boundary with a new decision (fails the escape hatch below).
+
 ## Trust-boundary check
-Walk all six; any YES or unsure → trust boundary.
+Any YES or unsure → trust boundary.
 1. Reads, writes or logs PII or sensitive data (identity, contact, ID numbers, financial, health, credentials).
 2. Creates, validates or changes authN, session or authZ rules (login, tokens, permissions, roles).
 3. Processes money, billing or third-party payments.
@@ -9,54 +14,30 @@ Walk all six; any YES or unsure → trust boundary.
 5. Integrates a new external vendor, partner API or third-party script.
 6. Changes a security-relevant dependency, config key or secret-handling path (TLS, JWT keys, IAM, encryption).
 
-## Workflow mode
-- **lean (default):** main session only; no subagent, `debug-parallel` or AIDLC spec unless the user asks. If full would clearly pay off, say so in one line and let the user choose.
-- **full:** `TEA_SDLC_WORKFLOW=full` (e.g. `.claude/settings.json` `env`), the user asks ("full workflow", "AIDLC", "use subagents"), or a spec bound to the branch is past `proposed`.
-
-The session-start note states the mode.
-
-| Trust boundary | lean | full |
-|---|---|---|
-| NO (any number of domains) | Fast path | Fast path |
-| YES (any number of domains) | Fast path with a security pass | Full workflow |
-
-## Fast path
-TDD + verification. `tea-sdlc:spec` first, 2-3 lines stating the approach (no artifact). No plan, worktree, subagent or review loop. Before a PR or hand-off: the single pre-PR pass (`rules/pre-pr-review.md`). Update a living doc whose documented behaviour changed in the same change.
-
-Several domains (backend, frontend, mobile, AWS/infra, data pipeline, AI/LLM, DevOps; a shared library used by one stack adds none): write the task order in 2-3 lines before the second domain; edit in dependency order; TDD per domain; smoke-test the integration point before merge even if each side passed.
-
-## Lean mode: fast path with a security pass
-In the main session, no dispatch:
-1. Before the first edit write 3-6 lines: assets touched, applicable threats (STRIDE / OWASP), controls kept or added. Control catalogue: `tea-sdlc:fintech-security`; honour the security decisions of an existing `docs/specs/<feature>/spec.md`.
-2. Test the security behaviour (authZ denied, input rejected, no PII in logs, idempotent money movement), not only the happy path.
-3. External contract change → `python3 scripts/check-contract.py` on the drafted contract.
-4. The pre-PR review covers security explicitly; the PR description lists the threats checked and any left to the human reviewer.
-
-## Full workflow (full mode, trust boundary)
-The session runs `python3 scripts/aidlc.py` itself; a stage is entered only via `aidlc advance` when its gate passes. Read only the current stage's part of `references/aidlc.md` (§1 gates, §2 formats, §3 CLI).
-1. **accepted:** `spec.md` in the to-spec template (a handed-over one is used verbatim): grill open decisions (`tea-sdlc:grilling`, `GLOSSARY.md`, ADRs only for hard-to-reverse trade-offs); user stories = requirement IDs; Implementation Decisions with a `### Security` subsection from tea-sdlc:security-engineer-subagent; Testing Decisions = the agreed seams (fewest, ideally one); `contracts/` + `python3 scripts/check-contract.py docs/specs/<feature>` only for an external contract; a blind spec check only for an ungrilled spec you wrote; one user approval.
-2. **planned:** `tickets.md`, tracer-bullet vertical slices with `Blocked by`; every story covered; parallel tickets declare disjoint `Files:`.
-3. **building:** feature branch; `build` builds the `aidlc next` batches (a lone ticket in this session, a disjoint batch dispatched); `aidlc task-done`; decisions taken instead of asking → `aidlc ruling`.
-4. **verified:** `aidlc verify` green at the current fingerprint.
-5. **reviewed:** Spec and Standards axes once each, in parallel with tea-sdlc:qa-subagent; `review.md` = finding lines, each fixed or cleared; then at most ONE diff-only re-review by a single tea-sdlc:code-reviewer with `AXIS: both`, never a second full round.
-6. **shipped:** PR, CI green, `ship.md` (required sections only).
-7. **implemented:** after merge, `/upgrade-service-docs`.
-
-External contract change = HTTP/RPC API, event, shared schema or public library API; tighter validation on an existing endpoint is not one.
-
-## Mid-execution promotion
-Re-classify when scope grows; promotion is mandatory.
-- Fast path hits a trust boundary → stop. Full mode: `aidlc init`, run from `proposed` (cite done work in the plan), dispatch Security on the unmerged work and apply its rules before more code. Lean: do the security pass on the work so far first.
-- Full workflow gains a domain → add its stories and tickets, `aidlc check <feature> --to planned`, extend the Security subsection, re-run the contract gate if the contract grows; new stories get one approval (and one blind pass over them only when not grilled).
-
-## Escape hatch (full mode)
-A trust-boundary change may take the fast path with TDD only if ALL hold:
+## Escape hatch (trust boundary inside /tea-sdlc:fix)
+All must hold, else `/tea-sdlc:aidlc`:
 1. ≤ 30 lines of production code across ≤ 3 files (tests excluded).
 2. No new endpoint, external surface, dependency, schema or migration.
-3. The trigger is a touch, not a new decision (renaming a field already classified as PII, not adding one).
-4. An existing Security rule or threat model covers the path; cite it (default the `### Security` subsection of `docs/specs/<feature>/spec.md`).
+3. A touch, not a new decision (renaming a field already classified as PII, not adding one).
+4. An existing security decision covers the path; cite it (a spec's `### Security`, `docs/security.md`).
 
-Commit message: `Escape hatch applied: <cite rule>`. Any condition fails → full workflow. This wins over any other skip list for Security.
+Then the security pass: before the first edit, 3-6 lines of assets touched, threats (STRIDE / OWASP), controls kept; tests for the security behaviour; the PR lists the threats checked. Commit message: `Escape hatch applied: <cite>`.
+
+## Stack skills (chosen from repository files, never from prompt words)
+Before the first edit in that area, Read the matching `skills/<name>/SKILL.md`:
+
+| The repository has | Read |
+|---|---|
+| `build.gradle*`, `pom.xml`, `go.mod`, `Cargo.toml`, `pyproject.toml`/`requirements*.txt` with a web framework | `backend-languages` |
+| SQL migrations (`db/migration`, `*.sql`, Flyway, Liquibase), ORM entities, DynamoDB or Redis clients | `database-patterns` |
+| Kafka, RabbitMQ, SQS, SNS or EventBridge clients, an outbox table | `messaging-patterns` |
+| OpenAPI, AsyncAPI or proto files, Pact | `api-contract-testing` |
+| `*.feature` files, Cucumber or godog | `bdd-cucumber` |
+| `cdk.json` | `cdk-testing` |
+| `dd-trace`, `dd-java-agent` or DogStatsD dependencies | `observability` |
+| a trust boundary (check above) | `fintech-security` |
+
+Always, in every stage: `test-driven-development` before production code, `systematic-debugging` when a test fails for a reason you cannot explain or a fix fails twice, `grounding-claims` for every factual claim, `find-docs` before relying on a library or cloud-service detail you have not seen in this session.
 
 ## Design-decision quality
-Non-trivial design decision (architecture, API contract, data model, skill/agent design): seek flaws and counter-arguments in your draft before presenting (full mode: an agent does it); resolve material ones in ≤ 2 rounds, report the rest. Skip for implementation, bug fixes, single-file changes.
+A non-trivial design decision (architecture, API contract, data model): look for flaws and counter-arguments in your draft before presenting; resolve material ones in ≤ 2 rounds, report the rest. Skip for implementation, bug fixes, single-file changes.

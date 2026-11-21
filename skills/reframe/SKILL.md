@@ -1,6 +1,7 @@
 ---
 name: reframe
-description: Use when the user states a consequential plan, decision or belief and asks for an opinion, a challenge, a fresh perspective or what they are missing, or is about to commit to something expensive to undo on an untested assumption. Gives the strongest case against, the load-bearing assumption, a different framing and the cheapest check that settles it. Skip when the user only wants the task carried out.
+description: Challenge a consequential plan, decision or belief (/tea-sdlc:reframe) — the strongest case against, the load-bearing assumption, a different framing, the cheapest check that settles it and a verdict. An opinion, no code.
+disable-model-invocation: true
 ---
 
 Target: $ARGUMENTS (default: the user's current position, restated in one sentence first)
