@@ -184,6 +184,15 @@ class PluginIntegrityTest(unittest.TestCase):
                         'skills/requesting-code-review/code-reviewer.md.\n')
         self.assertEqual(self.check()['errors'], [])
 
+    def test_stale_map_and_unphased_skill_fail(self):
+        (self.root / 'HOW-IT-WORKS.md').write_text('# old\n')
+        self.assertIn('HOW-IT-WORKS.md is stale', ' '.join(self.check()['errors']))
+        subprocess.run([sys.executable, str(self.root / 'scripts' / 'map.py')], check=True, capture_output=True)
+        new = self.root / 'skills' / 'brand-new' / 'SKILL.md'
+        new.parent.mkdir()
+        new.write_text('---\nname: brand-new\ndescription: Use when testing.\n---\n# x\n')
+        self.assertIn('skills in no phase', ' '.join(self.check()['errors']))
+
     def test_hook_with_syntax_error_fails(self):
         (self.root / 'hooks' / 'broken.py').write_text('def oops(:\n')
         self.assertIn('hooks/broken.py', ' '.join(self.check()['errors']))

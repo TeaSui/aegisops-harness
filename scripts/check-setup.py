@@ -129,6 +129,12 @@ def main():
             manifests[name] = json.loads((root / '.claude-plugin' / name).read_text())
         except (OSError, ValueError) as error:
             errors.append('.claude-plugin/%s unreadable: %s' % (name, type(error).__name__))
+    map_script = root / 'scripts' / 'map.py'
+    if map_script.is_file():  # HOW-IT-WORKS.md is generated; stale or a skill in no phase is an error
+        result = subprocess.run([sys.executable, str(map_script), '--check'], capture_output=True, text=True,
+                                timeout=60, cwd=str(root))
+        if result.returncode != 0:
+            errors.append((result.stderr.strip() or 'scripts/map.py --check failed').splitlines()[-1])
     plugin = manifests.get('plugin.json', {})
     if plugin and not re.fullmatch(r'\d+\.\d+\.\d+', str(plugin.get('version', ''))):
         errors.append('plugin.json version must be semver')

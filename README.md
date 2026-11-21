@@ -2,7 +2,7 @@
 
 > Software Development Life Cycle plugin for Claude Code — specialist subagents, trust-boundary routing, a canonical documentation layout and automated quality gates.
 
-**Version 3.0.0** · [Changelog](CHANGELOG.md) · MIT
+**Version 3.3.0** · [How it works (one page)](HOW-IT-WORKS.md) · [Changelog](CHANGELOG.md) · MIT
 
 `tea-sdlc` turns Claude Code into a coordinated engineering team: 9 specialist subagents, a 2-tier workflow router that escalates on trust boundaries, one documentation structure shared by every agent and command, and hooks that block secret leaks and unreviewed PRs — plus an **autopilot**, so you never have to remember a slash command or a skill name.
 
