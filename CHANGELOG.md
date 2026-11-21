@@ -14,6 +14,13 @@ Command-driven backend lifecycle. Nothing in tea-sdlc starts from a keyword or t
 - **Rovo first** (`references/aidlc.md` §0): a business or domain question goes to the files, then Atlassian Rovo MCP (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption; the user is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or contradictory sources. Sources and assumptions go into spec.md Further Notes and the final report. Subagents return NEEDS_CONTEXT instead of guessing a business rule.
 - The bootstrap is a situation → command table; the session-start snapshot names the next command for each open spec.
 
+### Measured (`claude-opus-5-5`)
+| Suite | Result |
+|---|---|
+| passive (silence: 18 natural prompts that used to trigger skills) | **17/17 invoked nothing of tea-sdlc** (1 session crashed, excluded) · $6.43 |
+| tdd (`/tea-sdlc:fix`, 4 cases × 2) | 8/8 failing test first · $7.40 |
+| lifecycle (`/tea-sdlc:aidlc`, 2 cases × 2) | 4/4 reach `shipped`, 6/6 outcome checks each · L2 handed spec $3.81–4.74, 10–14 min · L1 $4.79–6.12, 14–16 min |
+
 ### Evals
 - `routing/` removed (there is no router). The `passive` suite now checks silence: natural prompts must invoke no tea-sdlc skill or agent. tdd and lifecycle prompts start with `/tea-sdlc:fix` and `/tea-sdlc:aidlc`.
 

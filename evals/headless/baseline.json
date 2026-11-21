@@ -2,8 +2,8 @@
   "_comment": "Last accepted headless scores. Update with run.py --update-baseline after a deliberate change; see evals/README.md. Seeded from the 2.9.0 measurements recorded in CHANGELOG.md (pre-productized harness, same cases and judges).",
   "suites": {
     "tdd": {
-      "passed": 12,
-      "total": 12,
+      "passed": 8,
+      "total": 8,
       "rate": 1.0,
       "mean_score": 1.0,
       "cases": [
@@ -12,27 +12,59 @@
         "T3-validation",
         "T4-red"
       ],
-      "runs_per_case": 3,
+      "runs_per_case": 2,
       "model": "claude-opus-5-5",
       "claude_version": "2.1.319",
-      "plugin_version": "3.3.0",
-      "cost_usd": 5.81,
+      "plugin_version": "4.0.0",
+      "cost_usd": 7.4,
       "accepted": "2026-11-21"
     },
     "lifecycle": {
-      "passed": 5,
-      "total": 5,
+      "passed": 4,
+      "total": 4,
       "rate": 1.0,
       "mean_score": 1.0,
       "cases": [
         "L1-refund",
         "L2-refund-spec"
       ],
-      "runs_per_case": "2-3",
+      "runs_per_case": 2,
       "model": "claude-opus-5-5",
       "claude_version": "2.1.319",
-      "plugin_version": "3.3.0",
-      "cost_usd": 22.36,
+      "plugin_version": "4.0.0",
+      "cost_usd": 19.47,
+      "accepted": "2026-11-21"
+    },
+    "passive": {
+      "passed": 17,
+      "total": 17,
+      "rate": 1.0,
+      "mean_score": 1.0,
+      "cases": [
+        "01-feature",
+        "02-failing",
+        "03-expert",
+        "04-reframe",
+        "05-vague",
+        "06-prd",
+        "07-metrics",
+        "08-kafka",
+        "09-sql",
+        "10-docs",
+        "11-incident",
+        "12-goal",
+        "13-review-in",
+        "14-prove",
+        "15-validate",
+        "16-threat",
+        "17-review-out",
+        "18-plan"
+      ],
+      "runs_per_case": 1,
+      "model": "claude-opus-5-5",
+      "claude_version": "2.1.319",
+      "plugin_version": "4.0.0",
+      "cost_usd": 6.43,
       "accepted": "2026-11-21"
     }
   }
