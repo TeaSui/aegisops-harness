@@ -1,6 +1,8 @@
 ---
 name: test-driven-development
-description: Use before writing production code for a new behavior or a bug fix — write the test, run it and show it failing for the expected reason, then make it pass; prose and config changes get proportionate structural checks instead (tea-sdlc — follows the routing tiers and hook gates)
+description: Red-green-refactor before any production code — the new test run and shown failing for the expected reason, then made to pass; prose and config changes get proportionate structural checks. Read by /tea-sdlc:build, /tea-sdlc:fix and /tea-sdlc:receiving-code-review.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Test-Driven Development
@@ -19,9 +21,13 @@ The `tdd-gate` hook blocks the first production edit of a session without a reco
 
 Untested existing code you change gets tests for the behavior you touch. These choices need no extra permission. A check that cannot run is named as a gap with the best evidence used instead; never report a skipped check as passed.
 
+## Seams
+
+Tests live at seams: the public interface where behaviour is observed without reaching inside. Use the seams agreed in the spec's Testing Decisions (no spec: the highest existing seam, else the fewest new ones, ideally one; state it in one line). Never test internals or private methods; verify through the interface, not a side channel (querying the database instead of calling it). Expected values come from the story or a worked example, never recomputed the way the code does (tautological). Vertical slices: one test → one implementation → repeat; never all tests first. With a spec, name each test with its story ID (`RFD-3`); use glossary terms.
+
 ## Cycle
 
-1. **RED:** one test, one behavior, named for the behavior, real code (mocks only when unavoidable), assertions derived from the requirement, never copied from the implementation.
+1. **RED:** one test, one behavior, named for the behavior, real code (mocks only when unavoidable), assertions derived from the story or requirement, never copied from the implementation.
 2. **Verify RED.** Passes at once → the behavior exists or the test misses it; fix the test, never force an unrelated failure. Errors → fix the error until it fails correctly. A failure you cannot explain is not valid red.
 3. **GREEN:** the simplest code that passes. No unrequested options (YAGNI), no unrelated refactor.
 4. **Verify GREEN:** this test and the others pass, output clean (no new errors or warnings). A failure → fix the code, not the test.

@@ -1,12 +1,8 @@
 ---
 name: observability
-description: |
-  DataDog: APM instrumentation, custom metrics (StatsD/DogStatsD), log correlation with traces,
-  dashboard design, monitor/alert configuration, and DataBricks pipeline monitoring.
-  Use only when the project uses DataDog: instrumenting services with DataDog, DataDog dashboards or monitors,
-  DataDog log pipelines and trace correlation, or monitoring DataBricks jobs in DataDog.
-  Triggers on: DataDog, DD, dd-trace, dd-java-agent, DogStatsD, DataDog monitors/SLOs, DataBricks monitoring in DataDog.
-  General standards (log format, metric naming, alert severity) live in the plugin's references/observability-patterns.md.
+description: DataDog APM instrumentation, DogStatsD metrics, log-trace correlation, dashboards, monitors and DataBricks job monitoring; Read before the first edit in that area when the repository has dd-trace, dd-java-agent or DogStatsD dependencies. General standards live in references/observability-patterns.md.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # DataDog Observability

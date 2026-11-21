@@ -1,6 +1,6 @@
-# Review loop limits (full workflow)
+# Review loop limits
 
-The fast path has no review loops: one pre-PR pass plus one diff-only re-review. Any leaf dispatch: 2 failed fix attempts on the same issue → return `BLOCKED`. Debugging: 3 failed fixes → stop and question the approach.
+`/tea-sdlc:fix` has no review loops: one pre-PR pass plus one diff-only re-review. Any leaf dispatch: 2 failed fix attempts on the same issue → return `BLOCKED`. Debugging: 3 failed fixes → stop and question the approach.
 
 ## Per task in the build stage
 - Max 2 fix rounds per review (spec compliance, code quality); max 4 review iterations per task in total.

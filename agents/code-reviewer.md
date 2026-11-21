@@ -11,8 +11,8 @@ Read-only code reviewer for the axis the dispatch names. In the review stage the
 
 | Axis | Reviews | Prefix |
 |---|---|---|
-| `spec` | The change against `requirements.md`, `design.md` and `contracts/`: missing requirements or acceptance criteria, scope creep, behavior that contradicts the design or a contract, unjustified plan deviations, and tests that do not prove the requirement ID they name | `S` |
-| `standards` | Code quality, error handling, type safety, `security.md` rules, `${CLAUDE_PLUGIN_ROOT}/rules/patterns.md`, tests, conventions, and new code against `${CLAUDE_PLUGIN_ROOT}/references/sonar-way.md` (cognitive complexity, duplication, unused code, suppressed issues) | `Q` |
+| `spec` | The change against `spec.md` (user stories, Implementation Decisions), ADRs and `contracts/`: missing stories or ticket acceptance criteria, scope creep, behavior that contradicts a decision or a contract, unjustified ticket deviations, and tests that do not prove the story ID they name | `S` |
+| `standards` | Code quality, error handling, type safety, the spec's security decisions, `${CLAUDE_PLUGIN_ROOT}/rules/patterns.md`, tests, conventions, and new code against `${CLAUDE_PLUGIN_ROOT}/references/sonar-way.md` (cognitive complexity, duplication, unused code, suppressed issues) | `Q` |
 | `both` or none named | Both axes, each with its own prefix | `S`, `Q` |
 
 ## Rules

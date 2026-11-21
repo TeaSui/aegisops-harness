@@ -236,7 +236,7 @@ class DocContractTest(Base):
 
     def test_every_artifact_example_is_present(self):
         blocks = doc_blocks()
-        for name in ('requirements.md', 'spec-check.md', 'plan.md', 'ledger.md', 'review.md', 'ship.md'):
+        for name in ('spec.md', 'tickets.md', 'spec-check.md (optional)', 'ledger.md', 'review.md', 'ship.md'):
             self.assertIn(name, blocks)
 
     def test_readme_frontmatter_example(self):
@@ -247,27 +247,30 @@ class DocContractTest(Base):
         self.assertEqual(meta['branch'], 'feat/refunds')
         self.assertEqual(meta['security'], 'required')
 
-    def test_requirements_example(self):
-        reqs, findings = aidlc.parse_requirements(doc_blocks()['requirements.md'], 'requirements.md')
+    def test_spec_example(self):
+        stories, findings = aidlc.parse_spec(doc_blocks()['spec.md'], 'spec.md', 'RFD')
         self.assertPasses(findings)
-        self.assertEqual([r['id'] for r in reqs], ['RFD-1', 'RFD-2'])
-        self.assertEqual(len(reqs[0]['criteria']), 2)
-        self.assertEqual((reqs[0]['verify'], reqs[1]['verify']), ('test', 'check'))
-        self.assertEqual(reqs[1]['verify_detail'], 'k6 run load/refund-visibility.js')
-        self.assertPasses(aidlc.requirement_findings(reqs, 'RFD', 'requirements.md'))
+        self.assertEqual([r['id'] for r in stories], ['RFD-1', 'RFD-2', 'RFD-3', 'RFD-4'])
+        self.assertEqual([r['verify'] for r in stories], ['test', 'test', 'check', 'none'])
+        self.assertEqual(stories[2]['verify_detail'], 'k6 run load/refund-visibility.js')
+        self.assertTrue(stories[2]['title'].endswith('so that I can confirm it on the call.'))
+        self.assertTrue(aidlc.spec_security(doc_blocks()['spec.md']))
 
     def test_spec_check_example(self):
-        guesses, findings = aidlc.parse_spec_check(doc_blocks()['spec-check.md'], 'spec-check.md')
+        guesses, findings = aidlc.parse_spec_check(doc_blocks()['spec-check.md (optional)'], 'spec-check.md')
         self.assertPasses(findings)
         self.assertEqual([(g['id'], g['open']) for g in guesses], [('G1', True), ('G2', False), ('G3', False)])
 
-    def test_plan_example(self):
-        tasks, findings = aidlc.parse_plan(doc_blocks()['plan.md'], 'plan.md')
+    def test_tickets_example(self):
+        tickets, findings = aidlc.parse_tickets(doc_blocks()['tickets.md'], 'tickets.md')
         self.assertPasses(findings)
-        self.assertEqual([t['id'] for t in tasks], ['T1', 'T2', 'T3'])
-        self.assertEqual(tasks[0]['files'], ['src/refunds/model.ts', 'src/refunds/repo.ts'])
-        self.assertEqual(tasks[1]['depends'], ['T1'])
-        self.assertPasses(aidlc.plan_findings(tasks, ['RFD-1', 'RFD-2'], 'plan.md'))
+        self.assertEqual([t['id'] for t in tickets], ['T1', 'T2'])
+        self.assertEqual((tickets[0]['covers'], tickets[0]['depends'], tickets[1]['depends']),
+                         (['RFD-1', 'RFD-2'], [], ['T1']))
+        self.assertEqual((tickets[0]['files'], tickets[1]['files']), (['src/refunds/**'], []))
+        self.assertEqual((len(tickets[0]['criteria']), tickets[0]['done'], tickets[0]['owner']), (3, False, 'main'))
+        self.assertEqual(tickets[1]['test'], 'k6 run load/refund-visibility.js')
+        self.assertPasses(aidlc.plan_findings(tickets, ['RFD-1', 'RFD-2', 'RFD-3'], 'tickets.md'))
 
     def test_ledger_example(self):
         events, findings = aidlc.parse_ledger(doc_blocks()['ledger.md'], 'ledger.md')
@@ -1140,34 +1143,197 @@ class RulingTest(Base):
                                   '--task', 'T9')[0], 2)
 
 
+SPEC_MD = """# Refunds
+
+Status: ready-for-agent
+
+## Problem Statement
+
+Support cannot refund a captured payment.
+
+## Solution
+
+A support agent refunds a captured payment once.
+
+## User Stories
+
+### Refund
+
+1. As a support agent, I want to refund a captured payment, so that the customer gets the money back.
+2. As a support agent, I want refunds visible within 1 minute,
+   so that I can confirm them. (Verify: check — k6 run load/refund-visibility.js)
+3. As a customer, I want a refund email, so that I know. (Verify: none — the notifications service sends it)
+
+## Implementation Decisions
+
+- One seam: the refund service.
+- **Security:** assets payment amount; threats replay, over-refund; controls idempotency key, amount cap.
+
+## Testing Decisions
+
+- Test through the refund service only.
+
+## Out of Scope
+
+- Partial refunds.
+"""
+TICKETS_MD = """# Tickets
+
+## T1: Refund a captured payment
+Blocked by: none
+Covers: RFD-1
+Status: ready-for-agent
+What to build: a full refund, once.
+- [ ] A full refund returns REFUNDED
+Files: src/refunds/**
+
+## T2: Refund visibility
+Blocked by: T1
+Covers: RFD-2
+Status: ready-for-agent
+What to build: visible in the console within 1 minute.
+- [ ] p95 under 60 s
+"""
+
+
+class SpecTemplateLifecycleTest(Base):
+    """spec.md (the to-spec template) + tickets.md through every gate."""
+
+    def accepted_ready(self, **meta):
+        self.readme(**meta)
+        self.spec_file('spec.md', SPEC_MD)
+
+    def test_stories_are_requirements(self):
+        stories, findings = aidlc.parse_spec(SPEC_MD, 'spec.md', 'RFD')
+        self.assertPasses(findings)
+        self.assertEqual([(r['id'], r['verify']) for r in stories], [('RFD-1', 'test'), ('RFD-2', 'check'),
+                                                                     ('RFD-3', 'none')])
+        self.assertEqual(stories[1]['verify_detail'], 'k6 run load/refund-visibility.js')
+        self.assertIn('so that I can confirm them.', stories[1]['title'])
+
+    def test_accepted_needs_no_spec_check_or_security_md(self):
+        self.accepted_ready()
+        self.assertPasses(aidlc.check(self.spec, 'accepted'))
+
+    def test_accepted_gate_failures(self):
+        self.accepted_ready()
+        self.spec_file('spec.md', SPEC_MD.replace('- **Security:** assets', '- Assets').replace(
+            '## Out of Scope\n\n- Partial refunds.\n', '').replace('2. As a', '1. As a'))
+        findings = aidlc.check(self.spec, 'accepted')
+        self.assertFails(findings, 'no security decisions')
+        self.assertFails(findings, 'no "## Out Of Scope" section')
+        self.assertFails(findings, 'duplicate user story 1')
+        self.readme(security='not-applicable — internal tool')
+        self.assertFalse(any('security' in m for m in self.fails(aidlc.check(self.spec, 'accepted'))))
+
+    def test_bad_verify_tag_and_open_optional_guess(self):
+        self.accepted_ready()
+        self.spec_file('spec.md', SPEC_MD.replace('(Verify: none — the notifications service sends it)',
+                                                  '(Verify: maybe)'))
+        self.spec_file('spec-check.md', '- [ ] G1: which currency?\n')
+        findings = aidlc.check(self.spec, 'accepted')
+        self.assertFails(findings, "Verify: 'maybe'")
+        self.assertFails(findings, 'open guess G1')
+
+    def test_planned_coverage_skips_verify_none_and_accepts_ranges(self):
+        self.accepted_ready(status='accepted')
+        self.spec_file('tickets.md', TICKETS_MD)
+        self.assertPasses(aidlc.check(self.spec, 'planned'))
+        self.spec_file('tickets.md', TICKETS_MD.replace('Covers: RFD-2', 'Covers: none — later'))
+        self.assertFails(aidlc.check(self.spec, 'planned'), 'RFD-2 is not covered')
+        self.spec_file('tickets.md', TICKETS_MD.replace('Covers: RFD-1\n', 'Covers: RFD-1..2\n').replace(
+            'Covers: RFD-2', 'Covers: none — load test only'))
+        self.assertPasses(aidlc.check(self.spec, 'planned'))
+
+    def test_tickets_without_files_run_alone(self):
+        tickets, _ = aidlc.parse_tickets(TICKETS_MD.replace('Blocked by: T1', 'Blocked by: none'), 'tickets.md')
+        self.assertEqual([[t['id'] for t in g] for g in aidlc.batches(tickets)], [['T1'], ['T2']])
+        both = TICKETS_MD.replace('Blocked by: T1', 'Blocked by: none').replace(
+            'What to build: visible', 'Files: load/**\nWhat to build: visible')
+        tickets, _ = aidlc.parse_tickets(both, 'tickets.md')
+        self.assertEqual([[t['id'] for t in g] for g in aidlc.batches(tickets)], [['T1', 'T2']])
+
+    def test_full_lifecycle(self):
+        self.accepted_ready()
+        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
+        self.spec_file('tickets.md', TICKETS_MD)
+        self.assertEqual(self.cli('advance', 'refunds', 'planned')[0], 0)
+        self.git('checkout', '-q', '-b', 'feat/refunds')
+        self.assertEqual(self.cli('advance', 'refunds', 'building')[0], 0)
+        self.write('src/refunds/model.py', 'def refund(amount):\n    return amount\n')
+        self.write('tests/test_refunds.py', '# RFD-1: refund a captured payment\n')
+        self.commit('code')
+        code, out, _ = self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')
+        self.assertEqual(code, 1)
+        self.assertIn('acceptance criterion not ticked', out)
+        tickets = self.spec / 'tickets.md'
+        tickets.write_text(tickets.read_text().replace('- [ ] ', '- [x] '))
+        for tid in ('T1', 'T2'):
+            code, out, err = self.cli('task-done', 'refunds', tid, '--cmd', 'true')
+            self.assertEqual(code, 0, out + err)
+        text = tickets.read_text()
+        self.assertEqual(text.count('Status: done'), 2)
+        self.assertNotIn('ready-for-agent', text)
+        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertPasses(aidlc.check(self.spec, 'verified'))
+        rows = {r['id']: r for r in aidlc.trace_rows(aidlc.Spec(self.spec))}
+        self.assertEqual((rows['RFD-1']['tasks'], rows['RFD-1']['result']), (['T1'], 'pass'))
+        self.assertTrue(rows['RFD-3']['result'].startswith('none'))
+
+    def test_verified_needs_story_tests(self):
+        self.accepted_ready()
+        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
+        self.spec_file('tickets.md', TICKETS_MD.replace('- [ ] ', '- [x] '))
+        self.assertEqual(self.cli('advance', 'refunds', 'planned')[0], 0)
+        findings = aidlc.check(self.spec, 'verified')
+        self.assertFails(findings, 'spec.md')
+        self.assertFails(findings, 'RFD-1 (Verify: test) is not referenced by any test file')
+        self.assertFalse(any('RFD-3' in m for m in self.fails(findings)))
+
+
+class LintTest(Base):
+    def test_lint_passes_a_complete_spec_and_lists_failures(self):
+        good = self.write('draft/spec.md', SPEC_MD)
+        code, payload = self.cli_json('lint', good, '--key', 'RFD')
+        self.assertEqual((code, payload['stories']), (0, ['RFD-1', 'RFD-2', 'RFD-3']))
+        bad = self.write('draft/bad.md', SPEC_MD.replace('- **Security:** assets', '- Assets').replace(
+            '## Out of Scope', '## Notes').replace('Status: ready-for-agent', ''))
+        code, payload = self.cli_json('lint', bad, '--key', 'RFD')
+        messages = ' '.join(f['message'] for f in payload['findings'])
+        self.assertEqual(code, 1)
+        self.assertIn('no security decisions', messages)
+        self.assertIn('no "## Out Of Scope" section', messages)
+        self.assertIn('no "Status: ready-for-agent"', messages)
+        code, payload = self.cli_json('lint', bad, '--key', 'RFD', '--no-security')
+        self.assertNotIn('security', ' '.join(f['message'] for f in payload['findings'] if f['level'] == 'FAIL'))
+
+
 class InitTest(Base):
     def test_creates_parsable_skeletons_that_block_acceptance(self):
         code, payload = self.cli_json('init', 'refunds', '--key', 'RFD')
         self.assertEqual(code, 0)
-        for name in ('README.md', 'requirements.md', 'spec-check.md', 'plan.md', 'ledger.md'):
+        for name in ('README.md', 'spec.md', 'tickets.md', 'ledger.md'):
             self.assertTrue((self.spec / name).is_file(), name)
         data = aidlc.load_spec(self.spec)
         self.assertEqual([m for level, m in data['errors'] if level == 'FAIL'], [])
         self.assertEqual((data['stage'], data['readme']['key']), ('proposed', 'RFD'))
-        self.assertEqual((data['requirements'], data['tasks'], data['ledger']), ([], [], []))
+        self.assertEqual((data['tasks'], data['ledger']), ([], []))
         findings = aidlc.check(self.spec, 'accepted')
-        self.assertFails(findings, 'defines no requirement')
-        self.assertFails(findings, 'has not run')
+        self.assertFails(findings, '"## Problem Statement" is empty')
+        self.assertFails(findings, 'has no numbered story')
+        self.assertFails(findings, 'no security decisions')
         self.assertFails(findings, 'accepted_by')
+        self.assertFalse(any('spec-check' in m for m in self.fails(findings)))
 
     def test_init_then_doc_examples_pass_the_gates(self):
         self.assertEqual(self.cli('init', 'refunds', '--key', 'RFD')[0], 0)
         blocks = doc_blocks()
-        self.spec_file('requirements.md', '# Requirements\n\n' + blocks['requirements.md'])
-        self.spec_file('spec-check.md', blocks['spec-check.md'].replace(
-            '- [ ] G1: Is a partial refund allowed', '- [x] G1: Is a partial refund allowed').replace(
-            'capture?', 'capture? — resolved: RFD-1 now says full refunds only'))
-        self.spec_file('security.md', '# Security\nSTRIDE.\n')
+        self.spec_file('spec.md', blocks['spec.md'])
         readme = self.spec / 'README.md'
         readme.write_text(readme.read_text().replace('accepted_by:', 'accepted_by: Tea (2026-11-19)'))
         self.assertPasses(aidlc.check(self.spec, 'accepted'))
         self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
-        self.spec_file('plan.md', '# Plan\n\n' + blocks['plan.md'])
+        self.spec_file('tickets.md', '# Tickets\n\n' + blocks['tickets.md'])
         self.assertPasses(aidlc.check(self.spec, 'planned'))
 
     def test_path_slug_and_errors(self):
@@ -1196,7 +1362,7 @@ class StatusAndResolutionTest(Base):
                          ('proposed', 'accepted', True))
         self.assertEqual(items['payouts']['path'], 'svc/docs/specs/payouts')
         self.assertFalse(items['payouts']['passes'])
-        self.assertTrue(any('plan.md' in b for b in items['payouts']['blockers']))
+        self.assertTrue(any('tickets.md' in b for b in items['payouts']['blockers']))
         self.assertEqual((items['old-thing']['next'], items['old-thing']['passes']), (None, None))
         code, payload = self.cli_json('status')
         self.assertEqual(code, 0)

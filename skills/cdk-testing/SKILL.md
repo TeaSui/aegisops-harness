@@ -1,13 +1,8 @@
 ---
 name: cdk-testing
-description: |
-  AWS CDK testing patterns: unit tests with assertions, fine-grained assertions,
-  snapshot tests, integration tests, custom aspects for compliance, and reusable
-  L3 construct patterns with testability.
-  Use when: writing CDK unit tests, validating CloudFormation output, testing
-  custom constructs, enforcing compliance via aspects, or setting up CDK test suites.
-  Triggers on: CDK test, cdk synth, CloudFormation assertion, CDK aspect,
-  infrastructure test, stack test.
+description: AWS CDK testing — template assertions, fine-grained and snapshot tests, integration tests, compliance aspects and testable L3 constructs; Read before the first edit in that area when the repository has cdk.json.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # CDK Testing

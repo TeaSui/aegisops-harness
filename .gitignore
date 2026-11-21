@@ -21,6 +21,8 @@ Thumbs.db
 # Skills synced in by the Claude app; not part of this plugin
 skills/synced/
 
-# Bundled files must ship even when a personal core.excludesFile matches them (e.g. a global `cdk*`).
+# Bundled files must ship even when a personal core.excludesFile matches them (e.g. a global `cdk*` or `**/build/`).
 !/skills/cdk-testing/
 !/skills/cdk-testing/**
+!/skills/build/
+!/skills/build/**

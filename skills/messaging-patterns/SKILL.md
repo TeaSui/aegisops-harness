@@ -1,12 +1,8 @@
 ---
 name: messaging-patterns
-description: |
-  Broker selection guide, cross-broker patterns (idempotency, DLQ, retry backoff, outbox, schema versioning),
-  and routing to per-broker reference files for Kafka, RabbitMQ, and AWS SQS.
-  Use when: designing event-driven systems, choosing between Kafka/RabbitMQ/SQS, implementing producers or consumers,
-  handling message failures, designing event schemas, or reviewing messaging architecture.
-  Triggers on: Kafka, RabbitMQ, SQS, message broker, event-driven, consumer, producer, DLQ, dead letter, pub/sub,
-  message queue, event streaming, outbox pattern, exactly-once.
+description: Broker selection and cross-broker patterns (idempotency, DLQ, retry backoff, outbox, schema versioning) with Kafka, RabbitMQ and SQS references; Read before the first edit in that area when the repository has Kafka, RabbitMQ, SQS, SNS or EventBridge clients or an outbox table.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # Messaging Patterns

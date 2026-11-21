@@ -1,11 +1,12 @@
 ---
 name: receiving-code-review
-description: Use when review feedback arrives (from the tea-sdlc:code-reviewer subagent, the code-review skill, a PR comment or the user), before changing code for it — verify each finding against the code, fix or clear it with evidence (in the full workflow, close each line of review.md with `fixed:` or `cleared:` and re-stamp after the re-review), push back when it is wrong, and skip performative agreement (tea-sdlc — follows the routing tiers and hook gates)
+description: "Handle review feedback (/tea-sdlc:receiving-code-review, and step d of /tea-sdlc:review) — verify each finding from tea-sdlc:code-reviewer, the code-review skill, a PR comment or the user against the code, fix it test-first or clear it with evidence, push back when it is wrong; with a spec, close each review.md line with fixed: or cleared: and re-stamp."
+disable-model-invocation: true
 ---
 
 # Receiving Code Review
 
-Findings are claims to verify, not orders. For each: understand it, check it against the code, decide, then fix one item at a time with a test.
+Input: `$ARGUMENTS` (PR, comments, or the open lines of `review.md`). Findings are claims to verify, not orders. For each: understand it, check it against the code, decide, then fix one item at a time test-first (`${CLAUDE_PLUGIN_ROOT}/skills/test-driven-development/SKILL.md`).
 
 ## Rules
 
@@ -17,7 +18,7 @@ Findings are claims to verify, not orders. For each: understand it, check it aga
 - Order: blocking (breakage, security), then simple, then complex; test each fix and check for regressions.
 - Reply to GitHub inline comments in their thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level comment.
 
-## Full workflow: close the lines of `review.md`
+## With a spec: close the lines of `review.md`
 
 Format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 `review.md`. Close each finding on its own line; never delete or reword it:
 
@@ -38,6 +39,6 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> reviewed
 
 A stamp is valid only for the code it was taken on; any later code change needs a new `verify` and stamp. Still open after the re-review → the user only if the decision is theirs; otherwise `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> building --back --reason "<finding>"`.
 
-## Fast path
+## Without a spec (`/tea-sdlc:fix` work)
 
-One diff-only re-review of the fixes, then commit and record the pass per `tea-sdlc:requesting-code-review` §3 (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open go to the user as explicit open items, not another loop.
+Run the full suite (`${CLAUDE_PLUGIN_ROOT}/skills/verify/SKILL.md` §2), one diff-only re-review of the fixes, then commit and record the pass per `${CLAUDE_PLUGIN_ROOT}/skills/review/SKILL.md` §3 (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open go to the user as explicit open items, not another loop.

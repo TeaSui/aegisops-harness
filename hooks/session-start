@@ -57,8 +57,8 @@ try:
         lines, user_message = autopilot.snapshot(cwd or os.getcwd())
         if lines:
             payload['hookSpecificOutput']['additionalContext'] += (
-                '\n<tea-sdlc-autopilot>\nProject state at session start:\n- ' + '\n- '.join(lines[:10])
-                + '\n</tea-sdlc-autopilot>')
+                '\n<tea-sdlc>\nProject state at session start:\n- ' + '\n- '.join(lines[:10])
+                + '\n</tea-sdlc>')
         if user_message:
             messages.append(user_message)
 except Exception:

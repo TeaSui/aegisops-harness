@@ -101,8 +101,7 @@ update replaces it. Duel against the plugin's source checkout (`--target <checko
 
 There is no way to fork a live Skill/Agent invocation into a parallel A/B run inside a real
 session — tool calls have side effects, and no interception point can duplicate a turn. What
-*is* wired up: a `PostToolUse` hook (`hooks/auto-trigger.mjs`, registered by the plugin's
-`hooks/hooks.json`, matcher `Skill|Task|Agent`, `async: true`) that fires **after** a
+*is* available: a `PostToolUse` hook (`hooks/auto-trigger.mjs`, matcher `Skill|Task|Agent`, `async: true`) that fires **after** a
 real Skill or Agent call completes and, entirely in the background, checks whether an arena
 duel is due for that artifact:
 
@@ -119,8 +118,10 @@ duel is due for that artifact:
 - **Never touches the transcript**: no stdout, exits 0 unconditionally; everything is logged
   to `arena/auto-trigger.log`.
 
-The hook is registered for every plugin user but stays inert until `autoTrigger.enabled` is
-set to `true` in the state directory's `config.json`.
+tea-sdlc 4.0 starts nothing on its own, so the plugin does **not** register this hook. To opt in, add it to your
+own `.claude/settings.json` (`hooks.PostToolUse`, matcher `Skill|Task|Agent`, command
+`node <plugin>/tools/eval-upgrade/hooks/auto-trigger.mjs`) and set `autoTrigger.enabled` to `true` in the state
+directory's `config.json`.
 
 ## Toggles
 

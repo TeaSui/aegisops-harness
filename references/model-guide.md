@@ -21,8 +21,7 @@ Frontmatter sets the normal job; a dispatcher overrides only when a task differs
 |---|---|---|---|
 | tea-sdlc:security-engineer-subagent | sonnet | high | `opus` or `fable` for novel auth/crypto/payment designs or large trust-boundary diffs |
 | tea-sdlc:code-reviewer | sonnet | medium | `high` effort, or `opus`, for large or trust-boundary diffs |
-| tea-sdlc:ui-ux-designer-subagent | sonnet | medium | — |
-| backend / frontend / mobile / platform / data engineers | sonnet | high | `opus` for ambiguous bugs, cross-cutting refactors, or when `high` still fails |
+| tea-sdlc:backend-engineer-subagent | sonnet | high | `opus` for ambiguous bugs, cross-cutting refactors, or when `high` still fails |
 | tea-sdlc:qa-subagent | sonnet | medium | `high` for large release scopes |
 
 ## Facts that are not obvious

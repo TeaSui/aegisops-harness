@@ -13,10 +13,11 @@ CLI: python3 scripts/aidlc.py <command> [--json] [--repo DIR]   exit 0 pass, 1 g
   stamp SPEC review                        write the code fingerprint into review.md and log it
   trace SPEC [--write]                     requirement -> tasks -> tests -> result; --write fills README ## Traceability
   init SPEC --key KEY                      create the spec folder with skeletons
+  lint FILE [--key KEY] [--no-security]    check a standalone spec.md (a drafted prompt) against the spec rules
 SPEC is a folder path (contains '/') or a slug found under any docs/specs/ folder (init: <repo>/docs/specs/<slug>).
 --repo may be any folder of the repository (normalized to the git top level). task-done and verify accept
 --timeout SECONDS (default 1800). JSON: `exit` is always the CLI exit code; `command_exit` is the run command's.
-Writers of plan.md, README.md and ledger.md hold an exclusive flock on the spec folder (no-op without fcntl).
+Writers of tickets.md (or plan.md), README.md and ledger.md hold an exclusive flock on the spec folder (no-op without fcntl).
 
 Python API (load with importlib.util.spec_from_file_location; hooks call it; names and signatures are stable):
   find_spec(repo, ref) -> Path | None          spec folder for a path or slug; None when missing or ambiguous
@@ -95,7 +96,14 @@ FIELD = re.compile(r'^\s+[-*+]\s+([A-Za-z][\w-]*)\s*:\s*(.*)$')
 REQ_FIELD = re.compile(r'^[*_]*(acceptance|verify|priority)[*_]*\s*:[*_]*\s*(.*)$', re.I)
 BULLET = re.compile(r'^\s*(?:[-*+]|\d+[.)])\s+(.*\S)')
 DASH = r'\s*(?:—|–|--|-|:)?\s*'
-VERIFY = re.compile(r'^(test|check|manual)\b' + DASH + r'(.*)$', re.I)
+VERIFY = re.compile(r'^(test|check|manual|none)\b' + DASH + r'(.*)$', re.I)
+STORY = re.compile(r'^(\d+)[.)]\s+(.*\S)')
+STORY_VERIFY = re.compile(r'\s*[\[(]?\bverify\s*:\s*([^\])]*?)[\])]?\s*$', re.I)
+SPEC_SECTIONS = ('problem statement', 'solution', 'user stories', 'implementation decisions', 'testing decisions',
+                 'out of scope')
+SECURITY_DECISION = re.compile(r'^\s*(?:#{3,6}\s+|[-*+]\s+\*\*|\*\*)security\b', re.I)
+TICKET_FIELD = re.compile(r'^[*_]*(blocked[ -]by|covers|status|test|files|owner|what to build|exit)[*_]*\s*:[*_]*\s*(.*)$',
+                          re.I)
 NOT_APPLICABLE = re.compile(r'^not-applicable\b' + DASH + r'(.*)$', re.I)
 LEDGER_LINE = re.compile(r'^[-*]\s+(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)\s+([\w-]+)\s*(.*)$')
 JUNIT = re.compile(r'\bjunit=(?:(\d+) passed, (\d+) failed|(unreadable|missing))')
@@ -291,7 +299,8 @@ def parse_requirements(text, label):
 def _set_verify(req, value, where):
     match = VERIFY.match(value)
     if not match:
-        return [fail(f'{where}: {req["id"]} Verify: {value!r} is not test, check — <command> or manual — <reason>')]
+        return [fail(f'{where}: {req["id"]} Verify: {value!r} is not test, check — <command>, manual — <reason> '
+                     'or none — <reason>')]
     req['verify'], req['verify_detail'] = match.group(1).lower(), match.group(2).strip()
     if req['verify'] != 'test' and not req['verify_detail']:
         return [fail(f'{where}: {req["id"]} Verify: {req["verify"]} needs "— <command, procedure or reason>"')]
@@ -327,6 +336,66 @@ def select_requirements(reqs, key):
             seen.add(req['id'])
             chosen.append(req)
     return chosen
+
+
+def parse_spec(text, label, key):
+    """(stories, findings) for spec.md (the spec template): every template section present and filled; each
+    top-level numbered item under ## User Stories is requirement <key>-<n>. An item may end with
+    `(Verify: check — <command>)`, `(Verify: manual — <reason>)` or `(Verify: none — <reason>)` (not delivered here)."""
+    lines, findings = strip_noise(text), []
+    ranges = section_ranges(lines)
+    items, current = [], None
+    start, end = ranges.get('user stories', (0, 0))
+    for i in range(start + 1, end):
+        line = lines[i]
+        match = STORY.match(line)
+        if match:
+            current = {'number': int(match.group(1)), 'text': match.group(2), 'line': i + 1}
+            items.append(current)
+        elif current and line.strip() and line[0] in ' \t':
+            current['text'] += ' ' + line.strip()
+        elif line.strip():
+            current = None
+    stories, seen = [], {}
+    for item in items:
+        rid = f'{key}-{item["number"]}'
+        story = {'id': rid, 'prefix': key, 'line': item['line'], 'title': item['text'], 'criteria': [item['text']],
+                 'verify': 'test', 'verify_detail': '', 'verify_line': None, 'priority': None}
+        tag = STORY_VERIFY.search(item['text'])
+        if tag:
+            story['title'] = story['criteria'][0] = item['text'][:tag.start()].rstrip()
+            story['verify_line'] = item['line']
+            findings += _set_verify(story, tag.group(1).strip(), f'{label}:{item["line"]}')
+        if rid in seen:
+            findings.append(fail(f'{label}:{item["line"]}: duplicate user story {item["number"]} (also line {seen[rid]})'))
+            continue
+        seen[rid] = item['line']
+        stories.append(story)
+    return stories, findings
+
+
+def spec_findings(text, label, stories):
+    """The accepted gate on spec.md: every template section present and filled, at least one story."""
+    lines, findings = strip_noise(text), []
+    ranges = section_ranges(lines)
+    for name in SPEC_SECTIONS:
+        if name not in ranges:
+            findings.append(fail(f'{label}: no "## {name.title()}" section (spec template)'))
+            continue
+        start, end = ranges[name]
+        if not any(x.strip() and not x.lstrip().startswith('#') for x in lines[start + 1:end]):
+            findings.append(fail(f'{label}:{start + 1}: "## {name.title()}" is empty'))
+    if 'user stories' in ranges and not stories:
+        findings.append(fail(f'{label}: "## User Stories" has no numbered story ("1. As a <actor>, I want …")'))
+    return findings
+
+
+def spec_security(text):
+    """spec.md records security decisions: a `### Security` heading or a **Security** bullet in Implementation
+    Decisions."""
+    lines = strip_noise(text)
+    start, end = section_ranges(lines).get('implementation decisions', (0, 0))
+    return any(SECURITY_DECISION.match(x) for x in lines[start + 1:end])
 
 
 def parse_spec_check(text, label):
@@ -377,6 +446,53 @@ def parse_plan(text, label):
     return [_task(task) for task in tasks], findings
 
 
+def parse_tickets(text, label):
+    """(tickets, findings) for tickets.md: `## T<n>: <title>` sections with `Blocked by:`, `Covers:`, `Status:`
+    (ready-for-agent | done), `What to build:`, acceptance checkboxes and optional `Test:`, `Files:`, `Owner:`."""
+    tickets, findings, current = [], [], None
+    for n, line in enumerate(strip_noise(text), 1):
+        heading = HEADING.match(line)
+        if heading:
+            current = None
+            if len(heading.group(1)) == 2:
+                title = heading.group(2)
+                token = (title.split() or [''])[0].rstrip(':.')
+                if TASK_ID.match(token):
+                    current = {'id': token, 'title': title[len(token):].strip(' :.—-'), 'line': n, 'fields': {},
+                               'criteria': [], 'status_line': None}
+                    tickets.append(current)
+                elif re.match(r'^T\S*\d', token):
+                    findings.append(fail(f'{label}:{n}: ticket ID {token!r} must be T<n>'))
+            continue
+        if current is None:
+            continue
+        box = CHECKBOX.match(line.strip())
+        if box:
+            current['criteria'].append({'done': box.group(2) != ' ', 'text': box.group(3).strip(), 'line': n})
+            continue
+        field = TICKET_FIELD.match(line.strip())
+        if field:
+            name = {'blocked by': 'depends', 'blocked-by': 'depends', 'what to build': 'what'}.get(
+                field.group(1).lower(), field.group(1).lower())
+            current['fields'].setdefault(name, field.group(2).strip())
+            if name == 'status' and current['status_line'] is None:
+                current['status_line'] = n
+    result = []
+    for raw in tickets:
+        status = raw['fields'].get('status', 'ready-for-agent').strip().lower()
+        criteria = raw.pop('criteria')
+        status_line = raw.pop('status_line')
+        raw['done'] = status.startswith('done')
+        raw['fields'].setdefault('owner', 'main')
+        if not raw['fields'].get('exit'):
+            raw['fields']['exit'] = '; '.join(c['text'] for c in criteria)
+        what = raw['fields'].pop('what', '')
+        ticket = _task(raw)
+        ticket.update(criteria=criteria, status_line=status_line, what=what, ticket=True)
+        result.append(ticket)
+    return result, findings
+
+
 def _task(raw):
     fields = raw.pop('fields')
     covers = fields.get('covers')
@@ -390,12 +506,21 @@ def _task(raw):
             files.append(part + '**' if part.endswith('/') else part)
             if is_new:
                 new.append(files[-1])
-    raw.update({'covers': [] if none or covers is None else re.findall(r'\b[A-Z][A-Z0-9]*-\d+\b', covers),
+    raw.update({'covers': [] if none or covers is None else _covers(covers),
                 'covers_given': covers is not None, 'covers_none': none.group(1).strip() if none else None,
                 'depends': re.findall(r'\bT\d+\b', fields.get('depends') or ''),
                 'owner': fields.get('owner', ''), 'files': files, 'new_files': new,
                 'exit': fields.get('exit', ''), 'test': fields.get('test', '')})
     return raw
+
+
+def _covers(value):
+    """Requirement IDs in a covers list; `RFD-3..RFD-6` and `RFD-3..6` are inclusive ranges."""
+    ids = []
+    for prefix, first, second in re.findall(r'\b([A-Z][A-Z0-9]*)-(\d+)(?:\s*(?:\.\.|–|—)\s*(?:\1-)?(\d+))?\b', value):
+        last = int(second) if second else int(first)
+        ids += [f'{prefix}-{n}' for n in range(int(first), max(int(first), last) + 1)]
+    return list(dict.fromkeys(ids))
 
 
 def parse_ledger(text, label):
@@ -656,16 +781,19 @@ def plan_findings(tasks, req_ids, label):
     """The planned gate on parsed tasks; req_ids None skips the coverage checks."""
     findings, seen = [], {}
     if not tasks:
-        return [fail(f'{label}: defines no task ("- [ ] T1: <title>" with indented fields)')]
+        if label.endswith('plan.md'):
+            return [fail(f'{label}: defines no task ("- [ ] T1: <title>" with indented fields)')]
+        return [fail(f'{label}: defines no ticket ("## T1: <title>" with Blocked by:, Covers:, criteria)')]
     for task in tasks:
         where, tid = f'{label}:{task["line"]}', task['id']
         if tid in seen:
             findings.append(fail(f'{where}: duplicate task {tid} (also line {seen[tid]})'))
         seen.setdefault(tid, task['line'])
-        if not task['owner']:
-            findings.append(fail(f'{where}: {tid} has no owner'))
-        if not task['files']:
-            findings.append(fail(f'{where}: {tid} has no files'))
+        if not task.get('ticket'):  # legacy plan.md: every task names its owner and files
+            if not task['owner']:
+                findings.append(fail(f'{where}: {tid} has no owner'))
+            if not task['files']:
+                findings.append(fail(f'{where}: {tid} has no files'))
         if not task['covers_given']:
             findings.append(fail(f'{where}: {tid} covers nothing (add "covers: <IDs>" or "covers: none — <reason>")'))
         elif task['covers_none'] == '':
@@ -714,8 +842,12 @@ def batches(tasks):
     ready = [t for t in tasks if not t['done'] and all(d in done for d in t['depends'])]
     groups = []
     for task in ready:
+        if not task['files']:  # no declared files: nothing proves it conflict-free, so it runs alone
+            groups.append([task])
+            continue
         for group in groups:
-            if not any(overlaps(a, b) for other in group for a in other['files'] for b in task['files']):
+            if all(other['files'] for other in group) and not any(
+                    overlaps(a, b) for other in group for a in other['files'] for b in task['files']):
                 group.append(task)
                 break
         else:
@@ -961,16 +1093,36 @@ class Spec:
         key = self.meta.get('key', '')
         return key if KEY.match(key) else ''
 
+    @property
+    def legacy_spec(self):
+        """requirements.md (+ spec-check.md, security.md) instead of spec.md: specs written before 3.3.0."""
+        return not (self.dir / 'spec.md').is_file() and (self.dir / 'requirements.md').is_file()
+
+    @property
+    def spec_name(self):
+        return 'requirements.md' if self.legacy_spec else 'spec.md'
+
+    @property
+    def plan_name(self):
+        if (self.dir / 'tickets.md').is_file():
+            return 'tickets.md'
+        return 'plan.md' if (self.dir / 'plan.md').is_file() or self.legacy_spec else 'tickets.md'
+
     @cached_property
     def parsed_requirements(self):
-        return self._parse('requirements.md', parse_requirements)
+        if self.legacy_spec:
+            return self._parse('requirements.md', parse_requirements)
+        return self._parse('spec.md', lambda text, label: parse_spec(text, label, self.key or 'KEY'))
 
     @cached_property
     def requirements(self):
         """(requirements of this spec's key or None, parse findings + requirement_findings)."""
         reqs, findings = self.parsed_requirements
         if reqs is None:
-            return None, findings or self.missing('requirements.md')
+            return None, findings or self.missing(self.spec_name)
+        if not self.legacy_spec:
+            text, _ = read_text(self.dir / 'spec.md', self.label('spec.md'))
+            return reqs, findings + spec_findings(text or '', self.label('spec.md'), reqs)
         return (select_requirements(reqs, self.key),
                 findings + requirement_findings(reqs, self.key, self.label('requirements.md')))
 
@@ -980,7 +1132,7 @@ class Spec:
 
     @cached_property
     def tasks(self):
-        return self._parse('plan.md', parse_plan)
+        return self._parse(self.plan_name, parse_tickets if self.plan_name == 'tickets.md' else parse_plan)
 
     @cached_property
     def ledger(self):
@@ -1021,7 +1173,8 @@ def gate_accepted(spec):
                 findings.append(fail(f'{readme}: key {key} is also used by {spec.repo.rel(other)}'))
     findings += spec.requirements[1]
     guesses, problems = spec.guesses
-    findings += problems if guesses is not None or problems else spec.missing('spec-check.md')
+    if guesses is not None or problems or spec.legacy_spec:  # spec.md: the blind check is optional
+        findings += problems if guesses is not None or problems else spec.missing('spec-check.md')
     text, _ = read_text(spec.dir / 'spec-check.md', spec.label('spec-check.md'))
     if text is not None and not spec_check_ran(text):
         findings.append(fail(f'{spec.label("spec-check.md")}: the blind spec check has not run '
@@ -1055,6 +1208,14 @@ def _security(spec):
     if waiver:
         return [] if waiver.group(1).strip() else [
             fail(f'{spec.label("README.md")}: security: not-applicable needs "— <reason>"')]
+    if not spec.legacy_spec:
+        text, _ = read_text(spec.dir / 'spec.md', spec.label('spec.md'))
+        if text is not None and spec_security(text):
+            return []
+        if not (spec.dir / 'security.md').is_file():
+            return [fail(f'{spec.label("spec.md")}: Implementation Decisions has no security decisions (a "### Security" '
+                         'heading or a "**Security**" bullet: assets, threats, controls), or set README '
+                         'security: not-applicable — <reason>')]
     text, error = read_text(spec.dir / 'security.md', spec.label('security.md'))
     if text is None:
         return [fail(error or f'{spec.label("security.md")}: missing (or set security: not-applicable — <reason>)')]
@@ -1066,9 +1227,9 @@ def gate_planned(spec):
     tasks, problems = spec.tasks
     findings = findings + problems
     if tasks is None:
-        return findings + (spec.missing('plan.md') if not problems else [])
-    ids = [r['id'] for r in reqs] if reqs is not None else None
-    return findings + plan_findings(tasks, ids, spec.label('plan.md'))
+        return findings + (spec.missing(spec.plan_name) if not problems else [])
+    ids = [r['id'] for r in reqs if r['verify'] != 'none'] if reqs is not None else None
+    return findings + plan_findings(tasks, ids, spec.label(spec.plan_name))
 
 
 def gate_building(spec):
@@ -1090,16 +1251,22 @@ def gate_verified(spec):
     findings += problems
     green = {e['task'] for e in events if e['kind'] == 'task-done' and e.get('exit') == 0}
     for task in tasks:
-        where = f'{spec.label("plan.md")}:{task["line"]}'
+        where = f'{spec.label(spec.plan_name)}:{task["line"]}'
         if not task['done']:
             findings.append(fail(f'{where}: {task["id"]} is not done (aidlc task-done)'))
         elif task['id'] not in green:
             findings.append(fail(f'{where}: {task["id"]} is ticked but has no green task-done event in ledger.md'))
+        findings += _open_criteria(spec, task)
     for req in spec.requirements[0] or []:
         if req['verify'] == 'test' and not spec.repo.tests_referencing(req['id']):
-            findings.append(fail(f'{spec.label("requirements.md")}:{req["line"]}: {req["id"]} (Verify: test) is not '
+            findings.append(fail(f'{spec.label(spec.spec_name)}:{req["line"]}: {req["id"]} (Verify: test) is not '
                                  'referenced by any test file'))
     return findings + _verify_findings(spec)
+
+
+def _open_criteria(spec, task):
+    return [fail(f'{spec.label(spec.plan_name)}:{c["line"]}: {task["id"]} acceptance criterion not ticked: '
+                 f'{c["text"][:80]}') for c in task.get('criteria', []) if not c['done']]
 
 
 def _verify_findings(spec):
@@ -1573,10 +1740,11 @@ def cmd_next(args):
     spec = spec_arg(args)
     tasks, findings = spec.tasks
     if not tasks or failed(findings):
-        findings = findings or (spec.missing('plan.md') if tasks is None else plan_findings([], None, spec.label('plan.md')))
+        findings = findings or (spec.missing(spec.plan_name) if tasks is None
+                                else plan_findings([], None, spec.label(spec.plan_name)))
         return finding_result(findings, {'spec': spec.repo.rel(spec.dir), 'batches': []})
     groups = batches(tasks)
-    lines = [f'batch {i}: ' + ', '.join(f'{t["id"]} ({t["owner"] or "no owner"}: {", ".join(t["files"])})' for t in g)
+    lines = [f'batch {i}: ' + ', '.join(f'{t["id"]} ({t["owner"] or "no owner"}: {", ".join(t["files"]) or "files not declared, runs alone"})' for t in g)
              for i, g in enumerate(groups, 1)]
     if not groups:
         lines = ['all tasks are done'] if all(t['done'] for t in tasks) else ['no task is ready (open dependencies)']
@@ -1588,7 +1756,11 @@ def cmd_task_done(args):
     tasks, problems = spec.tasks
     task = next((t for t in tasks or [] if t['id'] == args.task), None)
     if task is None:
-        raise UsageError(f'{args.task} is not a task in {spec.label("plan.md")}')
+        raise UsageError(f'{args.task} is not a task in {spec.label(spec.plan_name)}')
+    unticked = _open_criteria(spec, task)
+    if unticked:  # the implementer ticks each criterion once a test shows it; done means all of them
+        return finding_result(unticked, {'spec': spec.repo.rel(spec.dir), 'task': task['id'], 'command_exit': None,
+                                         'ticked': False, 'output_tail': ''})
     cmd = args.cmd or task['test']
     if not cmd:
         raise UsageError(f'{args.task} has no "test:" field; pass --cmd')
@@ -1598,11 +1770,11 @@ def cmd_task_done(args):
     payload = {'spec': spec.repo.rel(spec.dir), 'task': task['id'], 'command_exit': code, 'ticked': False,
                'output_tail': tail}
     if code != 0:
-        findings.append(fail(f'{task["id"]}: command exited {code}; plan.md and ledger.md unchanged\n{tail}'))
+        findings.append(fail(f'{task["id"]}: command exited {code}; {spec.plan_name} and ledger.md unchanged\n{tail}'))
         return finding_result(findings, payload)
-    with spec_lock(spec.dir):  # plan.md may have changed while the command ran: re-read, tick by ID
-        if not _tick(spec.dir / 'plan.md', task['id']):
-            findings.append(fail(f'{task["id"]} is no longer in {spec.label("plan.md")}; nothing ticked'))
+    with spec_lock(spec.dir):  # the plan may have changed while the command ran: re-read, tick by ID
+        if not _tick(spec.dir / spec.plan_name, task['id']):
+            findings.append(fail(f'{task["id"]} is no longer in {spec.label(spec.plan_name)}; nothing ticked'))
             return finding_result(findings, payload)
         fp = Repo(spec.repo.root).fingerprint
         event = append_ledger(spec, f'task-done {task["id"]} exit=0 fingerprint={fp} cmd={quoted(cmd)}')
@@ -1611,13 +1783,21 @@ def cmd_task_done(args):
 
 
 def _tick(plan, task_id):
+    """plan.md: tick the task's box; tickets.md: set the ticket's `Status:` to done."""
     text, newline = read_for_edit(plan)
-    tasks, _ = parse_plan(text, plan.name)
+    tickets = plan.name == 'tickets.md'
+    tasks, _ = (parse_tickets if tickets else parse_plan)(text, plan.name)
     task = next((t for t in tasks if t['id'] == task_id), None)
     if task is None:
         return False
     lines = text.split('\n')
-    lines[task['line'] - 1] = re.sub(r'\[ \]', '[x]', lines[task['line'] - 1], count=1)
+    if not tickets:
+        lines[task['line'] - 1] = re.sub(r'\[ \]', '[x]', lines[task['line'] - 1], count=1)
+    elif task['status_line']:
+        line = lines[task['status_line'] - 1]
+        lines[task['status_line'] - 1] = line[:len(line) - len(line.lstrip())] + 'Status: done'
+    else:
+        lines.insert(task['line'], 'Status: done')
     write_atomic(plan, '\n'.join(lines), newline)
     return True
 
@@ -1671,7 +1851,7 @@ def cmd_ruling(args):
     if args.task:
         tasks = spec.tasks[0] or []
         if not TASK_ID.match(args.task) or args.task not in {t['id'] for t in tasks}:
-            raise UsageError(f'{args.task} is not a task in {spec.label("plan.md")}')
+            raise UsageError(f'{args.task} is not a task in {spec.label(spec.plan_name)}')
         task = f'{args.task}: '
     clean = [' '.join(str(x).split()) for x in (args.decision, args.why, args.if_wrong)]
     if not all(clean):
@@ -1727,6 +1907,28 @@ def trace_table(rows):
     return lines
 
 
+def cmd_lint(args):
+    """Check a standalone spec.md (e.g. a drafted prompt) against the accepted gate's spec.md rules."""
+    path = pathlib.Path(args.file)
+    text, error = read_text(path, str(path))
+    if text is None:
+        raise UsageError(error or f'{path}: not readable')
+    if not KEY.match(args.key):
+        raise UsageError(f'--key {args.key!r} must be 2-6 capital letters')
+    label = path.name
+    stories, findings = parse_spec(text, label, args.key)
+    findings += spec_findings(text, label, stories)
+    if not args.no_security and not spec_security(text):
+        findings.append(fail(f'{label}: Implementation Decisions has no security decisions (a "### Security" heading '
+                             'or a "**Security**" bullet: assets, threats, controls); pass --no-security only when '
+                             'the trust-boundary check is all NO'))
+    if not re.search(r'^\s*Status:\s*ready-for-agent\b', text, re.M | re.I):
+        findings.append(warn(f'{label}: no "Status: ready-for-agent" line: the spec stage will ask for approval'))
+    if not failed(findings):
+        findings.append(('OK', f'{label}: {len(stories)} stories, every template section filled'))
+    return finding_result(findings, {'file': str(path), 'stories': [s['id'] for s in stories]})
+
+
 def cmd_trace(args):
     spec = spec_arg(args)
     reqs, findings = spec.requirements
@@ -1759,52 +1961,43 @@ status: proposed
 key: {key}
 branch:
 security: required
+contract: none
 accepted_by:
 updated: {today}
 ---
 # {slug}
 
-<!-- One paragraph: what changes and why. Set `contract: external` or `contract: none` (layout §4). -->
-
-| File | Content |
-|---|---|
-| requirements.md | requirements `{key}-<n>` with acceptance criteria and `Verify:` |
-| spec-check.md | blind spec check guesses |
-| plan.md | tasks, owners, files, dependencies |
-| ledger.md | lifecycle events, written by `aidlc` only |
+Spec: `spec.md`. Tickets: `tickets.md`. Lifecycle events: `ledger.md` (written by `aidlc` only).
 """
-REQUIREMENTS_SKELETON = """# Requirements — {slug}
+SPEC_SKELETON = """# {slug}
+
+<!-- Template: references/aidlc.md §2. User story n is requirement {key}-n; tests reference it as {key}-n. -->
+
+## Problem Statement
+
+## Solution
+
+## User Stories
+
+## Implementation Decisions
+
+## Testing Decisions
+
+## Out of Scope
+
+## Further Notes
+"""
+TICKETS_SKELETON = """# Tickets — {slug}
 
 <!--
-Each requirement is a heading whose first token is its ID:
-
-### {key}-1: <title>
-Priority: must
-Acceptance:
-- Given <context>, when <action>, then <outcome>.
-Verify: test            (or: check — <command or procedure>, or: manual — <reason>)
--->
-"""
-SPEC_CHECK_SKELETON = """# Spec check — {slug}
-
-<!--
-Written by the blind spec checker (skill spec-check): one line per guess,
-- [ ] G1: <question>
-closed as "- [x] G1: <question> — resolved: <where the spec answers it>" or "— accepted risk: <why>".
-When there is nothing to guess the checker writes "Checked: no guesses."
--->
-"""
-PLAN_SKELETON = """# Plan — {slug}
-
-<!--
-One checkbox per task; [x] is set only by `aidlc task-done`.
-- [ ] T1: <title>
-  - covers: {key}-1            (or: none — <reason>)
-  - depends: none              (or: T<n>, …)
-  - owner: <agent or main>
-  - files: <path> (new), <glob>
-  - test: <command>            (optional: default for aidlc task-done)
-  - exit: <done criterion>
+## T1: <vertical slice title>
+Blocked by: none
+Covers: {key}-1..{key}-3
+Status: ready-for-agent        (aidlc task-done sets: done)
+What to build: <end-to-end behaviour, from the user's side>
+- [ ] <acceptance criterion>
+Test: <command>                (optional: default for aidlc task-done)
+Files: <glob>, <glob>          (optional: needed to run tickets in parallel)
 -->
 """
 LEDGER_SKELETON = """# Ledger — {slug}
@@ -1831,9 +2024,8 @@ def cmd_init(args):
     target.mkdir(parents=True, exist_ok=True)
     values = {'key': args.key, 'slug': target.name, 'today': today()}
     written = []
-    for name, skeleton in (('README.md', README_SKELETON), ('requirements.md', REQUIREMENTS_SKELETON),
-                           ('spec-check.md', SPEC_CHECK_SKELETON), ('plan.md', PLAN_SKELETON),
-                           ('ledger.md', LEDGER_SKELETON)):
+    for name, skeleton in (('README.md', README_SKELETON), ('spec.md', SPEC_SKELETON),
+                           ('tickets.md', TICKETS_SKELETON), ('ledger.md', LEDGER_SKELETON)):
         if not (target / name).exists():
             (target / name).write_text(skeleton.format(**values), encoding='utf-8')
             written.append(name)
@@ -1896,6 +2088,9 @@ def build_parser():
     add('stamp', cmd_stamp, 'spec').add_argument('what', choices=['review'])
     add('trace', cmd_trace, 'spec').add_argument('--write', action='store_true')
     add('init', cmd_init, 'spec').add_argument('--key', required=True)
+    lint = add('lint', cmd_lint, 'file')
+    lint.add_argument('--key', default='KEY')
+    lint.add_argument('--no-security', action='store_true', help='the change crosses no trust boundary')
     return parser
 
 

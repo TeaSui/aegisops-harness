@@ -1,9 +1,10 @@
 ---
-description: Score, upgrade and A/B-duel Claude Code assets (agents, commands, rules, skills) with the bundled eval-upgrade tool — static checks with a 0-100 score, LLM upgrade proposals, and champion/challenger arena duels with guarded auto-promotion. Use to audit, score, improve or duel the assets of a .claude directory or a plugin checkout.
+description: Score, upgrade and A/B-duel Claude Code assets (agents, commands, rules, skills) of a .claude directory or a plugin checkout with the bundled eval-upgrade tool — static checks with a 0-100 score, LLM upgrade proposals, and champion/challenger arena duels with guarded promotion.
+disable-model-invocation: true
 argument-hint: "[eval | dashboard | arena <challenger|duel|status|promote|discard> <artifact-id> [rounds] | config] [--target <dir>] [--types agents,commands,rules,skills] [--llm]"
 ---
 
-# /eval-upgrade
+# /tea-sdlc:eval-upgrade
 
 Run the bundled tool for `$ARGUMENTS` and report what it printed. With no arguments, run a static evaluation. The tool needs Node ≥20. For anything beyond this page, read `${CLAUDE_PLUGIN_ROOT}/tools/eval-upgrade/README.md`. Hooks are out of scope.
 
@@ -17,7 +18,7 @@ node "$T/bin/run.mjs" --show-config               # effective settings, state lo
 node "$T/server.mjs" --open                       # dashboard: start as a background Bash task
 ```
 
-Artifact IDs are `<type>/<name>` as the evaluation lists them (e.g. `skills/goal`, `agents/code-reviewer`).
+Artifact IDs are `<type>/<name>` as the evaluation lists them (e.g. `skills/spec`, `agents/code-reviewer`).
 
 ## Target
 - The target is any directory with `agents/`, `commands/`, `rules/` or `skills/` subfolders.

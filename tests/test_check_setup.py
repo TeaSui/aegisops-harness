@@ -163,12 +163,19 @@ class PluginIntegrityTest(unittest.TestCase):
         self.assertEqual(self.check()['errors'], [])
 
     def test_dangling_skill_reference_fails(self):
-        hook = self.root / 'hooks' / 'autopilot.py'
-        hook.write_text(hook.read_text().replace("('cdk-testing',", "('no-such-skill',", 1)
-                        + "\n# see tea-sdlc:missing-command\n")
+        rule = self.root / 'rules' / 'agents.md'
+        rule.write_text(rule.read_text() + '\nThen run /tea-sdlc:no-such-skill.\n')
+        (self.root / 'hooks' / 'autopilot.py').write_text(
+            (self.root / 'hooks' / 'autopilot.py').read_text() + '\n# see tea-sdlc:missing-command\n')
         errors = ' '.join(self.check()['errors'])
         self.assertIn('tea-sdlc:missing-command', errors)
         self.assertIn('no-such-skill', errors)
+
+    def test_model_invocable_skill_fails(self):
+        # tea-sdlc runs only from slash commands: a skill the model could load on its own is an error.
+        skill = self.root / 'skills' / 'plan' / 'SKILL.md'
+        skill.write_text(skill.read_text().replace('disable-model-invocation: true\n', '', 1))
+        self.assertIn('skills/plan/SKILL.md: needs disable-model-invocation: true', ' '.join(self.check()['errors']))
 
     def test_bare_agent_name_fails(self):
         # Claude Code registers plugin agents as tea-sdlc:<name>; a bare subagent_type is "not found".
@@ -181,16 +188,25 @@ class PluginIntegrityTest(unittest.TestCase):
     def test_namespaced_agent_name_and_agent_file_paths_pass(self):
         rule = self.root / 'rules' / 'agents.md'
         rule.write_text(rule.read_text() + '\nDispatch `tea-sdlc:qa-subagent`; template '
-                        'skills/requesting-code-review/code-reviewer.md.\n')
+                        'skills/review/code-reviewer.md.\n')
         self.assertEqual(self.check()['errors'], [])
+
+    def test_stale_map_and_unphased_skill_fail(self):
+        (self.root / 'HOW-IT-WORKS.md').write_text('# old\n')
+        self.assertIn('HOW-IT-WORKS.md is stale', ' '.join(self.check()['errors']))
+        subprocess.run([sys.executable, str(self.root / 'scripts' / 'map.py')], check=True, capture_output=True)
+        new = self.root / 'skills' / 'brand-new' / 'SKILL.md'
+        new.parent.mkdir()
+        new.write_text('---\nname: brand-new\ndescription: Use when testing.\n---\n# x\n')
+        self.assertIn('skills in no phase', ' '.join(self.check()['errors']))
 
     def test_hook_with_syntax_error_fails(self):
         (self.root / 'hooks' / 'broken.py').write_text('def oops(:\n')
         self.assertIn('hooks/broken.py', ' '.join(self.check()['errors']))
 
-    def test_each_root_is_checked_with_its_own_autopilot(self):
-        hook = self.root / 'hooks' / 'autopilot.py'
-        hook.write_text(hook.read_text().replace("('cdk-testing',", "('no-such-skill',", 1))
+    def test_each_root_is_checked_on_its_own(self):
+        rule = self.root / 'rules' / 'agents.md'
+        rule.write_text(rule.read_text() + '\nThen run /tea-sdlc:no-such-skill.\n')
         probe = (
             'import importlib.util, json, sys, io, contextlib\n'
             'spec = importlib.util.spec_from_file_location("cs", sys.argv[1]); m = importlib.util.module_from_spec(spec)\n'

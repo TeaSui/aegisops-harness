@@ -1,20 +1,20 @@
-# Passive-trigger cases. expect: any of these skills/agents counts (bare names; tea-sdlc: prefix is stripped).
-# setup: none | failing (npm test red) | pending (uncommitted sub() in src/math.js). Prompts never name a skill.
-{"id": "01-feature", "expect": ["brainstorming", "test-driven-development"], "setup": "none", "prompt": "Add a function clamp(value, min, max) to src/math.js."}
-{"id": "02-failing", "expect": ["systematic-debugging"], "setup": "failing", "prompt": "npm test is red since this morning, sort it out."}
-{"id": "03-expert", "expect": ["expert-lens"], "setup": "none", "prompt": "What would a seasoned payments engineer notice first about how src/wallet.js keeps balances?"}
-{"id": "04-reframe", "expect": ["reframe"], "setup": "none", "prompt": "We plan to split this repo into eight microservices next sprint so it scales. What are we missing?"}
-{"id": "05-vague", "expect": ["clarify", "brainstorming"], "setup": "none", "prompt": "Build a notification system for this app."}
-{"id": "06-prd", "expect": ["writing-software-docs"], "setup": "none", "prompt": "Write a PRD for a referral program in this shop."}
-{"id": "07-metrics", "expect": ["measurement-planning"], "setup": "none", "prompt": "Define a North Star metric, the activation funnel and an event taxonomy for onboarding in this shop."}
-{"id": "08-kafka", "expect": ["messaging-patterns"], "setup": "none", "prompt": "Design a Kafka consumer for order-created events with retries and a dead-letter topic; describe it, no code yet."}
-{"id": "09-sql", "expect": ["database-patterns"], "setup": "none", "prompt": "Write a Postgres query that returns each customer's latest order and lifetime spend, using CTEs."}
-{"id": "10-docs", "expect": ["find-docs", "context7-mcp", "grounding-claims"], "setup": "none", "prompt": "Does the Node.js built-in test runner support test.each like Jest? Give me the source."}
-{"id": "11-incident", "expect": ["incident-to-eval"], "setup": "none", "prompt": "Yesterday we reverted a commit because the fee rounding change broke checkout totals in production. Make sure our review process learns from it."}
-{"id": "12-goal", "expect": ["goal"], "setup": "none", "prompt": "Handle this end-to-end without checking in with me: add input validation to the functions in src/math.js and get the tests green."}
-{"id": "13-review-in", "expect": ["receiving-code-review"], "setup": "none", "prompt": "A reviewer left this on src/math.js: 'divide() must guard against division by zero, and add() should reject non-numbers.' Deal with the review."}
-{"id": "14-prove", "expect": ["prove-it", "verification-before-completion"], "setup": "none", "prompt": "Is the test suite green right now? Prove it."}
-{"id": "15-validate", "expect": ["validate-feature", "verification-before-completion", "requesting-code-review"], "setup": "pending", "prompt": "Check the pending change in this repo is ready before I open a PR."}
-{"id": "16-threat", "expect": ["fintech-security", "security-engineer-subagent"], "setup": "none", "prompt": "Threat model the transfer function in src/wallet.js before we expose it over HTTP."}
-{"id": "17-review-out", "expect": ["requesting-code-review"], "setup": "pending", "prompt": "I am done with the sub() change; get it reviewed before merge."}
-{"id": "18-plan", "expect": ["writing-plans", "brainstorming"], "setup": "none", "prompt": "Write an implementation plan for adding multi-currency support to the wallet."}
+# No passive activation: natural prompts (no slash command) that used to trigger tea-sdlc skills by keyword.
+# silent: pass when the session invokes no tea-sdlc skill, command or agent. setup: none | failing | pending.
+{"id": "01-feature", "setup": "none", "prompt": "Add a function clamp(value, min, max) to src/math.js.", "silent": true}
+{"id": "02-failing", "setup": "failing", "prompt": "npm test is red since this morning, sort it out.", "silent": true}
+{"id": "03-expert", "setup": "none", "prompt": "What would a seasoned payments engineer notice first about how src/wallet.js keeps balances?", "silent": true}
+{"id": "04-reframe", "setup": "none", "prompt": "We plan to split this repo into eight microservices next sprint so it scales. What are we missing?", "silent": true}
+{"id": "05-vague", "setup": "none", "prompt": "Build a notification system for this app.", "silent": true}
+{"id": "06-prd", "setup": "none", "prompt": "Write a PRD for a referral program in this shop.", "silent": true}
+{"id": "07-metrics", "setup": "none", "prompt": "Define a North Star metric, the activation funnel and an event taxonomy for onboarding in this shop.", "silent": true}
+{"id": "08-kafka", "setup": "none", "prompt": "Design a Kafka consumer for order-created events with retries and a dead-letter topic; describe it, no code yet.", "silent": true}
+{"id": "09-sql", "setup": "none", "prompt": "Write a Postgres query that returns each customer's latest order and lifetime spend, using CTEs.", "silent": true}
+{"id": "10-docs", "setup": "none", "prompt": "Does the Node.js built-in test runner support test.each like Jest? Give me the source.", "silent": true}
+{"id": "11-incident", "setup": "none", "prompt": "Yesterday we reverted a commit because the fee rounding change broke checkout totals in production. Make sure our review process learns from it.", "silent": true}
+{"id": "12-goal", "setup": "none", "prompt": "Handle this end-to-end without checking in with me: add input validation to the functions in src/math.js and get the tests green.", "silent": true}
+{"id": "13-review-in", "setup": "none", "prompt": "A reviewer left this on src/math.js: 'divide() must guard against division by zero, and add() should reject non-numbers.' Deal with the review.", "silent": true}
+{"id": "14-prove", "setup": "none", "prompt": "Is the test suite green right now? Prove it.", "silent": true}
+{"id": "15-validate", "setup": "pending", "prompt": "Check the pending change in this repo is ready before I open a PR.", "silent": true}
+{"id": "16-threat", "setup": "none", "prompt": "Threat model the transfer function in src/wallet.js before we expose it over HTTP.", "silent": true}
+{"id": "17-review-out", "setup": "pending", "prompt": "I am done with the sub() change; get it reviewed before merge.", "silent": true}
+{"id": "18-plan", "setup": "none", "prompt": "Write an implementation plan for adding multi-currency support to the wallet.", "silent": true}

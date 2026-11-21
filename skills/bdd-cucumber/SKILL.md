@@ -1,11 +1,8 @@
 ---
 name: bdd-cucumber
-description: |
-  BDD with Cucumber: writing Gherkin feature files, step definitions for Java (Cucumber-JVM) and Go (godog),
-  scenario outlines, data tables, hooks, and linking features to acceptance criteria.
-  Use when: writing Cucumber tests, creating Gherkin feature files, implementing step definitions,
-  setting up BDD test infrastructure, or converting acceptance criteria to scenarios.
-  Triggers on: Cucumber, Gherkin, BDD, feature file, .feature, step definitions, scenario outline, godog.
+description: BDD with Cucumber — Gherkin feature files, step definitions for Cucumber-JVM and godog, scenario outlines, data tables, hooks and scenarios linked to story IDs; Read before the first edit in that area when the repository has .feature files, Cucumber or godog.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # BDD Cucumber
@@ -16,7 +13,7 @@ description: |
 - One behaviour per scenario: exactly one When; at most two `And` under Then; split scenarios over ~10 steps.
 - Background when 3+ scenarios share Givens. Scenario Outline only with 2+ example rows.
 - Scenarios are independent: reset state in a `Before` hook.
-- Feature header names the spec: `# See: docs/specs/<feature>/requirements.md`.
+- Feature header names the spec: `# See: docs/specs/<feature>/spec.md`.
 
 ## Tags
 
@@ -28,7 +25,7 @@ description: |
 | `@wip` | Excluded from CI |
 | `@slow` | Nightly only |
 | `@<domain>` | Feature filter |
-| `@<KEY>-<n>` | Requirement this scenario covers, from `docs/specs/<feature>/requirements.md` (e.g. `@RFD-1`); the exact upper-case token counts as spec traceability |
+| `@<KEY>-<n>` | User story this scenario covers, from `docs/specs/<feature>/spec.md` (story 1 of key RFD = `@RFD-1`); the exact upper-case token counts as spec traceability |
 
 Tag from the first commit.
 

@@ -153,7 +153,7 @@ def main():
     sys.stderr.write(
         f'tdd-gate: you are about to change production code ({target}) and no failing test run is recorded in this '
         'session. For a behavior change or bug fix: write the test, run it, and show it failing for the expected '
-        'reason BEFORE this edit (skill test-driven-development). If this change needs no new test (docs, config, '
+        'reason BEFORE this edit (rules: skills/test-driven-development/SKILL.md). If this change needs no new test (docs, config, '
         'refactor under existing coverage), retry the same edit: this reminder appears once per session.\n')
     return 2
 

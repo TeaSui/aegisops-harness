@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Description lint for skills/*/SKILL.md and commands/*.md: the text Claude Code reads to decide when to load them.
+"""Description lint for skills/*/SKILL.md and commands/*.md: the menu text a person reads when choosing a command.
 
 Deterministic and free. Per file:
   - frontmatter present and valid YAML (the same Ruby YAML check as scripts/check-setup.py; skipped with a warning
     when Ruby is missing), a `description`, and for skills a `name` equal to the folder name;
-  - the description says when to use it (trigger language such as "Use when", "Use before", "Triggers on");
+  - `disable-model-invocation: true` (tea-sdlc runs only from slash commands; the description is menu text, not a
+    trigger), with a warning when it still reads like a model trigger ("when the user says …");
   - its length is within bounds (too short cannot carry triggers; too long is truncated in the skill listing).
 Across files, a collision check: TF-IDF cosine similarity between every pair of descriptions (stdlib implementation).
 Pairs above the threshold are collisions; accepted ones live in allowlist.json with a reason. Exit 1 on any lint
@@ -113,8 +114,10 @@ def lint(root, items, check_setup=None):
             errors.append('%s: description is %d chars (max %d)' % (rel, len(flat), MAX_LEN))
         elif len(flat) > WARN_LEN:
             warnings.append('%s: description is %d chars (over %d)' % (rel, len(flat), WARN_LEN))
-        if not TRIGGER.search(flat):
-            errors.append(rel + ': description does not say when to use it (e.g. "Use when …", "Triggers on …")')
+        if not re.search(r'(?m)^disable-model-invocation:\s*true\s*$', block):
+            errors.append(rel + ': needs disable-model-invocation: true (tea-sdlc runs only from slash commands)')
+        if TRIGGER.search(flat) and re.search(r'\b(user says|user asks|when the user)\b', flat, re.I):
+            warnings.append(rel + ': description reads as a model trigger; say what it does and which command runs it')
         descriptions[name] = flat
     if check_setup is not None and hasattr(check_setup, 'yaml_errors'):
         parsed = check_setup.yaml_errors([path for _, _, path in items])

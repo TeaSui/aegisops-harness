@@ -1,36 +1,35 @@
 ---
 name: session-bootstrap
-description: Injected automatically at session start by the tea-sdlc hook; load it only if the <session-bootstrap> block is missing or truncated.
+description: Injected at session start by the tea-sdlc hook. Lists the tea-sdlc commands; nothing in tea-sdlc starts without one.
+disable-model-invocation: true
+user-invocable: false
 ---
 
 # tea-sdlc
 
-Paths `rules/…`, `references/…`, `scripts/…`, `skills/…` are under `${CLAUDE_PLUGIN_ROOT}` (expand them in subagent dispatches); `docs/…` is in the project. A subagent on a dispatched subtask keeps to it and skips this intake.
+tea-sdlc is the backend engineering lifecycle **spec → plan → build → verify → review → ship**, and it acts only through the commands below. Without one, work as plain Claude Code: never start a tea-sdlc workflow or open its skill files yourself, and never pick a workflow from words in the prompt. When a request fits a command, name the command in one line and let the user run it. The gates in hooks stay on in every session: secret scan on commit and push, a failing test before the first production edit, a recorded pre-PR review before `gh pr create`, the ship gate before `gh pr merge`. When a gate blocks, do what it says and retry.
 
-**Skill names.** Use `tea-sdlc:<skill>`; it wins over a same-named skill from another plugin.
+| Situation | Command | What runs |
+|---|---|---|
+| Unsure the input is good enough for the lifecycle | `/tea-sdlc:prompt-builder <rough idea>` | a `/tea-sdlc:aidlc` input with a spec that passes `aidlc lint`, or a `/tea-sdlc:fix` input |
+| New backend feature or behaviour change | `/tea-sdlc:aidlc <request or pasted spec>` | spec → plan → build → verify → review → ship, one approval at the spec |
+| You already wrote a spec in the to-spec template | `/tea-sdlc:aidlc <pasted spec>` | the same; the spec is saved verbatim, `Status: ready-for-agent` = approved |
+| Decisions still open and you want to be interviewed | `/tea-sdlc:grilling <topic>`, then `/tea-sdlc:aidlc` | interview → `GLOSSARY.md`, ADRs |
+| Step-by-step control, or one stage again | `/tea-sdlc:spec` · `plan` · `build` · `verify` · `review` · `ship` | that stage only, then it stops |
+| Resume after `/clear` or in a new session | `/tea-sdlc:aidlc <slug>` (no argument: status of every spec) | continues from the recorded stage |
+| Bug fix or small change with no new decision | `/tea-sdlc:fix <bug or change>` | root cause → failing test → fix → verify → one review → PR |
+| Review comments arrived | `/tea-sdlc:receiving-code-review <PR or comments>` | verify each comment → fix test-first → re-verify |
+| After the merge | `/tea-sdlc:upgrade-service-docs` | living docs updated, spec closed (`implemented`) |
+| A service has no living docs | `/tea-sdlc:generate-service-docs` | `docs/` for the service |
+| Challenge a plan, or a top practitioner's view | `/tea-sdlc:reframe` · `/tea-sdlc:expert-lens` | an opinion, no code |
+| Score or upgrade one part of this plugin (or a `.claude` folder) | `/tea-sdlc:eval-upgrade [eval \| arena …]` | static score, upgrade proposals, A/B duels |
 
-**Autopilot.** Treat `<tea-sdlc-autopilot>` notes as a checklist: load what fits, name it in one line. Run commands yourself: `upgrade-service-docs` after QA GO or a merge, `generate-service-docs` (offer once) for a service without living docs, `prove-it` when the user doubts a claim, `debug-parallel` for a cross-service error (full mode, or when the user asks). Never start a workflow from an incidental keyword; if you shrink a required step, say so. A blocking gate (TDD, contract, verification, pre-PR): do what it says, retry. Ask the user only for what only they can do.
+**Inside a command:** follow its file to the end without asking for permission between steps. Support skills (TDD, debugging, stack patterns, security catalogue) are loaded by the stage files by path, chosen from the repository's files (`rules/workflow-routing.md`), never from prompt keywords. Plugin root: `${CLAUDE_PLUGIN_ROOT}`. Paths `rules/…`, `references/…`, `scripts/…`, `skills/…` are under it, and a literal `${CLAUDE_PLUGIN_ROOT}` in a file you Read means it too (write the real path in commands); `docs/…` is in the project.
 
-**First action.** For any request that builds, adds, modifies, fixes or refactors code, invoke `tea-sdlc:brainstorming` before reading files, choosing a tier or asking anything, even if simple or from `/prompt-builder`. Only openers may precede it: `tea-sdlc:goal` (whole outcome handed over), `tea-sdlc:clarify`, `tea-sdlc:expert-lens`, `tea-sdlc:reframe`. Skip only for (a) a subagent on a specific subtask, (b) questions, explanations or reviews that change no code, (c) a bare slash command.
+**Open questions** (business rules, domain terms, existing behaviour): `references/aidlc.md` §0 — files first, then Atlassian Rovo, then a recorded assumption; ask the user only for what only they can decide.
 
-**Tier.** Before the first edit, state tier and reason in one line. Trust boundary = YES if it touches any of: PII or financial data; auth, session or permissions; money, billing, payments; a new endpoint, webhook or public surface; a new external vendor; security config or secrets (TLS, JWT, IAM, encryption). Unsure = YES. Mode is lean unless `TEA_SDLC_WORKFLOW=full`, the user asks for the full workflow, or a spec bound to this branch is past `proposed`.
+**Subagents.** A subagent on a dispatched subtask keeps to it and ignores this table.
 
-| Trust boundary | Process |
-|---|---|
-| NO | Fast path: TDD + verification here, no dispatch; several stacks → dependency order, integration check before merge; one pre-PR pass (`rules/pre-pr-review.md`) |
-| YES, lean | Fast path + security pass: 3-6 lines of assets, threats, controls before the first edit (`tea-sdlc:fintech-security`), tests for them, threats in the PR description; no subagents |
-| YES, full | AIDLC (`references/aidlc.md`, current stage's section): `tea-sdlc:brainstorming` → accepted; `tea-sdlc:writing-plans` → planned; branch → building; `tea-sdlc:subagent-driven-development` → verified; `tea-sdlc:requesting-code-review` → reviewed; `tea-sdlc:shipping` → shipped; `upgrade-service-docs` → implemented. Only `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <feature> <stage>` moves a stage; run it yourself |
+**PRs.** Run `gh pr create` and decide from what `gh` answers, never from the remote URL.
 
-Unclear: `rules/workflow-routing.md`. Never skip a required step silently. Re-route if scope adds a stack or trust boundary.
-
-**PRs.** Run `gh pr create` and decide from what `gh` answers, never from the remote URL. "Ready to ship" includes an open PR.
-
-**TDD.** Behaviour change or bug fix: invoke `tea-sdlc:test-driven-development` first; show the new test failing for the expected reason before production code.
-
-**Situational** (also when described): `tea-sdlc:clarify` if an open point changes what gets built or the user wants questions first; `tea-sdlc:expert-lens` for what a top practitioner would do; `tea-sdlc:reframe` when asked to challenge a consequential plan or belief.
-
-**Autonomy.** Reuse authorization for the same scope; continue reversible, necessary work and delegated routine choices; ask only for unresolvable material decisions or when permissions require. Secrets, destructive actions, publishing and security gates stay in authorized scope. Mid-task messages steer unless they cancel the goal.
-
-**Final reply.** Outcome first (done, partly done, blocked); then key changes, what was verified or not, files changed, checks run, risks or user actions. Small task: 1-3 sentences. Cite paths and output.
-
-Model choice: `references/model-guide.md`, only when choosing models.
+**Final reply.** Outcome first (done, partly done, blocked); then key changes, what was verified, files changed, checks run, rulings and assumptions with their sources, risks or user actions.

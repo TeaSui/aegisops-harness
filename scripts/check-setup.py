@@ -129,6 +129,12 @@ def main():
             manifests[name] = json.loads((root / '.claude-plugin' / name).read_text())
         except (OSError, ValueError) as error:
             errors.append('.claude-plugin/%s unreadable: %s' % (name, type(error).__name__))
+    map_script = root / 'scripts' / 'map.py'
+    if map_script.is_file():  # HOW-IT-WORKS.md is generated; stale or a skill in no phase is an error
+        result = subprocess.run([sys.executable, str(map_script), '--check'], capture_output=True, text=True,
+                                timeout=60, cwd=str(root))
+        if result.returncode != 0:
+            errors.append((result.stderr.strip() or 'scripts/map.py --check failed').splitlines()[-1])
     plugin = manifests.get('plugin.json', {})
     if plugin and not re.fullmatch(r'\d+\.\d+\.\d+', str(plugin.get('version', ''))):
         errors.append('plugin.json version must be semver')
@@ -215,15 +221,12 @@ def main():
     for path, rel in scanned_files(root):
         for name in re.findall(r'(?<![\w-])tea-sdlc:([a-z0-9][a-z0-9-]*[a-z0-9])', path.read_text(errors='replace')):
             referenced.add((name, rel))
-    try:
-        # Load this root's hook under a private name: never reuse a module cached from another root.
-        import importlib.util
-        spec = importlib.util.spec_from_file_location('tea_sdlc_autopilot_%d' % id(root), root / 'hooks' / 'autopilot.py')
-        autopilot = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(autopilot)
-        referenced |= {(name, 'hooks/autopilot.py SKILL_NAMES') for name in autopilot.SKILL_NAMES}
-    except Exception as error:  # a broken hook is reported above or here
-        errors.append('hooks/autopilot.py could not be imported: %s' % type(error).__name__)
+    # No passive activation: the model may never load a tea-sdlc skill or command on its own.
+    for path in list(skills) + list(commands):
+        head = path.read_text(errors='replace')[:1500]
+        if not re.search(r'^disable-model-invocation:\s*true\s*$', head, re.M):
+            errors.append('%s: needs disable-model-invocation: true (tea-sdlc runs only from slash commands)'
+                          % path.relative_to(root).as_posix())
     agent_names = {p.stem for p in agents}
     for name, rel in sorted(referenced):
         if name not in invocable | agent_names and name != 'tea-sdlc':
