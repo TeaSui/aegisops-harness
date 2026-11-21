@@ -7,7 +7,7 @@ A local server that shows HTML screens in the browser and records the user's cli
 From the plugin root:
 
 ```bash
-skills/brainstorming/scripts/start-server.sh --project-dir <project root>
+skills/spec/scripts/start-server.sh --project-dir <project root>
 ```
 
 It prints JSON with `url`, `screen_dir`, `state_dir`; keep them and give the user the URL. `--project-dir` keeps screens in `<project>/.brainstorm/` across restarts (remind the user to gitignore it); without it they go to `/tmp` and are deleted on stop. Lost output → read `<state_dir>/server-info`.
@@ -28,7 +28,7 @@ URL unreachable (remote/container) → add `--host 0.0.0.0 --url-host localhost`
 3. Tell the user the URL, one line on what is shown, and to answer in the terminal (clicking is optional); end the turn.
 4. Next turn: the terminal reply is primary; `<state_dir>/events` (JSON lines `{"type":"click","choice":…,"text":…,"timestamp":…}`, cleared on each new screen, absent if no clicks) adds the selections; the last choice is usually final.
 5. Iterate with a new version until this question is settled. When the conversation moves back to text, push a `waiting-<n>.html` screen ("Continuing in terminal…") so a stale choice is not left up.
-6. Done: `skills/brainstorming/scripts/stop-server.sh <session dir>`.
+6. Done: `skills/spec/scripts/stop-server.sh <session dir>`.
 
 ## Screens
 

@@ -1,5 +1,5 @@
 ---
-name: requesting-code-review
+name: review
 description: Use when work needs review before merge or a PR ("get it reviewed", "review my changes"), or when a full-workflow spec reaches `verified` — the review stage runs two separate reviews in parallel (Spec axis, Standards axis), writes their findings to review.md, then `aidlc stamp` and `aidlc advance reviewed`, which records the pre-PR pass. Fast path runs the built-in code-review skill once on the diff (rules/pre-pr-review.md). (tea-sdlc — follows the routing tiers and hook gates)
 ---
 
@@ -11,7 +11,7 @@ The reviewer works in a fresh context from the inputs you hand it, never your se
 |---|---|
 | Full-workflow spec at `verified` | §2 Review stage |
 | Fast path, or no spec folder | §3 Fast path pass |
-| One task inside the build stage | per-task templates of `tea-sdlc:subagent-driven-development` |
+| One task inside the build stage | per-task templates of `tea-sdlc:build` |
 | Optional review (stuck, before a refactor, after a hard bug) | §3 without recording it |
 
 ## 1. Review scope
@@ -37,7 +37,7 @@ b. **One message, parallel, each axis exactly once:**
 | `tea-sdlc:code-reviewer`, `AXIS: standards` | `spec.md` `### Security`, project `REVIEW.md` and conventions, `GLOSSARY.md`, the scope |
 | `tea-sdlc:qa-subagent` | `spec.md` Testing Decisions, `tickets.md`, `aidlc trace <f>`, the scope, the running target / base URL when a service is up (authorizes live API checks); its verdict fills `## QA` |
 
-Both reviewers get the template `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`; they run on `sonnet` (effort medium; high for a large or trust-boundary diff).
+Both reviewers get the template `${CLAUDE_PLUGIN_ROOT}/skills/review/code-reviewer.md`; they run on `sonnet` (effort medium; high for a large or trust-boundary diff).
 
 c. **Write `review.md`:** frontmatter `reviewers: spec=<agent> standards=<agent>`, `## Spec` and `## Standards` holding each reviewer's lines exactly as returned, `## QA` with the verdict. Never merge across axes, change a severity, reorder or drop a finding; disagreement is a `cleared:` with evidence. An axis with no findings keeps its heading.
 
@@ -52,11 +52,11 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" stamp <f> review
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> reviewed
 ```
 
-On pass the pre-PR record for `HEAD` is written and `gh pr create` is allowed. Leave `review.md`, `README.md`, `ledger.md` uncommitted; `tea-sdlc:shipping` opens the PR from this `HEAD`, then commits them.
+On pass the pre-PR record for `HEAD` is written and `gh pr create` is allowed. Leave `review.md`, `README.md`, `ledger.md` uncommitted; `tea-sdlc:ship` opens the PR from this `HEAD`, then commits them.
 
 g. **Still open after the re-review** → the gate blocks. A decision only the user can make (accept a risk, change a story): ask once with the finding and options; the answer closes it as `cleared: accepted by <name> — <reason>`. Real rework: `aidlc advance <f> building --back --reason "<finding>"`.
 
-Then `tea-sdlc:shipping`.
+Then `tea-sdlc:ship`.
 
 ## 3. Fast path pass
 

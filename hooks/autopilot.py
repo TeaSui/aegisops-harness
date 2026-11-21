@@ -140,8 +140,8 @@ INTENTS = (
                                  r'\b(left|said|says|asks?|wants?|suggests?|flagged|commented)\b'
                                  r'|\b(deal with|address|apply|handle) (the |this |their )?(review|review comments?|'
                                  r'feedback|pr comments?)\b')),
-    ('requesting-code-review', rx(r'\b(get|have) (it|this|them|these|the \w+(?: \w+)?) reviewed\b|'r'\breview (my|the|this|these) (code|changes?|diff|pr|branch)\b|\bcode review\b')),
-    ('shipping', rx(r'\bship (it|this|the \w+)\b|\b(cut|make|do) (a |the )?release\b|\brelease (it|this|v?\d[\w.]*)\b'
+    ('review', rx(r'\b(get|have) (it|this|them|these|the \w+(?: \w+)?) reviewed\b|'r'\breview (my|the|this|these) (code|changes?|diff|pr|branch)\b|\bcode review\b')),
+    ('ship', rx(r'\bship (it|this|the \w+)\b|\b(cut|make|do) (a |the )?release\b|\brelease (it|this|v?\d[\w.]*)\b'
                     r'|\bdeploy (it|this)\b|\bdeploy (the \w+ )?to (prod\w*|staging|production)\b|\bgo live\b')),
     ('finishing-a-development-branch', rx(r'(?<!→ )(?<!-> )(?<!auto )\b(open|create|raise|make|send) (a |the )?'
                                           r'(pr|pull request)\b'
@@ -152,15 +152,15 @@ INTENTS = (
 HANDED_SPEC = re.compile(r'^\W{0,4}problem statement\W*$(?s:.*)^\W{0,4}user stories\W*$', re.I | re.M)
 LIFECYCLE_STATUS = rx(r'\b(where are we|what\'?s next|what is next|which stage|status of (the|this) (feature|spec|change))\b')
 
-# Intents that frame the whole task run before brainstorming; the others follow the change workflow.
+# Intents that frame the whole task run before spec; the others follow the change workflow.
 OPENERS = ('goal', 'clarify', 'grilling', 'expert-lens', 'reframe')
 # Intents that still apply when the prompt is a question; the rest ask for work to be done.
 CONVERSATIONAL = OPENERS + ('prove-it', 'find-docs')
 
 
 # Every skill or command name this hook can emit; scripts/check-setup.py verifies each one exists in the plugin.
-CHAIN = ('brainstorming', 'systematic-debugging', 'debug-parallel', 'test-driven-development')
-FOLLOW_UPS = ('verification-before-completion', 'executing-plans')
+CHAIN = ('spec', 'systematic-debugging', 'debug-parallel', 'test-driven-development')
+FOLLOW_UPS = ('verification-before-completion', 'build')
 SKILL_NAMES = frozenset(CHAIN + FOLLOW_UPS + OPENERS + tuple(name for name, _ in DOMAINS + INTENTS))
 
 
@@ -205,7 +205,7 @@ def route(prompt, rules_dir):
         return ''
     chain = [i for i in intents if i in OPENERS]
     if change or debug:
-        chain.append('brainstorming')  # the bootstrap's first action for any fix, so the order matches it
+        chain.append('spec')  # the bootstrap's first action for any fix, so the order matches it
     if debug:
         chain.append('systematic-debugging')
         if MULTI_SERVICE.search(text) and full:
@@ -431,21 +431,20 @@ def plan_progress(path):
 NEXT_STEP = {
     'proposed': 'finish spec.md (the template: stories, decisions incl. Security, testing seams), get the one '
                 'approval, then `aidlc advance <spec> accepted`',
-    'accepted': 'slice tickets.md with tea-sdlc:writing-plans, then `aidlc advance <spec> planned`',
+    'accepted': 'slice tickets.md with tea-sdlc:plan, then `aidlc advance <spec> planned`',
     'planned': '`aidlc advance <spec> building` on a feature branch, then build the `aidlc next` batches '
-               '(tea-sdlc:subagent-driven-development)',
+               '(tea-sdlc:build)',
     'building': 'build the `aidlc next` batches; finish tickets with `aidlc task-done`; then `aidlc verify` and advance',
-    'verified': 'two-axis review + QA into review.md (tea-sdlc:requesting-code-review), `aidlc stamp <spec> review`, '
+    'verified': 'two-axis review + QA into review.md (tea-sdlc:review), `aidlc stamp <spec> review`, '
                 'then advance',
-    'reviewed': 'ship stage (tea-sdlc:shipping): PR, CI, ship.md, `aidlc advance <spec> shipped`, merge',
+    'reviewed': 'ship stage (tea-sdlc:ship): PR, CI, ship.md, `aidlc advance <spec> shipped`, merge',
     'shipped': 'promote with upgrade-service-docs, then `aidlc advance <spec> implemented`',
 }
 
 
 # Skills that the superpowers plugin also ships under the same name.
-SUPERPOWERS_TWINS = ('brainstorming', 'test-driven-development', 'systematic-debugging', 'verification-before-completion',
-                     'writing-plans', 'executing-plans', 'subagent-driven-development', 'dispatching-parallel-agents',
-                     'finishing-a-development-branch', 'requesting-code-review', 'receiving-code-review')
+SUPERPOWERS_TWINS = ('test-driven-development', 'systematic-debugging', 'verification-before-completion',
+                     'dispatching-parallel-agents', 'finishing-a-development-branch', 'receiving-code-review')
 STATE_ROOTS = ('tdd', 'contract-gate', 'tea-sdlc/autopilot')
 STATE_MAX_AGE_DAYS = 30
 
@@ -545,7 +544,7 @@ def snapshot(cwd, which=None):
     for plan in plans:
         progress = plan_progress(plan)
         if progress and progress[0] < progress[1]:
-            lines.append(f'Open plan {display_path(str(plan), root)} ({progress[0]}/{progress[1]} tasks done); resume it with tea-sdlc:executing-plans '
+            lines.append(f'Open plan {display_path(str(plan), root)} ({progress[0]}/{progress[1]} tasks done); resume it with tea-sdlc:build '
                          'when the user continues that work.')
     has_code = any((root / name).exists() for name in tdd.INFRA)
     if has_code and not (root / 'docs').is_dir():

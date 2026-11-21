@@ -20,7 +20,7 @@ For each open `- [ ] G<n>: …`:
 - **Resolved:** change spec.md so it answers it (story, decision, error code, limit), tick the line, append `— resolved: <where>`.
 - **Accepted risk:** tick and append `— accepted risk: <why>` when the answer changes nothing a test could see, or something outside the spec settles it (cite it).
 
-A guess needing a product decision gets your most reasonable answer, written into the spec, marked resolved and listed for the user at the approval point (`tea-sdlc:brainstorming` §4). Do not stop to ask per guess. Never delete a guess or reword it.
+A guess needing a product decision gets your most reasonable answer, written into the spec, marked resolved and listed for the user at the approval point (`tea-sdlc:spec` §4). Do not stop to ask per guess. Never delete a guess or reword it.
 
 No second blind run, even after large closing edits: close the guesses directly in the spec. Exception: stories added mid-execution get one pass over the new stories only.
 

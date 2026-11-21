@@ -1,11 +1,11 @@
 ---
 name: finishing-a-development-branch
-description: Use when fast-path or non-spec work is verified and must be delivered (merge, PR, keep, discard), or the user says open a PR / push it / merge. Runs the single pre-PR review record and the delivery the user already chose; asks only when no choice is known. A branch with an active full-workflow spec goes to tea-sdlc:shipping instead.
+description: Use when fast-path or non-spec work is verified and must be delivered (merge, PR, keep, discard), or the user says open a PR / push it / merge. Runs the single pre-PR review record and the delivery the user already chose; asks only when no choice is known. A branch with an active full-workflow spec goes to tea-sdlc:ship instead.
 ---
 
 # Finishing a development branch
 
-If `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" status` lists an active spec whose `branch:` is the current branch, use `tea-sdlc:shipping` (or `tea-sdlc:requesting-code-review` first if it is not yet `reviewed`). No Git involved: report the verified artifact.
+If `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" status` lists an active spec whose `branch:` is the current branch, use `tea-sdlc:ship` (or `tea-sdlc:review` first if it is not yet `reviewed`). No Git involved: report the verified artifact.
 
 1. **Tests.** Run the full suite and read the result. Failing → report and stop; never merge or open a PR on red.
 2. **Base branch.** Find it yourself: `git symbolic-ref --short refs/remotes/origin/HEAD`, `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`, or local `main`/`master`. Ask only if all fail.

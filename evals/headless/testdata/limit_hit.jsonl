@@ -1,4 +1,4 @@
 {"type": "system", "subtype": "init", "claude_code_version": "9.9.9", "model": "m"}
-{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "tea-sdlc:brainstorming"}}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "tea-sdlc:spec"}}]}}
 {"type": "result", "subtype": "success", "num_turns": 29, "total_cost_usd": 1.5, "duration_ms": 60000, "result": "Waiting for the security agent."}
 {"type": "result", "subtype": "success", "num_turns": 37, "total_cost_usd": 2.0, "duration_ms": 1000, "result": "You've hit your 5-hour limit \u00b7 resets 3:30am (Asia/Saigon)"}

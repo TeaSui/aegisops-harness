@@ -181,7 +181,7 @@ class PluginIntegrityTest(unittest.TestCase):
     def test_namespaced_agent_name_and_agent_file_paths_pass(self):
         rule = self.root / 'rules' / 'agents.md'
         rule.write_text(rule.read_text() + '\nDispatch `tea-sdlc:qa-subagent`; template '
-                        'skills/requesting-code-review/code-reviewer.md.\n')
+                        'skills/review/code-reviewer.md.\n')
         self.assertEqual(self.check()['errors'], [])
 
     def test_stale_map_and_unphased_skill_fail(self):

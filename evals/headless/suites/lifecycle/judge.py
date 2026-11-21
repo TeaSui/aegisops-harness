@@ -191,6 +191,9 @@ def outcome(case, stream, repo):
         checks['pr_opened'] = False
     creates = ' '.join(c for c in (str(call['input'].get('command', '')) for call in stream['calls']
                                    if call['name'] == 'Bash') if 'gh pr create' in c)
+    for path in re.findall(r'(?:--body-file|-F)[ =]+["\']?([^\s"\']+)', creates):  # body written with Write first
+        creates += ' ' + ' '.join(str(call['input'].get('content', '')) for call in stream['calls']
+                                  if call['name'] == 'Write' and str(call['input'].get('file_path', '')).endswith(path))
     checks['threats_listed'] = bool(THREATS.search(creates + ' ' + str(stream.get('result') or '')))
     score = sum(checks.values()) / float(len(checks))
     summary = '%d/%d checks (%s)%s' % (sum(checks.values()), len(checks),

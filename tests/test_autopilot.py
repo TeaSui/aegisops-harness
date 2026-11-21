@@ -71,7 +71,7 @@ class PromptRouterTest(HookCase):
         for prompt in self.NOT_CODE:
             ctx = self.route(prompt)
             self.assertNotIn('tea-sdlc:test-driven-development', ctx, prompt)
-            self.assertNotIn('tea-sdlc:brainstorming', ctx, prompt)
+            self.assertNotIn('tea-sdlc:spec', ctx, prompt)
             self.assertNotIn('trust boundary', ctx, prompt)
 
     def test_mentioning_a_flow_is_not_asking_for_its_steps(self):
@@ -105,13 +105,13 @@ class PromptRouterTest(HookCase):
     # Prompts from the passive-trigger experiment (headless sessions) that the router missed.
     def test_red_build_is_a_bug(self):
         ctx = self.route('npm test is red since this morning, sort it out.')
-        # The bootstrap loads brainstorming first for any fix, so the note lists it and then the debugging step.
-        self.assertLess(ctx.index('tea-sdlc:brainstorming'), ctx.index('tea-sdlc:systematic-debugging'))
+        # The bootstrap loads spec first for any fix, so the note lists it and then the debugging step.
+        self.assertLess(ctx.index('tea-sdlc:spec'), ctx.index('tea-sdlc:systematic-debugging'))
 
     def test_review_feedback_is_received_not_requested(self):
         ctx = self.route("A reviewer left this on src/math.js: 'divide() must guard against zero.' Deal with the review.")
         self.assertIn('tea-sdlc:receiving-code-review', ctx)
-        self.assertNotIn('tea-sdlc:requesting-code-review', ctx)
+        self.assertNotIn('tea-sdlc:review', ctx)
 
     def test_domain_skills_are_named_without_a_change_verb(self):
         self.assertIn('tea-sdlc:messaging-patterns', self.route(
@@ -141,12 +141,12 @@ class PromptRouterTest(HookCase):
 
     def test_readiness_and_review_requests(self):
         self.assertIn('tea-sdlc:validate-feature', self.route('Check the pending change is ready before I open a PR.'))
-        self.assertIn('tea-sdlc:requesting-code-review', self.route('I am done with the sub() change; get it reviewed '
+        self.assertIn('tea-sdlc:review', self.route('I am done with the sub() change; get it reviewed '
                                                                     'before merge.'))
 
     def test_release_requests_go_to_shipping(self):
         for prompt in ('ship it', 'Cut a release for the refund feature', 'deploy this to production'):
-            self.assertIn('tea-sdlc:shipping', self.route(prompt), prompt)
+            self.assertIn('tea-sdlc:ship', self.route(prompt), prompt)
 
     def test_lifecycle_status_questions_point_to_the_cli(self):
         for prompt in ('where are we with the refund feature?', "what's next?"):
@@ -154,7 +154,7 @@ class PromptRouterTest(HookCase):
 
     def test_short_steering_messages_still_route(self):
         self.assertIn('tea-sdlc:systematic-debugging', self.route('ok, fix that bug'))
-        self.assertIn('tea-sdlc:brainstorming', self.route('no, add a retry'))
+        self.assertIn('tea-sdlc:spec', self.route('no, add a retry'))
 
     FULL = {'TEA_SDLC_WORKFLOW': 'full'}
 
@@ -167,7 +167,7 @@ class PromptRouterTest(HookCase):
 
     def test_payment_feature_is_a_trust_boundary(self):
         ctx = self.route('Add a payment API for the e-wallet', self.FULL)
-        self.assertIn('tea-sdlc:brainstorming', ctx)
+        self.assertIn('tea-sdlc:spec', ctx)
         self.assertIn('money', ctx)
         self.assertIn('Full workflow (Security first)', ctx)
 
@@ -198,7 +198,7 @@ class PromptRouterTest(HookCase):
     def test_handed_over_spec_is_used_verbatim(self):
         lean, full = self.route(self.HANDED), self.route(self.HANDED, self.FULL)
         for ctx in (lean, full):
-            self.assertIn('tea-sdlc:brainstorming', ctx)
+            self.assertIn('tea-sdlc:spec', ctx)
             self.assertIn('Spec handed over (to-spec template)', ctx)
             self.assertIn('no grilling', ctx)
         self.assertIn('save it verbatim as docs/specs/<feature>/spec.md', full)
@@ -228,7 +228,7 @@ class PromptRouterTest(HookCase):
 
     def test_outer_workflow_skills_come_first(self):
         ctx = self.route('fix the flaky checkout test end-to-end, until done')
-        self.assertLess(ctx.index('tea-sdlc:goal'), ctx.index('tea-sdlc:brainstorming'))
+        self.assertLess(ctx.index('tea-sdlc:goal'), ctx.index('tea-sdlc:spec'))
 
     def test_load_balancer_is_not_money(self):
         self.assertNotIn('money', self.route('Update the load balancer health check path'))
@@ -465,7 +465,7 @@ class SessionSnapshotTest(HookCase):
         self.enable_superpowers()
         ctx = self.start()['hookSpecificOutput']['additionalContext']
         self.assertIn('superpowers', ctx)
-        self.assertIn('tea-sdlc:brainstorming', ctx)
+        self.assertIn('tea-sdlc:spec', ctx)
 
     def test_superpowers_disabled_locally_is_not_mentioned(self):
         self.enable_superpowers(local_override=False)

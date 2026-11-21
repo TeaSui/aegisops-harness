@@ -13,7 +13,7 @@ Promote a merged change into the living docs and close its spec: the AIDLC promo
 ## Steps
 1. **Resolve** the service root, the system root and the spec folder. With no spec (fast path), skip steps 2, 3 and 7 and compare the code changes with the living docs directly.
 2. **Confirm the ship.** The spec is at `shipped` and its commits are on the target branch (merge or squash). Run promotion on that branch, never in an implementation worktree.
-   - Spec at an earlier stage: finish that stage first (`tea-sdlc:shipping`).
+   - Spec at an earlier stage: finish that stage first (`tea-sdlc:ship`).
    - Change not merged: stop with `NEEDS_CONTEXT`.
    - Pre-AIDLC spec (no `key:`): QA `GO` or the merge is enough, and steps 3 and 7 are done by hand.
 3. **Trace.** Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" trace <spec> --write`, which writes README `## Traceability`. Compare the actual code changes (classes, endpoints, events, tables, config) with the table and the contract delta. A requirement shown as pending or failing stays pending.

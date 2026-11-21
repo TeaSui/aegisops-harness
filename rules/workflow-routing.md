@@ -21,7 +21,7 @@ The session-start note states the mode.
 | YES (any number of domains) | Fast path with a security pass | Full workflow |
 
 ## Fast path
-TDD + verification. Brainstorming first, 2-3 lines stating the approach (no artifact). No plan, worktree, subagent or review loop. Before a PR or hand-off: the single pre-PR pass (`rules/pre-pr-review.md`). Update a living doc whose documented behaviour changed in the same change.
+TDD + verification. `tea-sdlc:spec` first, 2-3 lines stating the approach (no artifact). No plan, worktree, subagent or review loop. Before a PR or hand-off: the single pre-PR pass (`rules/pre-pr-review.md`). Update a living doc whose documented behaviour changed in the same change.
 
 Several domains (backend, frontend, mobile, AWS/infra, data pipeline, AI/LLM, DevOps; a shared library used by one stack adds none): write the task order in 2-3 lines before the second domain; edit in dependency order; TDD per domain; smoke-test the integration point before merge even if each side passed.
 
@@ -36,7 +36,7 @@ In the main session, no dispatch:
 The session runs `python3 scripts/aidlc.py` itself; a stage is entered only via `aidlc advance` when its gate passes. Read only the current stage's part of `references/aidlc.md` (§1 gates, §2 formats, §3 CLI).
 1. **accepted:** `spec.md` in the to-spec template (a handed-over one is used verbatim): grill open decisions (`tea-sdlc:grilling`, `GLOSSARY.md`, ADRs only for hard-to-reverse trade-offs); user stories = requirement IDs; Implementation Decisions with a `### Security` subsection from tea-sdlc:security-engineer-subagent; Testing Decisions = the agreed seams (fewest, ideally one); `contracts/` + `python3 scripts/check-contract.py docs/specs/<feature>` only for an external contract; a blind spec check only for an ungrilled spec you wrote; one user approval.
 2. **planned:** `tickets.md`, tracer-bullet vertical slices with `Blocked by`; every story covered; parallel tickets declare disjoint `Files:`.
-3. **building:** feature branch; `subagent-driven-development` builds the `aidlc next` batches (a lone ticket in this session, a disjoint batch dispatched); `aidlc task-done`; decisions taken instead of asking → `aidlc ruling`.
+3. **building:** feature branch; `build` builds the `aidlc next` batches (a lone ticket in this session, a disjoint batch dispatched); `aidlc task-done`; decisions taken instead of asking → `aidlc ruling`.
 4. **verified:** `aidlc verify` green at the current fingerprint.
 5. **reviewed:** Spec and Standards axes once each, in parallel with tea-sdlc:qa-subagent; `review.md` = finding lines, each fixed or cleared; then at most ONE diff-only re-review by a single tea-sdlc:code-reviewer with `AXIS: both`, never a second full round.
 6. **shipped:** PR, CI green, `ship.md` (required sections only).

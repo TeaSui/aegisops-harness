@@ -11,16 +11,16 @@
     {
       "pair": [
         "dispatching-parallel-agents",
-        "subagent-driven-development"
+        "build"
       ],
-      "reason": "both dispatch subagents: dispatching-parallel-agents runs independent investigations or ad-hoc parallel tasks and points to subagent-driven-development for the full-workflow build; subagent-driven-development owns the build stage of a planned spec"
+      "reason": "both dispatch subagents: dispatching-parallel-agents runs independent investigations or ad-hoc parallel tasks and points to build for the full-workflow build; build owns the build stage of a planned spec"
     },
     {
       "pair": [
-        "requesting-code-review",
-        "subagent-driven-development"
+        "review",
+        "build"
       ],
-      "reason": "consecutive AIDLC stages sharing aidlc verbs: subagent-driven-development ends at `verified`; requesting-code-review starts when a spec reaches `verified` (or on a review request) and ends at `reviewed`"
+      "reason": "consecutive AIDLC stages sharing aidlc verbs: build ends at `verified`; review starts when a spec reaches `verified` (or on a review request) and ends at `reviewed`"
     },
     {
       "pair": [
@@ -39,9 +39,9 @@
     {
       "pair": [
         "finishing-a-development-branch",
-        "shipping"
+        "ship"
       ],
-      "reason": "both deliver a branch (PR, merge, 'ship it'); they split by tier and each description points to the other: shipping owns a reviewed full-workflow spec (ship.md, ship gate), finishing-a-development-branch owns fast-path or non-spec work. The router sends a bare 'ship it' to shipping only, while finishing-a-development-branch still lists 'ship it' as a trigger phrase"
+      "reason": "both deliver a branch (PR, merge, 'ship it'); they split by tier and each description points to the other: ship owns a reviewed full-workflow spec (ship.md, ship gate), finishing-a-development-branch owns fast-path or non-spec work. The router sends a bare 'ship it' to ship only, while finishing-a-development-branch still lists 'ship it' as a trigger phrase"
     }
   ]
 }

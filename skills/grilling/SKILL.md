@@ -12,4 +12,4 @@ Goal: shared understanding before a spec, with the vocabulary and the decisions 
 3. **Language.** A term that conflicts with the glossary, or a fuzzy or overloaded one → propose one canonical term. Resolved → add it to `GLOSSARY.md` at once (term, one-line definition, terms to avoid). Domain only: no implementation.
 4. **ADR** (`docs/adr/NNNN-<slug>.md`, next free number: context, decision, alternatives, consequences) only when the decision is hard to reverse, surprising without context and a real trade-off. Otherwise it goes in the spec's Implementation Decisions.
 5. **Seams.** Settle where the feature is tested: the highest existing seam, else the fewest new ones (ideally one). They become the spec's Testing Decisions.
-6. **Stop** when the remaining open points change nothing a test could observe. Then write the spec (`tea-sdlc:brainstorming` §3) with no further interview.
+6. **Stop** when the remaining open points change nothing a test could observe. Then write the spec (`tea-sdlc:spec` §3) with no further interview.

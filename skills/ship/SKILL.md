@@ -1,5 +1,5 @@
 ---
-name: shipping
+name: ship
 description: Use when a reviewed full-workflow change is ready to release, merge or deploy, or the user says ship it, release or deploy — opens the PR if none is open, waits for CI, confirms the version and writes the changelog per the project's convention, writes ship.md (GO/NO-GO, rollback, post-release verification), advances the spec to `shipped`, merges through the ship gate, runs the post-release verification and promotes the spec with upgrade-service-docs. Fast-path or non-spec work goes to finishing-a-development-branch.
 ---
 
@@ -7,7 +7,7 @@ description: Use when a reviewed full-workflow change is ready to release, merge
 
 `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run every step yourself. Gate and `ship.md` format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §1 (`shipped` row) and §2 `ship.md`.
 
-**Applies** when `aidlc status` shows the branch's spec at `reviewed` (or `shipped`, to resume). Earlier stage → `tea-sdlc:requesting-code-review` first. No spec or fast path → `tea-sdlc:finishing-a-development-branch`.
+**Applies** when `aidlc status` shows the branch's spec at `reviewed` (or `shipped`, to resume). Earlier stage → `tea-sdlc:review` first. No spec or fast path → `tea-sdlc:finishing-a-development-branch`.
 
 **User consent.** Merge and deploy only when the request covers delivery ("ship it", "merge", "release", "deploy", a `tea-sdlc:goal` hand-off). Otherwise stop after step 5 and ask once whether to merge.
 
@@ -53,7 +53,7 @@ Only the required sections:
 Real CI failure, QA `NO-GO`, code changed after review, or a conflict needing code:
 1. `decision: NO-GO` with the reason in `## Checks`.
 2. `aidlc advance <f> building --back --reason "<why>"`.
-3. Fix via `tea-sdlc:subagent-driven-development` (new work = new `tickets.md` ticket), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`tea-sdlc:requesting-code-review` §2a re-entry), stamp, advance `reviewed`, return here.
+3. Fix via `tea-sdlc:build` (new work = new `tickets.md` ticket), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`tea-sdlc:review` §2a re-entry), stamp, advance `reviewed`, return here.
 
 ## Report
 

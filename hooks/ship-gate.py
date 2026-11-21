@@ -166,7 +166,7 @@ def main():
     for rel, stage, findings in problems:
         lines.append(f'  {rel} (stage {stage}):')
         lines.extend(f'    - {finding}' for finding in findings[:8])
-    lines.append(f'Finish the ship stage (skill tea-sdlc:shipping): write ship.md (GO, rollback, post-release '
+    lines.append(f'Finish the ship stage (skill tea-sdlc:ship): write ship.md (GO, rollback, post-release '
                  f'verification), then `{cli} advance <spec> shipped`, then merge.')
     return deny(lines)
 

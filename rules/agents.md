@@ -17,8 +17,7 @@ Only the main session dispatches, and only in the full workflow; the fast path n
 - Implementers never edit `docs/specs/**` (spec, contracts, ledger, review) except ticking their ticket's acceptance checkboxes; a contract that looks wrong comes back as `NEEDS_CONTEXT`.
 
 ## Planning skills order
-1. `writing-plans` writes `tickets.md` after the spec's security decisions and gated contracts (tickets cite contract paths).
-2. `subagent-driven-development` runs the build stage in this session (`aidlc next` batches, `aidlc task-done`).
-3. `executing-plans` resumes a saved plan in a new session or after `/clear`/compaction, still dispatching through `subagent-driven-development`.
+1. `plan` writes `tickets.md` after the spec's security decisions and gated contracts (tickets cite contract paths).
+2. `build` runs the build stage in this session (`aidlc next` batches, `aidlc task-done`), and resumes it in a new session or after `/clear`/compaction.
 
 No full-workflow execution without a plan that passes the `planned` gate. The fast path writes no plan.

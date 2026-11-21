@@ -19,15 +19,15 @@ OUT = ROOT / 'HOW-IT-WORKS.md'
 # Phase → skills, in lifecycle order (the stages of references/aidlc.md, the order work actually happens in).
 PHASES = (
     ('Define', 'what to build and why', (
-        'brainstorming', 'grilling', 'clarify', 'goal', 'expert-lens', 'reframe', 'spec-check', 'writing-software-docs',
+        'spec', 'grilling', 'clarify', 'goal', 'expert-lens', 'reframe', 'spec-check', 'writing-software-docs',
         'measurement-planning')),
-    ('Plan', 'slices and order', ('writing-plans',)),
+    ('Plan', 'slices and order', ('plan',)),
     ('Build', 'code, test-first', (
-        'test-driven-development', 'subagent-driven-development', 'executing-plans', 'dispatching-parallel-agents')),
+        'test-driven-development', 'build', 'build', 'dispatching-parallel-agents')),
     ('Verify', 'prove it works', (
         'verification-before-completion', 'systematic-debugging', 'validate-feature', 'grounding-claims', 'find-docs')),
-    ('Review', 'a second pair of eyes', ('requesting-code-review', 'receiving-code-review')),
-    ('Ship', 'PR, release, learn', ('shipping', 'finishing-a-development-branch', 'incident-to-eval')),
+    ('Review', 'a second pair of eyes', ('review', 'receiving-code-review')),
+    ('Ship', 'PR, release, learn', ('ship', 'finishing-a-development-branch', 'incident-to-eval')),
     ('Domain', 'loaded when the stack shows up', (
         'fintech-security', 'fintech-mobile', 'backend-languages', 'database-patterns', 'messaging-patterns',
         'data-pipeline-patterns', 'frontend-react', 'api-contract-testing', 'bdd-cucumber', 'cdk-testing',
@@ -98,7 +98,7 @@ def router_names():
     spec.loader.exec_module(module)
     names = {name: 'keyword' for name, _ in module.INTENTS}
     names.update({name: 'stack keyword' for name, _ in module.DOMAINS})
-    names.update({name: 'every code change' for name in ('brainstorming', 'test-driven-development')})
+    names.update({name: 'every code change' for name in ('spec', 'test-driven-development')})
     names['systematic-debugging'] = 'bug or error'
     names['session-bootstrap'] = 'session start'
     return names
@@ -123,7 +123,7 @@ def render():
            'you type a request',
            '  │  UserPromptSubmit hook (autopilot.py): skills to load, tier, mode',
            '  ▼',
-           'Define   brainstorming ── trust boundary? ── no ──▶ fast path: TDD → verify → one review → PR',
+           'Define   spec ────────── trust boundary? ── no ──▶ fast path: TDD → verify → one review → PR',
            '  │                          │ yes',
            '  │                lean (default): security pass, still one session, no subagents',
            '  │                full: spec.md (grilling, Security) ── approval',

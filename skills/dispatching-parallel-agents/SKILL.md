@@ -1,15 +1,15 @@
 ---
 name: dispatching-parallel-agents
-description: Use in the full workflow, or when the user asks for parallel investigation, to run 2+ independent investigations or tasks with disjoint files concurrently via subagents. In a full-workflow build the batches come from `aidlc next`, driven by subagent-driven-development. Not for fast-path implementation (no dispatch). For an error crossing services use debug-parallel.
+description: Use in the full workflow, or when the user asks for parallel investigation, to run 2+ independent investigations or tasks with disjoint files concurrently via subagents. In a full-workflow build the batches come from `aidlc next`, driven by build. Not for fast-path implementation (no dispatch). For an error crossing services use debug-parallel.
 ---
 
 # Dispatching Parallel Agents
 
-**Tier check first.** Dispatch only in full mode or when the user asked for parallel investigation; in lean mode (default) and on the fast path, work in this session. An error crossing services → the `debug-parallel` command. Executing a written plan → `tea-sdlc:subagent-driven-development`.
+**Tier check first.** Dispatch only in full mode or when the user asked for parallel investigation; in lean mode (default) and on the fast path, work in this session. An error crossing services → the `debug-parallel` command. Executing a written plan → `tea-sdlc:build`.
 
 ## Full-workflow build: batches come from `aidlc next`
 
-`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" next <f> --json` returns the ready tickets already grouped into batches that share no file (only tickets declaring `Files:` share a batch). One message per batch, one Agent call per ticket: agent = the ticket's `Owner:` (else the domain agent for its files), owned files = its `Files:`, prompt = the implementer template of `tea-sdlc:subagent-driven-development`. Never move a ticket to an earlier batch or merge batches; a ticket that needs another ticket's file is a plan change (edit `tickets.md`, rerun `aidlc check <f> --to planned`).
+`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" next <f> --json` returns the ready tickets already grouped into batches that share no file (only tickets declaring `Files:` share a batch). One message per batch, one Agent call per ticket: agent = the ticket's `Owner:` (else the domain agent for its files), owned files = its `Files:`, prompt = the implementer template of `tea-sdlc:build`. Never move a ticket to an earlier batch or merge batches; a ticket that needs another ticket's file is a plan change (edit `tickets.md`, rerun `aidlc check <f> --to planned`).
 
 ## Parallel investigation
 

@@ -46,7 +46,7 @@ The tier makes a stage lighter; it never removes one. Emit only the tier's `<wor
 </context>
 
 <workflow> <!-- fast path / fast path + security pass -->
-First invoke `tea-sdlc:brainstorming` (2-3 lines), then confirm the tier. Resolve the owning scope root and the existing ADR and living-doc locations per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`, and reuse them. Never create a parallel tree or a `-v2` duplicate. Run the stages in order; meet each gate before the next and report the current stage. Do not dispatch subagents.
+First invoke `tea-sdlc:spec` (2-3 lines), then confirm the tier. Resolve the owning scope root and the existing ADR and living-doc locations per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`, and reuse them. Never create a parallel tree or a `-v2` duplicate. Run the stages in order; meet each gate before the next and report the current stage. Do not dispatch subagents.
 1. SPEC: the approach and acceptance criteria in 2-3 lines; no spec folder, no approval. If documented behavior changes, update the affected living file in the same change. Security pass: before the first edit, write 3-6 lines (assets, the applicable STRIDE/OWASP threats, the controls kept or added) using `tea-sdlc:fintech-security`.
 2. ADR: for each decision that is hard to reverse, surprising without context and a real trade-off, write `[service]/docs/adr/NNNN-<slug>.md` (`<system-root>/docs/adr/` when it spans services) with the next free number (context, options, decision, consequences), and link it from the README ADR index. If there is none, write "No ADR needed: [reason]". Accepted ADRs are immutable; supersede them instead. Gate: every decision has an ADR or that line.
 3. TDD (`tea-sdlc:test-driven-development`): read `docs/architecture.md` (Code conventions, Test strategy) and 2-3 existing tests. Write tests from the acceptance criteria: happy path, edge cases and errors; with a security pass, also authorization denied, input rejected, no PII in logs, and idempotent money movement. Run them and show them failing for the expected reason. Gate: that output.
@@ -56,7 +56,7 @@ First invoke `tea-sdlc:brainstorming` (2-3 lines), then confirm the tier. Resolv
 </workflow>
 
 <workflow> <!-- full workflow -->
-First invoke `tea-sdlc:brainstorming` (a full design), then confirm the tier. Resolve the scope root and the existing spec, ADR and contract locations per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`, and reuse them. For each stage, read only its section of `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`. `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run it yourself. Only `aidlc advance` changes the stage; when a gate lists findings, fix them and rerun. Start with `aidlc status` and resume `[slug]` if it already exists. Report the current stage.
+First invoke `tea-sdlc:spec` (a full design), then confirm the tier. Resolve the scope root and the existing spec, ADR and contract locations per `${CLAUDE_PLUGIN_ROOT}/references/documentation-layout.md`, and reuse them. For each stage, read only its section of `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md`. `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run it yourself. Only `aidlc advance` changes the stage; when a gate lists findings, fix them and rerun. Start with `aidlc status` and resume `[slug]` if it already exists. Report the current stage.
 1. SPEC (→ accepted):
    - `aidlc init [slug] --key [KEY]` in `[service]/docs/specs/`; set the README `scope`, `affects`, `contract: none|external` and `security: required`.
    - Write `spec.md` with the template in `aidlc.md` §2: Problem Statement, Solution, User Stories (numbered; story n is `[KEY]-n`; optional `(Verify: check|manual|none — …)`), Implementation Decisions (architecture, contracts, UI, `### Security`; no file paths or code), Testing Decisions (the agreed seams, ideally one; external behaviour only; prior art), Out of Scope, Further Notes.
@@ -65,19 +65,19 @@ First invoke `tea-sdlc:brainstorming` (a full design), then confirm the tier. Re
    - Write ADRs as in the fast path, linked from Implementation Decisions.
    - Grill open decisions with the user (`tea-sdlc:grilling`); if that did not happen, run one blind spec check (`tea-sdlc:spec-check`) and close every guess in the spec directly; there is no second check.
    - Get the user's approval once; if the request explicitly delegated it, record `accepted_by: <user> (delegated in request)`. Then `aidlc advance [slug] accepted`.
-2. PLAN (→ planned): `tea-sdlc:writing-plans` writes `tickets.md` as tracer-bullet vertical slices (`## T<n>`, `Blocked by`, `Covers`, `Status: ready-for-agent`, What to build, acceptance checkboxes, `Test:`, `Files:` for parallel tickets). Every story is covered (except `Verify: none`), and no file is shared by tickets that may run in parallel. Then `aidlc advance [slug] planned`.
+2. PLAN (→ planned): `tea-sdlc:plan` writes `tickets.md` as tracer-bullet vertical slices (`## T<n>`, `Blocked by`, `Covers`, `Status: ready-for-agent`, What to build, acceptance checkboxes, `Test:`, `Files:` for parallel tickets). Every story is covered (except `Verify: none`), and no file is shared by tickets that may run in parallel. Then `aidlc advance [slug] planned`.
 3. BUILD (→ building):
    - On a feature branch, `aidlc advance [slug] building`.
-   - Loop until no ticket is ready: `aidlc next [slug]`; dispatch each batch in parallel via `tea-sdlc:subagent-driven-development` (test-first through the agreed seams, tests named by story ID; the implementer ticks the acceptance checkboxes); close each with `aidlc task-done [slug] T<n> --cmd "<exit check>"`.
+   - Loop until no ticket is ready: `aidlc next [slug]`; dispatch each batch in parallel via `tea-sdlc:build` (test-first through the agreed seams, tests named by story ID; the implementer ticks the acceptance checkboxes); close each with `aidlc task-done [slug] T<n> --cmd "<exit check>"`.
    - Apply the accepted `contracts/` delta to the authoritative contract source. Implementers never rewrite spec, ADR or living-doc files.
    - Record each unsettled, non-user decision with `aidlc ruling [slug] --decision … --why … --if-wrong …`.
 4. VERIFY (→ verified): `aidlc verify [slug] --cmd "<test command>"` (add `--junit <glob>` when the runner writes JUnit XML), plus build and lint. Then `aidlc advance [slug] verified`.
-5. REVIEW (→ reviewed), with `tea-sdlc:requesting-code-review`:
+5. REVIEW (→ reviewed), with `tea-sdlc:review`:
    - Run the Spec axis and the Standards axis once each, plus the `tea-sdlc:qa-subagent` verdict (live API checks when a service is running).
    - Put finding lines only in `review.md`, never merged or re-ranked. Close each with `fixed:` or `cleared:`, and rerun `aidlc verify` after code fixes.
    - Allow at most one diff-only re-review of the fixes (one reviewer, both axes); never a second full round.
    - Then `aidlc stamp [slug] review` and `aidlc advance [slug] reviewed`, which records the pre-PR pass.
-6. SHIP (→ shipped), with `tea-sdlc:shipping`:
+6. SHIP (→ shipped), with `tea-sdlc:ship`:
    - Open the PR, linking the spec and ADRs and including `aidlc trace [slug]`.
    - Wait for green CI. Bump the version and `CHANGELOG.md` when the project versions releases.
    - Write `ship.md` with only its required sections (decision, version, Checks, Rollback, Post-release verification), then `aidlc advance [slug] shipped`.

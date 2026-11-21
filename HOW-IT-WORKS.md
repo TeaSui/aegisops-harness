@@ -10,7 +10,7 @@ One page for people. The skills themselves are written for the model: short, imp
 you type a request
   │  UserPromptSubmit hook (autopilot.py): skills to load, tier, mode
   ▼
-Define   brainstorming ── trust boundary? ── no ──▶ fast path: TDD → verify → one review → PR
+Define   spec ────────── trust boundary? ── no ──▶ fast path: TDD → verify → one review → PR
   │                          │ yes
   │                lean (default): security pass, still one session, no subagents
   │                full: spec.md (grilling, Security) ── approval
@@ -35,7 +35,7 @@ Ship     PR, CI green, ship.md                             (gate: gh pr merge)
 
 | Phase | Skill | Use it for | Loads by itself on |
 |---|---|---|---|
-| **Define** · what to build and why | `brainstorming` | First, before reading files or editing, whenever a request builds, adds, modifies, fixes or refactors code (after an … | every code change |
+| **Define** · what to build and why | `spec` | First, before reading files or editing, whenever a request builds, adds, modifies, fixes or refactors code (after an … | every code change |
 |  | `grilling` | When the user asks to be grilled or interviewed on a plan or design ("grill me", "interview me"), or before writing a … | keyword |
 |  | `clarify` | Before starting a task when the request leaves open something that changes what gets built (scope, behavior, data, … | keyword |
 |  | `goal` | Execute an explicitly delegated end-to-end outcome autonomously, including recon, implementation, verification and … | keyword |
@@ -44,19 +44,19 @@ Ship     PR, CI green, ship.md                             (gate: gh pr merge)
 |  | `spec-check` | Before a full-workflow spec is approved when the spec was written by the session and not grilled with the user, once … | named by another skill |
 |  | `writing-software-docs` | When the user asks to write, draft or spec out a BRD, PRD, FRD, user stories with acceptance criteria, RFC, ADR, … | keyword |
 |  | `measurement-planning` | When a feature must be measurable or the user asks for a North Star, funnel, analytics event taxonomy, experiment … | keyword |
-| **Plan** · slices and order | `writing-plans` | After spec acceptance, or when the user asks for an implementation plan, a breakdown or tickets | named by another skill |
+| **Plan** · slices and order | `plan` | After spec acceptance, or when the user asks for an implementation plan, a breakdown or tickets | named by another skill |
 | **Build** · code, test-first | `test-driven-development` | Before writing production code for a new behavior or a bug fix | every code change |
-|  | `subagent-driven-development` | In the full workflow once the spec is `planned` (tickets.md passes its gate), to run the build stage in this session | named by another skill |
-|  | `executing-plans` | When resuming or continuing a saved implementation plan (docs/specs/&lt;feature>/tickets.md, docs/plans/*.md), … | named by another skill |
+|  | `build` | In the full workflow once the spec is `planned` (tickets.md passes its gate), to run the build stage in this session | named by another skill |
+|  | `build` | In the full workflow once the spec is `planned` (tickets.md passes its gate), to run the build stage in this session | named by another skill |
 |  | `dispatching-parallel-agents` | In the full workflow, or when the user asks for parallel investigation, to run 2+ independent investigations or tasks … | named by another skill |
 | **Verify** · prove it works | `verification-before-completion` | Before saying work is done, fixed or passing, before a commit, PR or handing to the next task | named by another skill |
 |  | `systematic-debugging` | When a bug, failing test, error or unexpected behavior appears, before proposing or making a fix | bug or error |
 |  | `validate-feature` | When asked to validate a whole branch or change set, or to check that the pending change is ready before opening a PR … | keyword |
 |  | `grounding-claims` | When about to assert a codebase, git-history, command-output or subagent-evidence fact not seen in this session's tool … | named by another skill |
 |  | `find-docs` | When an answer or code you are about to write depends on a library, framework, SDK, CLI or cloud-service detail not … | keyword |
-| **Review** · a second pair of eyes | `requesting-code-review` | When work needs review before merge or a PR ("get it reviewed", "review my changes"), or when a full-workflow spec … | keyword |
+| **Review** · a second pair of eyes | `review` | When work needs review before merge or a PR ("get it reviewed", "review my changes"), or when a full-workflow spec … | keyword |
 |  | `receiving-code-review` | When review feedback arrives (from the tea-sdlc:code-reviewer subagent, the code-review skill, a PR comment or the … | keyword |
-| **Ship** · PR, release, learn | `shipping` | When a reviewed full-workflow change is ready to release, merge or deploy, or the user says ship it, release or deploy | keyword |
+| **Ship** · PR, release, learn | `ship` | When a reviewed full-workflow change is ready to release, merge or deploy, or the user says ship it, release or deploy | keyword |
 |  | `finishing-a-development-branch` | When fast-path or non-spec work is verified and must be delivered (merge, PR, keep, discard), or the user says open a … | keyword |
 |  | `incident-to-eval` | Turn a revert, rollback or production incident caused by a merged change into a regression case for review quality | keyword |
 | **Domain** · loaded when the stack shows up | `fintech-security` | Reference for drafting or reviewing security rules in fintech code (Spring Boot, Go, AWS serverless): candidate … | stack keyword |

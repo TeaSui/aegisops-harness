@@ -1,5 +1,5 @@
 ---
-name: brainstorming
+name: spec
 description: Use first, before reading files or editing, whenever a request builds, adds, modifies, fixes or refactors code (after an opener skill such as goal or clarify when one applies). Runs the trust-boundary check, clarifies the outcome, constraints and acceptance evidence, compares approaches when the tradeoff matters, writes the spec for full-workflow work and ends with the routing tier. Scales from three lines (routine fix) to a full design (trust-boundary or new system).
 ---
 
@@ -25,7 +25,7 @@ Request already carries goals, acceptance criteria and a tier (e.g. a `/prompt-b
 
 Read project context and existing sources before asking. Identify outcome, constraints, acceptance evidence, material unknowns. Ask one concise question only when the answer changes the design. Compare 2-3 approaches when the tradeoff matters; recommend one with cost, risk, validation. Keep domain conventions and security controls. Size the design to the change: a config change is a few sentences; a new system states interfaces, ownership, data flow, failure behavior. Challenge a significant architecture decision once; record unresolved concerns.
 
-Visual decision the user should compare (layouts, mockups, diagrams) → browser companion: `${CLAUDE_PLUGIN_ROOT}/skills/brainstorming/visual-companion.md` (its `skills/brainstorming/scripts/…` run from `${CLAUDE_PLUGIN_ROOT}`). Not for text questions.
+Visual decision the user should compare (layouts, mockups, diagrams) → browser companion: `${CLAUDE_PLUGIN_ROOT}/skills/spec/visual-companion.md` (its `skills/spec/scripts/…` run from `${CLAUDE_PLUGIN_ROOT}`). Not for text questions.
 
 ## 3. Spec (full workflow only)
 
@@ -52,4 +52,4 @@ End with exactly one line:
 
 `Tier: fast path | fast path + security pass | full workflow — <trust-boundary items hit, or none>`
 
-Then: fast path (with or without security pass) → `tea-sdlc:test-driven-development` in this session, no subagent dispatch, single pre-PR pass before a PR. Full workflow → `tea-sdlc:writing-plans` (tickets) on the accepted spec.
+Then: fast path (with or without security pass) → `tea-sdlc:test-driven-development` in this session, no subagent dispatch, single pre-PR pass before a PR. Full workflow → `tea-sdlc:plan` (tickets) on the accepted spec.

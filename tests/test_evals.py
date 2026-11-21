@@ -50,18 +50,18 @@ def stream(name):
 
 class RoutingRunnerTest(unittest.TestCase):
     NOTE = ('Signals: code change ("add"); trust boundary: money ("transfer"), new public surface ("endpoint").\n'
-            'Load in this order, without waiting for the user to name them: tea-sdlc:brainstorming → '
+            'Load in this order, without waiting for the user to name them: tea-sdlc:spec → '
             'tea-sdlc:test-driven-development.\nRouting: trust-boundary signal → walk the six-item check; any YES → '
             'Full workflow (Security first).\nThreat models are produced by security-engineer-subagent.')
 
     def test_parse_note_reads_skills_agents_and_trust_labels(self):
         emitted, trust = routing.parse_note(self.NOTE)
-        self.assertEqual(emitted, {'brainstorming', 'test-driven-development', 'security-engineer-subagent'})
+        self.assertEqual(emitted, {'spec', 'test-driven-development', 'security-engineer-subagent'})
         self.assertEqual(trust, {'money', 'new public surface'})
 
     def test_check_reports_each_kind_of_miss(self):
-        self.assertEqual(routing.check({'expect': ['brainstorming'], 'trust': ['money'], 'tier': 'full'}, self.NOTE), [])
-        problems = routing.check({'expect': ['goal'], 'forbid': ['brainstorming'], 'trust': ['auth'],
+        self.assertEqual(routing.check({'expect': ['spec'], 'trust': ['money'], 'tier': 'full'}, self.NOTE), [])
+        problems = routing.check({'expect': ['goal'], 'forbid': ['spec'], 'trust': ['auth'],
                                   'forbid_trust': ['money'], 'tier': 'fast', 'expect_text': ['aidlc.py'],
                                   'forbid_text': ['Full workflow']}, self.NOTE)
         self.assertEqual(len(problems), 7, problems)
@@ -346,7 +346,7 @@ class StreamAndJudgeTest(unittest.TestCase):
         agent = passive_judge.judge({'expect': ['fintech-security', 'security-engineer-subagent']},
                                     stream('passive_agent.jsonl'))
         self.assertTrue(agent['pass'])
-        miss = passive_judge.judge({'expect': ['requesting-code-review']}, stream('passive_miss.jsonl'))
+        miss = passive_judge.judge({'expect': ['review']}, stream('passive_miss.jsonl'))
         self.assertFalse(miss['pass'])
         self.assertIn('code-review', miss['summary'])
 
@@ -483,7 +483,7 @@ import json, os, sys
 args = sys.argv[1:]
 prompt = args[args.index('-p') + 1]
 assert '--plugin-dir' in args and '--output-format' in args
-skill = 'tea-sdlc:brainstorming' if 'clamp' in prompt else 'code-review'
+skill = 'tea-sdlc:spec' if 'clamp' in prompt else 'code-review'
 print(json.dumps({"type": "system", "subtype": "init", "claude_code_version": "0.0.0-fake", "model": "fake"}))
 print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "1", "name": "Skill",
                                                                "input": {"skill": skill}}]}}))

@@ -1,5 +1,5 @@
 ---
-name: writing-plans
+name: plan
 description: Use after spec acceptance, or when the user asks for an implementation plan, a breakdown or tickets — slices the user stories into tracer-bullet vertical slices with Blocked-by edges, written beside the spec, and advances it to planned. Fast-path work does not need one.
 ---
 
@@ -23,4 +23,4 @@ Leave every `Status: ready-for-agent`; only `aidlc task-done` sets `done`. Then 
 
 ## Then
 
-Check for uncovered stories, invented blockers, horizontal slices and vague criteria. If implementation is authorized, continue with `tea-sdlc:subagent-driven-development` without asking; a resumed plan uses `tea-sdlc:executing-plans`.
+Check for uncovered stories, invented blockers, horizontal slices and vague criteria. If implementation is authorized, continue with `tea-sdlc:build` without asking (it also resumes a saved plan).

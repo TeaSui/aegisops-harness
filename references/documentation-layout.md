@@ -66,9 +66,9 @@ The integrating (main) session writes every file except `spec-check.md` (blind c
 | `spec-check.md` | guesses a spec-only reader would make, each resolved or accepted risk | ungrilled spec written by the session |
 | `measurement.md` | metrics, funnel, analytics event taxonomy, experiments, consent (skill `measurement-planning`) | must be measurable |
 | `concern-report.md` | existing vs required compatibility | optional |
-| `tickets.md` | tracer-bullet vertical slices (skill `writing-plans`); exempt from freezing | full workflow |
+| `tickets.md` | tracer-bullet vertical slices (skill `plan`); exempt from freezing | full workflow |
 | `ledger.md` | transitions, ticket completions, rulings, test runs, review stamps | from `accepted` |
-| `review.md` / `ship.md` | finding lines / GO-NO-GO, version, checks, rollback, post-release verification (skill `shipping`) | before `reviewed` / `shipped` |
+| `review.md` / `ship.md` | finding lines / GO-NO-GO, version, checks, rollback, post-release verification (skill `ship`) | before `reviewed` / `shipped` |
 
 Specs from before 3.3.0 (`requirements.md`, `security.md`, `design.md`, `ui-design.md`, `plan.md`) stay as they are; the engine still gates them.
 

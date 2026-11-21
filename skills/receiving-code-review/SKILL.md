@@ -40,4 +40,4 @@ A stamp is valid only for the code it was taken on; any later code change needs 
 
 ## Fast path
 
-One diff-only re-review of the fixes, then commit and record the pass per `tea-sdlc:requesting-code-review` §3 (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open go to the user as explicit open items, not another loop.
+One diff-only re-review of the fixes, then commit and record the pass per `tea-sdlc:review` §3 (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open go to the user as explicit open items, not another loop.

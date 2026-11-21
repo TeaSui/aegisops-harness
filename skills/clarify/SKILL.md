@@ -1,6 +1,6 @@
 ---
 name: clarify
-description: Use before starting a task when the request leaves open something that changes what gets built (scope, behavior, data, interface, anything expensive to undo), or when the user asks to be asked clarifying questions first. Inspects the project, then asks only the questions whose answers change the work, each with the default that applies if unanswered. Skip for clear or routine requests. For a code change, brainstorming already covers this; load clarify when the user asks to be questioned first or the task is not a code change.
+description: Use before starting a task when the request leaves open something that changes what gets built (scope, behavior, data, interface, anything expensive to undo), or when the user asks to be asked clarifying questions first. Inspects the project, then asks only the questions whose answers change the work, each with the default that applies if unanswered. Skip for clear or routine requests. For a code change, tea-sdlc:spec already covers this; load clarify when the user asks to be questioned first or the task is not a code change.
 ---
 
 Task: $ARGUMENTS (default: the task under discussion)

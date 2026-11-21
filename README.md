@@ -50,14 +50,14 @@ You describe the work in English; the plugin decides which skill, command and ga
 | When | What fires on its own | Hook |
 |---|---|---|
 | Session start, resume, `/clear`, compaction | Bootstrap plus a project snapshot: active specs with their plan progress and next step, a resumable `.goal/state.md`, open plans, a repository with no `docs/` yet, the superpowers plugin enabled alongside (use the tea-sdlc twin of each shared skill), a missing `gitleaks` (also shown to you, with the install command). Gate state older than 30 days is pruned | `session-start` |
-| Every prompt | Keyword router: code change → `brainstorming` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → fast path with a security pass (lean, the default) or Full workflow (full mode); domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `fintech-security`, plus `tea-sdlc:security-engineer-subagent` in full mode); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
+| Every prompt | Keyword router: code change → `spec` → `test-driven-development`; bug or error → `systematic-debugging` (`debug-parallel` across services); trust-boundary words (PII, auth, money, new endpoint, vendor, secrets) → fast path with a security pass (lean, the default) or Full workflow (full mode); domain skills by name, even without a change verb (Go/Spring/FastAPI, SQL, Kafka, CDK, React, Flutter, Datadog, threat model → `fintech-security`, plus `tea-sdlc:security-engineer-subagent` in full mode); readiness (“ready before I open a PR”), review (“get it reviewed”), PR, docs, incident, “are you sure?”, “give me the source”, “end-to-end” → the matching skill or command. English keywords only. Silent for questions (ending in `?`, or opening with does/is/how… and containing one), small talk, and changes to prose or git/ops (prompts, rules, README, branches, versions, commits) | `autopilot.py prompt` |
 | Before the first production edit | Write a failing test first (once per session) · fix a failing external contract first | `tdd-gate.py`, `contract-gate.py` |
 | After tool calls | Three failing test runs in a row → `systematic-debugging`; `git revert` → `incident-to-eval`; a merge while a spec is `shipped` (or a pre-AIDLC spec is `accepted`) → `upgrade-service-docs` | `autopilot.py post` |
 | Before the session says “done” | Code changed since the last test run → run the tests or say why none applies (once per change set, at most 3 per session) | `autopilot.py stop` |
 | A subagent starts | The house rules travel with it (subagents never see the bootstrap) | `autopilot.py subagent` |
 | `git commit` / `git push` / `gh pr create` / `gh pr merge` | Secret scan · review stage done · ship stage done | `security-gate.py`, `pr-review-gate.py`, `ship-gate.py` |
 
-Notes are hints, not orders: the session skips any that does not fit and names what it applied. Measured on real headless sessions (Claude Code 2.1.319, `sonnet`): with the prompt note the session loaded `brainstorming`, stated the tier and wrote a failing test before the code; on a “pure rename” it first answered *“I ran no tests”*, the stop gate sent it back, and it ran the suite before reporting.
+Notes are hints, not orders: the session skips any that does not fit and names what it applied. Measured on real headless sessions (Claude Code 2.1.319, `sonnet`): with the prompt note the session loaded `spec`, stated the tier and wrote a failing test before the code; on a “pure rename” it first answered *“I ran no tests”*, the stop gate sent it back, and it ran the suite before reporting.
 
 Switches (environment variables, all default on): `TEA_SDLC_WORKFLOW=full` (opt in to the subagent-based full workflow; the default is lean), `TEA_SDLC_AUTOPILOT=off` (prompt and follow-up notes, session snapshot, subagent rules), `TEA_SDLC_SHIP_GATE=off`, `TEA_SDLC_VERIFY_GATE=off`, `TEA_SDLC_TDD_GATE=off`, `TEA_SDLC_CONTRACT_GATE=off`.
 
@@ -87,12 +87,12 @@ A full-workflow change lives in `docs/specs/<feature>/` and moves through stages
 
 | Stage | Artifact | Gate checks | Skill |
 |---|---|---|---|
-| **spec** → `accepted` | `spec.md`: Problem Statement, Solution, numbered User Stories (story n = `RFD-n`), Implementation Decisions with `### Security`, Testing Decisions, Out of Scope | every template section filled, story numbers unique, `Verify:` tags valid, security decisions present, any `spec-check.md` guess closed, contract gate, one recorded approval | `brainstorming`, `spec-check` |
-| **plan** → `planned` | `tickets.md`: tracer-bullet vertical slices (`Blocked by`, `Covers`, acceptance checkboxes, `Test`, `Files`) | every story covered, no cycle, no file shared by tickets that may run in parallel | `writing-plans` |
-| **build** → `building` | feature branch; `ledger.md` | branch recorded, not the default branch | `subagent-driven-development` |
-| **test** → `verified` | `aidlc task-done` / `aidlc verify` ledger events | every ticket `done` by a passing test command, every story referenced by a test, a green run whose **code fingerprint** matches the current code, no failing story test in JUnit | `subagent-driven-development`, `verification-before-completion` |
-| **review** → `reviewed` | `review.md`: Spec axis, Standards axis, QA verdict | no open finding, QA GO, review stamped against the current code | `requesting-code-review`, `receiving-code-review` |
-| **ship** → `shipped` | `ship.md`: GO, rollback, post-release verification | CI green (`gh pr checks`), changelog has the version, code unchanged since review | `shipping` |
+| **spec** → `accepted` | `spec.md`: Problem Statement, Solution, numbered User Stories (story n = `RFD-n`), Implementation Decisions with `### Security`, Testing Decisions, Out of Scope | every template section filled, story numbers unique, `Verify:` tags valid, security decisions present, any `spec-check.md` guess closed, contract gate, one recorded approval | `spec`, `spec-check` |
+| **plan** → `planned` | `tickets.md`: tracer-bullet vertical slices (`Blocked by`, `Covers`, acceptance checkboxes, `Test`, `Files`) | every story covered, no cycle, no file shared by tickets that may run in parallel | `plan` |
+| **build** → `building` | feature branch; `ledger.md` | branch recorded, not the default branch | `build` |
+| **test** → `verified` | `aidlc task-done` / `aidlc verify` ledger events | every ticket `done` by a passing test command, every story referenced by a test, a green run whose **code fingerprint** matches the current code, no failing story test in JUnit | `build`, `verification-before-completion` |
+| **review** → `reviewed` | `review.md`: Spec axis, Standards axis, QA verdict | no open finding, QA GO, review stamped against the current code | `review`, `receiving-code-review` |
+| **ship** → `shipped` | `ship.md`: GO, rollback, post-release verification | CI green (`gh pr checks`), changelog has the version, code unchanged since review | `ship` |
 | **promote** → `implemented` | living docs, README traceability table | traceability written | `/upgrade-service-docs` |
 
 What it gives you that a prose workflow cannot:
@@ -158,7 +158,7 @@ One structure for every agent, command and skill, owned by [`references/document
     ├── spec-check.md         optional blind spec check: every guess closed (spec-check)
     ├── contracts/            only for contract: external (checked by scripts/check-contract.py)
     ├── measurement.md        measurement-planning (when in scope)
-    ├── tickets.md            vertical slices (writing-plans); Status: done set only by aidlc task-done
+    ├── tickets.md            vertical slices (plan); Status: done set only by aidlc task-done
     ├── ledger.md             aidlc only: advances, task-done, verify, rulings, stamps
     ├── review.md             Spec + Standards axes + QA verdict
     └── ship.md               GO / NO-GO, rollback, post-release verification
@@ -185,8 +185,8 @@ Project level: `GLOSSARY.md` (domain terms). Legacy specs (`requirements.md`, `p
 
 | Area | Skills |
 |---|---|
-| Workflow (AIDLC) | `session-bootstrap`, `brainstorming` (spec), `grilling` (decisions, `GLOSSARY.md`, ADRs), `spec-check` (optional blind spec check), `measurement-planning`, `writing-plans` (tickets), `subagent-driven-development` (parallel build), `executing-plans`, `dispatching-parallel-agents`, `shipping` (ship stage), `goal` |
-| Quality | `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `validate-feature`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `incident-to-eval` |
+| Workflow (AIDLC) | `session-bootstrap`, `spec` (spec), `grilling` (decisions, `GLOSSARY.md`, ADRs), `spec-check` (optional blind spec check), `measurement-planning`, `plan` (tickets), `build` (parallel build), `build`, `dispatching-parallel-agents`, `ship` (ship stage), `goal` |
+| Quality | `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `validate-feature`, `review`, `receiving-code-review`, `finishing-a-development-branch`, `incident-to-eval` |
 | Grounding | `grounding-claims` (codebase and command facts), `find-docs` (library, SDK and CLI facts via Context7 or official docs) |
 | Thinking tools | `clarify` (ask only what changes the work), `expert-lens` (what the best practitioner would notice, do first, refuse), `reframe` (strongest case against the current view) — triggered by the situation or as `/clarify`, `/expert-lens`, `/reframe` |
 | Documentation | `writing-software-docs` (BRD, PRD, FRD, user stories, RFC, ADR, specification, concern report) |

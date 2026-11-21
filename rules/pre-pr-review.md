@@ -4,7 +4,7 @@ Before opening a PR or handing a change to review, review it in a fresh context,
 
 ## Fast path (both modes)
 1. Run verification and show its output.
-2. Built-in `code-review` skill once on the diff: `low` effort in lean mode, default effort in full mode (unavailable → `tea-sdlc:requesting-code-review`). Trust boundary: it also checks the security pass (threats listed and tested, no PII or secrets in logs).
+2. Built-in `code-review` skill once on the diff: `low` effort in lean mode, default effort in full mode (unavailable → `tea-sdlc:review`). Trust boundary: it also checks the security pass (threats listed and tested, no PII or secrets in logs).
 3. Fix each finding or clear it with a reason backed by evidence; a note alone clears nothing.
 4. Re-review only the fix diff.
 5. Commit, then `python3 scripts/mark-pr-review.py --reviewer <name> --open-findings <n>`.
