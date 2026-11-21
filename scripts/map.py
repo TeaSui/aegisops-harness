@@ -32,6 +32,13 @@ COMMANDS = (
     ('Challenge a plan or a belief', 'reframe', ()),
     ('What a top practitioner would do', 'expert-lens', ()),
 )
+# Commands in commands/ with the situation they serve (their own descriptions follow in the map).
+COMMAND_FILES = {
+    'prompt-builder': 'Turn a rough idea into an input that meets the AIDLC standard (checked with aidlc lint)',
+    'eval-upgrade': 'Score, upgrade or A/B-duel one part of the plugin or a .claude directory',
+    'upgrade-service-docs': 'After the merge: promote the spec into the living docs, close it',
+    'generate-service-docs': 'A service has no living docs yet',
+}
 # Support skills: never invoked by name; a stage Reads them when the repository (or the change) calls for them.
 SUPPORT = (
     ('test-driven-development', 'build, fix: before any production code'),
@@ -133,7 +140,8 @@ def render():
            '| Situation | Command | Loads, in order |', '|---|---|---|']
     for situation, cmd, loads in COMMANDS:
         out.append(f'| {situation} | `/tea-sdlc:{cmd}` | {" → ".join(f"`{x}`" for x in loads) or "—"} |')
-    out += [f'| {gist(meta.get("description", ""), 90)} | `/tea-sdlc:{name}` | — |' for name, meta in commands.items()]
+    out += [f'| {COMMAND_FILES.get(name) or gist(meta.get("description", ""), 90)} | `/tea-sdlc:{name}` | — |'
+            for name, meta in commands.items()]
     out += ['', '## Support skills (never invoked by name)', '', '| Skill | Read when |', '|---|---|']
     out += [f'| `{name}` | {when} |' for name, when in SUPPORT if name in skills]
     out += ['', '## Agents', '', '| Agent | Job |', '|---|---|']

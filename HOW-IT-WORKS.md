@@ -33,8 +33,10 @@ questions on the way: files → Atlassian Rovo → recorded assumption → (rare
 | Review comments arrived | `/tea-sdlc:receiving-code-review` | `test-driven-development` → `verify` |
 | Challenge a plan or a belief | `/tea-sdlc:reframe` | — |
 | What a top practitioner would do | `/tea-sdlc:expert-lens` | — |
-| Build living reference docs for a service or system that has none | `/tea-sdlc:generate-service-docs` | — |
-| After the merge, promote a shipped spec into the living service and system docs | `/tea-sdlc:upgrade-service-docs` | — |
+| Score, upgrade or A/B-duel one part of the plugin or a .claude directory | `/tea-sdlc:eval-upgrade` | — |
+| A service has no living docs yet | `/tea-sdlc:generate-service-docs` | — |
+| Turn a rough idea into an input that meets the AIDLC standard (checked with aidlc lint) | `/tea-sdlc:prompt-builder` | — |
+| After the merge: promote the spec into the living docs, close it | `/tea-sdlc:upgrade-service-docs` | — |
 
 ## Support skills (never invoked by name)
 

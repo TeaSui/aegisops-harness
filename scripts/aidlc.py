@@ -13,6 +13,7 @@ CLI: python3 scripts/aidlc.py <command> [--json] [--repo DIR]   exit 0 pass, 1 g
   stamp SPEC review                        write the code fingerprint into review.md and log it
   trace SPEC [--write]                     requirement -> tasks -> tests -> result; --write fills README ## Traceability
   init SPEC --key KEY                      create the spec folder with skeletons
+  lint FILE [--key KEY] [--no-security]    check a standalone spec.md (a drafted prompt) against the spec rules
 SPEC is a folder path (contains '/') or a slug found under any docs/specs/ folder (init: <repo>/docs/specs/<slug>).
 --repo may be any folder of the repository (normalized to the git top level). task-done and verify accept
 --timeout SECONDS (default 1800). JSON: `exit` is always the CLI exit code; `command_exit` is the run command's.
@@ -1906,6 +1907,28 @@ def trace_table(rows):
     return lines
 
 
+def cmd_lint(args):
+    """Check a standalone spec.md (e.g. a drafted prompt) against the accepted gate's spec.md rules."""
+    path = pathlib.Path(args.file)
+    text, error = read_text(path, str(path))
+    if text is None:
+        raise UsageError(error or f'{path}: not readable')
+    if not KEY.match(args.key):
+        raise UsageError(f'--key {args.key!r} must be 2-6 capital letters')
+    label = path.name
+    stories, findings = parse_spec(text, label, args.key)
+    findings += spec_findings(text, label, stories)
+    if not args.no_security and not spec_security(text):
+        findings.append(fail(f'{label}: Implementation Decisions has no security decisions (a "### Security" heading '
+                             'or a "**Security**" bullet: assets, threats, controls); pass --no-security only when '
+                             'the trust-boundary check is all NO'))
+    if not re.search(r'^\s*Status:\s*ready-for-agent\b', text, re.M | re.I):
+        findings.append(warn(f'{label}: no "Status: ready-for-agent" line: the spec stage will ask for approval'))
+    if not failed(findings):
+        findings.append(('OK', f'{label}: {len(stories)} stories, every template section filled'))
+    return finding_result(findings, {'file': str(path), 'stories': [s['id'] for s in stories]})
+
+
 def cmd_trace(args):
     spec = spec_arg(args)
     reqs, findings = spec.requirements
@@ -2065,6 +2088,9 @@ def build_parser():
     add('stamp', cmd_stamp, 'spec').add_argument('what', choices=['review'])
     add('trace', cmd_trace, 'spec').add_argument('--write', action='store_true')
     add('init', cmd_init, 'spec').add_argument('--key', required=True)
+    lint = add('lint', cmd_lint, 'file')
+    lint.add_argument('--key', default='KEY')
+    lint.add_argument('--no-security', action='store_true', help='the change crosses no trust boundary')
     return parser
 
 

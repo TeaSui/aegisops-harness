@@ -1291,6 +1291,23 @@ class SpecTemplateLifecycleTest(Base):
         self.assertFalse(any('RFD-3' in m for m in self.fails(findings)))
 
 
+class LintTest(Base):
+    def test_lint_passes_a_complete_spec_and_lists_failures(self):
+        good = self.write('draft/spec.md', SPEC_MD)
+        code, payload = self.cli_json('lint', good, '--key', 'RFD')
+        self.assertEqual((code, payload['stories']), (0, ['RFD-1', 'RFD-2', 'RFD-3']))
+        bad = self.write('draft/bad.md', SPEC_MD.replace('- **Security:** assets', '- Assets').replace(
+            '## Out of Scope', '## Notes').replace('Status: ready-for-agent', ''))
+        code, payload = self.cli_json('lint', bad, '--key', 'RFD')
+        messages = ' '.join(f['message'] for f in payload['findings'])
+        self.assertEqual(code, 1)
+        self.assertIn('no security decisions', messages)
+        self.assertIn('no "## Out Of Scope" section', messages)
+        self.assertIn('no "Status: ready-for-agent"', messages)
+        code, payload = self.cli_json('lint', bad, '--key', 'RFD', '--no-security')
+        self.assertNotIn('security', ' '.join(f['message'] for f in payload['findings'] if f['level'] == 'FAIL'))
+
+
 class InitTest(Base):
     def test_creates_parsable_skeletons_that_block_acceptance(self):
         code, payload = self.cli_json('init', 'refunds', '--key', 'RFD')

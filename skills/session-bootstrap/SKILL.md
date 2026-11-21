@@ -11,6 +11,7 @@ tea-sdlc is the backend engineering lifecycle **spec → plan → build → veri
 
 | Situation | Command | What runs |
 |---|---|---|
+| Unsure the input is good enough for the lifecycle | `/tea-sdlc:prompt-builder <rough idea>` | a `/tea-sdlc:aidlc` input with a spec that passes `aidlc lint`, or a `/tea-sdlc:fix` input |
 | New backend feature or behaviour change | `/tea-sdlc:aidlc <request or pasted spec>` | spec → plan → build → verify → review → ship, one approval at the spec |
 | You already wrote a spec in the to-spec template | `/tea-sdlc:aidlc <pasted spec>` | the same; the spec is saved verbatim, `Status: ready-for-agent` = approved |
 | Decisions still open and you want to be interviewed | `/tea-sdlc:grilling <topic>`, then `/tea-sdlc:aidlc` | interview → `GLOSSARY.md`, ADRs |
@@ -21,6 +22,7 @@ tea-sdlc is the backend engineering lifecycle **spec → plan → build → veri
 | After the merge | `/tea-sdlc:upgrade-service-docs` | living docs updated, spec closed (`implemented`) |
 | A service has no living docs | `/tea-sdlc:generate-service-docs` | `docs/` for the service |
 | Challenge a plan, or a top practitioner's view | `/tea-sdlc:reframe` · `/tea-sdlc:expert-lens` | an opinion, no code |
+| Score or upgrade one part of this plugin (or a `.claude` folder) | `/tea-sdlc:eval-upgrade [eval \| arena …]` | static score, upgrade proposals, A/B duels |
 
 **Inside a command:** follow its file to the end without asking for permission between steps. Support skills (TDD, debugging, stack patterns, security catalogue) are loaded by the stage files by path, chosen from the repository's files (`rules/workflow-routing.md`), never from prompt keywords. Plugin root: `${CLAUDE_PLUGIN_ROOT}`. Paths `rules/…`, `references/…`, `scripts/…`, `skills/…` are under it, and a literal `${CLAUDE_PLUGIN_ROOT}` in a file you Read means it too (write the real path in commands); `docs/…` is in the project.
 

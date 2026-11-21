@@ -47,6 +47,7 @@ Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commit
 
 | Situation | Command |
 |---|---|
+| Turn a rough idea into an input that meets the AIDLC standard | `/tea-sdlc:prompt-builder <idea>` |
 | New backend feature or behaviour change (request or pasted to-spec spec) | `/tea-sdlc:aidlc <request or spec>` |
 | Interview me first on open decisions | `/tea-sdlc:grilling <topic>` |
 | One stage at a time | `/tea-sdlc:spec` · `/tea-sdlc:plan` · `/tea-sdlc:build` · `/tea-sdlc:verify` · `/tea-sdlc:review` · `/tea-sdlc:ship` |
@@ -57,6 +58,7 @@ Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commit
 | After the merge | `/tea-sdlc:upgrade-service-docs` |
 | Service has no living docs | `/tea-sdlc:generate-service-docs` |
 | A second opinion | `/tea-sdlc:reframe` · `/tea-sdlc:expert-lens` |
+| Score, upgrade or A/B-duel part of the plugin | `/tea-sdlc:eval-upgrade` |
 
 What each command loads, which gate stops it and which files it leaves: [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 
