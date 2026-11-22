@@ -38,8 +38,19 @@ Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commit
 |---|---|
 | `python3` | All hooks and `scripts/` |
 | [`gitleaks`](https://github.com/gitleaks/gitleaks) | Secret gate on `git commit` / `git push` (fails closed when missing) |
-| `gh` | PR review gate (`gh pr create`) |
+| `gh` (GitHub) or Bitbucket Cloud credentials | Opening, checking and merging PRs (`scripts/pr.py`), the PR and ship gates |
 | `ruby` (optional) | Full YAML parsing in `scripts/check-setup.py` and `scripts/check-contract.py` (when PyYAML is absent) |
+
+### Bitbucket Cloud
+
+`scripts/pr.py` picks Bitbucket when `origin` is on `bitbucket.org` (SSH or HTTPS). Pushing uses your git credentials, as today. The API calls (create, checks, merge, comments) read these from the environment, for example in `~/.claude/settings.json` under `env` or your shell profile:
+
+| Variable | Value |
+|---|---|
+| `BITBUCKET_EMAIL` + `BITBUCKET_API_TOKEN` | your Atlassian account email and an [API token](https://support.atlassian.com/bitbucket-cloud/docs/using-api-tokens/) with the scopes `read:repository:bitbucket`, `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket` |
+| or `BITBUCKET_ACCESS_TOKEN` | a repository, project or workspace access token (sent as Bearer) |
+
+Check with `python3 <plugin>/scripts/pr.py auth` in the repository: exit 0 means PRs can be opened. CI status comes from the build statuses your CI posts to the PR (Bitbucket Pipelines, Jenkins, CodeBuild…).
 
 ---
 
@@ -64,7 +75,7 @@ What each command loads, which gate stops it and which files it leaves: [HOW-IT-
 
 ## 🔎 Questions during the lifecycle
 
-Files first (spec, `GLOSSARY.md`, ADRs, code, tests), then **Atlassian Rovo MCP** (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption. A person is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or sources that contradict each other (`references/aidlc.md` §0). Every source and assumption is listed in the spec and the final report.
+Files first (spec, `GLOSSARY.md`, ADRs, code, tests), then **Atlassian Rovo MCP** (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption. A person is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or sources that contradict each other (`references/aidlc.md` §0), and never when the input says "do not ask", "end to end" or `Status: ready-for-agent`: then the decision is recorded (`RISK-ACCEPTANCE NEEDED:` when it accepts a risk) and listed first in the final report. `hooks/question-gate.py` enforces both: inside a tea-sdlc command, a question in delegated input is blocked, and the first question asked before any Rovo search is sent back. Every source and assumption is listed in the spec and the final report.
 
 ## 🤖 Agents
 

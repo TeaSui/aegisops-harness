@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.1.0 — 2026-11-22
+
+Bitbucket Cloud support: the ship stage no longer stops at "gh is signed in to github.com only".
+
+### Added
+- **`scripts/pr.py`**, one PR interface: `provider`, `auth`, `view`, `create`, `checks [--watch]`, `merge`, `comments`, `reply`, `default-branch`. GitHub goes through `gh`; Bitbucket Cloud (origin on `bitbucket.org`, SSH or HTTPS) through REST API 2.0 with `BITBUCKET_EMAIL` + `BITBUCKET_API_TOKEN` (Atlassian API token, Basic) or `BITBUCKET_ACCESS_TOKEN` (Bearer). Tokens are read from the environment and never printed. Stdlib only.
+- The `shipped` gate reads Bitbucket PR build statuses (latest state per key) the way it reads `gh pr checks`.
+
+### Changed
+- `ship`, `ship/no-spec.md`, `review`, `receiving-code-review` and the bootstrap use `pr.py` for every PR action. A refused push or rejected credentials is BLOCKED with the error and its fix, not a silent hand-off.
+- `pr-review-gate` also guards `pr.py create` and raw `curl` POSTs to Bitbucket's `pullrequests`; `ship-gate` also guards `pr.py merge` and Bitbucket API merges, resolves Bitbucket PR numbers and URLs to their head branch, and compares Bitbucket's 12-character commit hashes by prefix.
+
+## 4.0.1 — 2026-11-22
+
+Fewer questions to the user inside a command. A Sonnet run on a ready-for-agent login spec asked 3 questions in 2 rounds, two of them before any Rovo search.
+
+### Fixed
+- **Question gate** (`hooks/question-gate.py`, PreToolUse `AskUserQuestion`), active only after a tea-sdlc work command (`aidlc`, a stage command, `fix`, `prompt-builder`; not `grilling`):
+  - delegated input (`do not ask`, `not available for questions`, `end to end`, `Status: ready-for-agent`) blocks every question: the decision is recorded instead;
+  - otherwise the first question of a command run is sent back when no Atlassian Rovo tool was called since the command started (a retry passes, so a session without Rovo is never stuck).
+  - Off with `TEA_SDLC_QUESTION_GATE=off`.
+- **§0 rules** (`references/aidlc.md`, `aidlc`, `build`): step 4 only after Rovo was searched for that question, one batch per stage; a missing integration contract with a configurable default is a recorded assumption, not a question; delegated input has no step 4, and a risk taken on the user's behalf is recorded as `RISK-ACCEPTANCE NEEDED:` and listed first in the final report.
+- **Security engineer subagent** no longer asks or escalates as `BLOCKER`: what the files do not settle goes under `Open decisions` with a recommended answer, and the rules already assume it. Subagents return NEEDS_CONTEXT with a recommended answer and never ask the user.
+- **No default jurisdiction.** `fintech-security` and `references/data-privacy-patterns.md` no longer default to Singapore (MAS TRM, PDPA): the regime comes from `docs/security.md`, the spec, the customers' country, then Rovo, else the stricter of that country's data-protection law and the group baseline, recorded. National IDs (SAID, NRIC, …) never appear raw in events or logs.
+
+### Added
+- `aidlc lint` warns when a spec names no compliance regime, or uses a national ID with no decision on how it appears in events and logs.
+- `/tea-sdlc:prompt-builder` keeps the Markdown structure, adds the compliance regime, national-ID handling and external dependencies to `### Security`, tags stories other systems deliver `Verify: none`, and writes the delegation sentence when the user hands every choice over ("I approve your assumptions" does not cover later decisions).
+- Lifecycle eval case `L3-delegated-pii` (ready-for-agent spec with a national ID in events and no Security section): passes only with zero `AskUserQuestion` calls; the judge reports `questions` and `risk_acceptance_records`.
+
 ## 4.0.0 — 2026-11-21
 
 Command-driven backend lifecycle. Nothing in tea-sdlc starts from a keyword or the model's own choice.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for Bash: `gh pr merge` waits until the branch's spec has passed the `shipped` gate.
+"""PreToolUse gate for Bash: a PR merge (`gh pr merge`, `scripts/pr.py merge`, a Bitbucket API merge) waits until the branch's spec has passed the `shipped` gate.
 
 A full-workflow change is bound to its branch by `aidlc advance <spec> building` (README `branch:`). The gate:
 - evaluates the spec as it is on the branch being merged: the current checkout when that branch is checked out,
@@ -21,7 +21,10 @@ import subprocess
 import sys
 import tempfile
 
-MERGE = re.compile(r'(^|[;&|\s])gh\s+pr\s+merge\b')
+# `gh pr merge`, `scripts/pr.py merge` (GitHub or Bitbucket), or a raw POST to Bitbucket's merge endpoint.
+MERGE = re.compile(r'(^|[;&|\s])gh\s+pr\s+merge\b|pr\.py["\']?\s+merge\b'
+                   r'|\bcurl\b[^;&|]*api\.bitbucket\.org/[^;&|\s]*/pullrequests/\d+/merge')
+PR_REF = re.compile(r'\d+|https?://\S+/pull(?:-requests|requests)?/\d+\S*')
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parent.parent
 POST_SHIP = ('implemented', 'partially-implemented', 'superseded')
 
@@ -35,13 +38,18 @@ def run(args, cwd, timeout=20):
 
 
 def merge_target(command):
-    """The PR argument of the first `gh pr merge` in the command, or None for the current branch."""
+    """The PR argument of the first merge command, or None for the current branch."""
+    found = MERGE.search(command)
+    curl = re.search(r'/pullrequests/(\d+)/merge', found.group(0))
+    if curl:
+        return curl.group(1)
     try:
-        words = shlex.split(command[MERGE.search(command).start():], posix=True)
+        words = shlex.split(command[found.start():], posix=True)
     except ValueError:
         words = command.split()
+    start = next((i + 1 for i, w in enumerate(words) if w == 'merge'), len(words))
     args, skip = [], False
-    for word in words[3:]:
+    for word in words[start:]:
         if word in ('&&', '||', ';', '|'):
             break
         if skip:
@@ -49,7 +57,7 @@ def merge_target(command):
             continue
         if word.startswith('-'):
             skip = word in ('-t', '--subject', '-b', '--body', '-F', '--body-file', '-A', '--author-email',
-                            '--match-head-commit', '-R', '--repo')
+                            '--match-head-commit', '-R', '--repo', '--strategy')
             continue
         args.append(word)
     raw = command[MERGE.search(command).end():]
@@ -59,7 +67,15 @@ def merge_target(command):
 
 
 def pr_head(target, cwd):
-    """(head branch, head commit) for a PR number, URL or branch, via gh; (None, None) when gh cannot tell."""
+    """(head branch, head commit) for a PR number, URL or branch, via scripts/pr.py (Bitbucket or gh); (None, None)
+    when neither can tell."""
+    try:
+        pr = load_pr().client(cwd)
+        if pr.__class__.__name__ == 'Bitbucket':
+            found = pr.find(target)
+            return (found['head'], found['head_sha']) if found else (None, None)
+    except Exception:  # missing credentials or API down: let the merge through as before
+        return None, None
     gh = os.environ.get('AIDLC_GH') or 'gh'
     out = run([gh, 'pr', 'view', target, '--json', 'headRefName,headRefOid'], cwd)
     try:
@@ -68,6 +84,13 @@ def pr_head(target, cwd):
     except (ValueError, AttributeError):
         # Older fakes and gh versions may print the branch name alone.
         return (out.splitlines()[0].strip() if out else None), None
+
+
+def load_pr():
+    spec = importlib.util.spec_from_file_location('tea_sdlc_pr', PLUGIN_ROOT / 'scripts' / 'pr.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_engine():
@@ -128,14 +151,14 @@ def main():
         return 0
     target = merge_target(command)
     if target == '$':
-        return deny(['ship-gate: `gh pr merge` names its PR through a variable or command substitution, so the gate '
+        return deny(['ship-gate: the merge command names its PR through a variable or command substitution, so the gate '
                      'cannot check which change ships. Run it with a literal PR number or branch.'])
     current = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], top)
     oid = None
     if target is None:
         branch = current
         _, oid = pr_head(current, top) if current else (None, None)
-    elif re.fullmatch(r'\d+|https?://\S+/pull/\d+\S*', target):
+    elif PR_REF.fullmatch(target):
         branch, oid = pr_head(target, top)
     else:
         branch = target
@@ -146,7 +169,7 @@ def main():
         aidlc = load_engine()
         if branch == current:
             head = run(['git', 'rev-parse', 'HEAD'], top)
-            if oid and head and oid != head and aidlc.specs_for_branch(top, branch):
+            if oid and head and not head.startswith(oid) and aidlc.specs_for_branch(top, branch):  # Bitbucket: short hash
                 return deny([f'ship-gate: the PR head ({oid[:12]}) is not the commit checked here ({head[:12]}); '
                              'push or pull so the reviewed and shipped code is what merges, then retry.'])
             problems = problems_in(aidlc, top, branch)

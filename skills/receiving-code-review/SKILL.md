@@ -16,7 +16,7 @@ Input: `$ARGUMENTS` (PR, comments, or the open lines of `review.md`). Findings a
 - "Implement it properly" for a feature: grep for real usage. Unused → decline (YAGNI) and clear the finding with the search command and result. Ask the user only when the answer is theirs alone (a planned external consumer, a product commitment the code cannot show).
 - Push back, with code, tests or search results, when a suggestion breaks behavior, lacks context, violates YAGNI, is wrong for the stack or ignores a compatibility reason.
 - Order: blocking (breakage, security), then simple, then complex; test each fix and check for regressions.
-- Reply to GitHub inline comments in their thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level comment.
+- Read comments with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/pr.py" comments <pr>` and reply in each comment's thread with `pr.py reply <pr> <comment id> --body-file <file>` (GitHub or Bitbucket), not as a top-level comment.
 
 ## With a spec: close the lines of `review.md`
 

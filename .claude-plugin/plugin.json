@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "tea-sdlc",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Slash-command driven backend lifecycle for Claude Code: spec \u2192 plan \u2192 build \u2192 verify \u2192 review \u2192 ship with code-enforced gates, requirement-to-test traceability and parallel backend subagents; /tea-sdlc:fix for bug fixes without a spec.",
   "author": {
     "name": "Tea Nguyen",

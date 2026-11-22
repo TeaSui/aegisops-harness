@@ -53,7 +53,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" stamp <f> review
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> reviewed
 ```
 
-On pass the pre-PR record for `HEAD` is written and `gh pr create` is allowed. Leave `review.md`, `README.md`, `ledger.md` uncommitted; `/tea-sdlc:ship` opens the PR from this `HEAD`, then commits them.
+On pass the pre-PR record for `HEAD` is written and the PR gate (`pr.py create`, `gh pr create`) allows the PR. Leave `review.md`, `README.md`, `ledger.md` uncommitted; `/tea-sdlc:ship` opens the PR from this `HEAD`, then commits them.
 
 g. **Still open after the re-review** → the gate blocks. A decision only the user can make (accept a risk, change a story): ask once with the finding and options; the answer closes it as `cleared: accepted by <name> — <reason>`. Real rework: `aidlc advance <f> building --back --reason "<finding>"`.
 

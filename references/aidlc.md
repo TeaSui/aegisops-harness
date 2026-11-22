@@ -9,9 +9,11 @@ A question about business rules, domain terms, existing behaviour, limits, owner
 1. **Files:** the spec, `GLOSSARY.md`, ADRs, contracts, the code and its tests, git history.
 2. **Atlassian Rovo MCP** (the Atlassian server, whatever its prefix, e.g. `mcp__plugin_operations_atlassian__*`): `search` (Rovo search over Confluence and Jira) with the glossary term, the feature name and any Jira key, then `fetch` / `getConfluencePage` / `getJiraIssue` on the best hits; `searchConfluenceUsingCql` / `searchJiraIssuesUsingJql` to narrow. Record what settled it (page title + URL, or issue key): in `spec.md` Further Notes under `Sources:`, or in the ruling. Sources disagree → the newer and more specific one wins; record the conflict.
 3. **Recorded assumption:** still open → take the most reasonable answer and continue; at the spec stage write it into spec.md (story or decision, listed for the approval), later `aidlc ruling … --why "<no source; reasoning>"`.
-4. **Ask the user** only when no safe default exists and the answer is one of: accepting a security or compliance risk, money movement or regulatory behaviour with no source, an irreversible or production action, sources that contradict each other on observable behaviour. One batched question, each with your recommended answer.
+4. **Ask the user** only after step 2 ran for that question, when no safe default exists and the answer is one of: accepting a security or compliance risk, money movement or regulatory behaviour with no source, an irreversible or production action, sources that contradict each other on observable behaviour. One batched question per stage, each with your recommended answer. A missing contract, endpoint or integration detail with a configurable default (a connector with the path in config, confirmed before release) is step 3, not 4.
 
-Rovo not connected or failing → say so once in the stage report and go on with 3–4. Subagents have no Rovo: they return NEEDS_CONTEXT, the main session answers through this order. Never ask what steps 1–2 answer.
+**Delegated input** (`do not ask`, `not available for questions`, `end to end`, or a spec with `Status: ready-for-agent`): there is no step 4. Take the recommended option, record it (spec.md `Assumptions:`, or `aidlc ruling`) with the decision starting `RISK-ACCEPTANCE NEEDED:` when it accepts a security or compliance risk, and list those first in the final report. The only stops are the ones `/tea-sdlc:aidlc` names (merge and deploy need words for it).
+
+Rovo not connected or failing → say so once in the stage report and go on with 3–4. Subagents have no Rovo: they return NEEDS_CONTEXT with a recommended answer, the main session answers through this order. Never ask what steps 1–2 answer. `hooks/question-gate.py` enforces this: inside a tea-sdlc command it blocks every question in delegated input, and otherwise the first question asked before any Rovo call.
 
 ## 1. Stages
 
@@ -28,10 +30,10 @@ README `status:` holds the stage; active = `proposed`…`shipped`. Only `aidlc a
 | `building` | README `branch:` = current branch, not the default branch |
 | `verified` | `planned` checks still pass; every ticket `Status: done` with a green `task-done` event and every criterion ticked; every `Verify: test` story referenced by ≥1 test file; latest `verify` green (exit 0, code unchanged during run, fingerprint = current; with JUnit: every `Verify: test` story has a passing test, none failed) |
 | `reviewed` | `review.md` has `## Spec` and `## Standards`, no open finding, each closed one says `fixed:`/`cleared:`; `## QA` says `Verdict: GO` or `Verdict: CONDITIONAL GO — <conditions>` (unless README `qa: not-applicable — <reason>`); `fingerprint:` = current; evidence chain holds; no uncommitted code. On pass writes the pre-PR record for HEAD |
-| `shipped` | `ship.md` `decision: GO`, non-empty `## Rollback` and `## Post-release verification`; CI green (`gh pr checks` if available, else a `CI:` line in `## Checks` saying green/pass); `version:` mentioned in `CHANGELOG.md` when both exist; fingerprint = reviewed one; evidence chain holds; no uncommitted code |
+| `shipped` | `ship.md` `decision: GO`, non-empty `## Rollback` and `## Post-release verification`; CI green (`scripts/pr.py checks`: gh for GitHub, PR statuses for Bitbucket Cloud, when it can tell; else a `CI:` line in `## Checks` saying green/pass); `version:` mentioned in `CHANGELOG.md` when both exist; fingerprint = reviewed one; evidence chain holds; no uncommitted code |
 | `implemented` | README `## Traceability` (`aidlc trace --write`); set by `upgrade-service-docs` |
 
-`ship-gate` blocks `gh pr merge` on a spec-bound branch until `shipped` passes.
+`ship-gate` blocks a merge (`pr.py merge`, `gh pr merge`, a Bitbucket API merge) on a spec-bound branch until `shipped` passes.
 
 - **Code fingerprint:** over all non-ignored files except `docs/**`, `**/docs/specs/**`, `*.md`, `CHANGELOG*`, `LICENSE*`. Code, config or manifest edits invalidate a test run — bump a manifest version **before** `verify`. Prefixes match only at ≥12 hex chars.
 - **Evidence chain:** latest `verify` green on F, review stamped on F, working tree = F with no uncommitted code (so HEAD = F).

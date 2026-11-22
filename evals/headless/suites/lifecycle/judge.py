@@ -9,6 +9,8 @@ Scores six stage artifacts in the fixture's spec folder, one point each (partial
   build       ledger.md has >=1 `task-done` event and a `verify ... exit=0` event
   review      review.md has `## Spec` and `## Standards`
   ship        ship.md says `decision: GO` and has non-empty `## Rollback` and `## Post-release verification`
+A case with "max_questions" also needs at most that many AskUserQuestion calls (attempts count, also blocked
+ones); `risk_acceptance_records` counts "RISK-ACCEPTANCE NEEDED" in spec.md and ledger.md.
 A case with "judge": "outcome" (lean mode) is scored on the result instead: `npm test` green, the hidden refund
 checks in hidden_refund.mjs (money back to the sender, at most once, never more than sent), a PR opened through the
 fixture's gh, and the threats checked named in the PR body or the final report. Needs node; without it the hidden
@@ -190,7 +192,7 @@ def outcome(case, stream, repo):
     except (OSError, ValueError):
         checks['pr_opened'] = False
     creates = ' '.join(c for c in (str(call['input'].get('command', '')) for call in stream['calls']
-                                   if call['name'] == 'Bash') if 'gh pr create' in c)
+                                   if call['name'] == 'Bash') if re.search(r'gh pr create|pr\.py["\']? create', c))
     for path in re.findall(r'(?:--body-file|-F)[ =]+["\']?([^\s"\']+)', creates):  # body written with Write first
         creates += ' ' + ' '.join(str(call['input'].get('content', '')) for call in stream['calls']
                                   if call['name'] == 'Write' and str(call['input'].get('file_path', '')).endswith(path))
@@ -221,15 +223,24 @@ def judge(case, stream, repo=None, plugin_dir=None):
     advances = best.get('advances', [])
     gate_discipline = (len(advances) / float(reached)) if reached else None
     passed = score >= float(case.get('pass_score', 0.67))
+    questions = sum(1 for call in stream['calls'] if call['name'] == 'AskUserQuestion')
+    if case.get('max_questions') is not None:
+        passed = passed and questions <= int(case['max_questions'])
+    risk_records = 0
+    if best_name:
+        spec_dir = next(s for s in specs if s.name == best_name)
+        risk_records = sum(read(spec_dir / name).count('RISK-ACCEPTANCE NEEDED') for name in ('spec.md', 'ledger.md'))
     result = outcome(case, stream, repo) if repo else None
     summary = '%d/%d stages (%s); stage %s; advances: %s; aidlc calls: %d; outcome %s; %s, %s doc lines' % (
         points, len(ARTIFACTS), ', '.join(a for a in ARTIFACTS if best['artifacts'][a]) or 'none', stage or 'none',
         ', '.join(advances) or 'none', len(aidlc_calls(stream)), result['summary'] if result else 'n/a',
-        best.get('format', '-'), best.get('doc_lines', 0))
+        best.get('format', '-'), best.get('doc_lines', 0)) + '; questions %d, risk-acceptance records %d' % (
+        questions, risk_records)
     return {'pass': passed, 'score': round(score, 3), 'spec': best_name, 'specs_found': sorted(scored),
             'artifacts': best['artifacts'], 'detail': best, 'stage': stage, 'aidlc_status': stages,
             'aidlc_status_note': status_note, 'advances': advances,
             'gate_discipline': None if gate_discipline is None else round(min(gate_discipline, 1.0), 3),
             'aidlc_calls': len(aidlc_calls(stream)), 'skills': stream['skills'], 'agents': stream['agents'],
             'outcome': result and {'score': result['score'], 'checks': result['checks']},
-            'doc_lines': best.get('doc_lines', 0), 'summary': summary}
+            'doc_lines': best.get('doc_lines', 0), 'questions': questions, 'risk_acceptance_records': risk_records,
+            'summary': summary}

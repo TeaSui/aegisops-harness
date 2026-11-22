@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for Bash: block `gh pr create` until a pre-PR review is recorded for HEAD.
+"""PreToolUse gate for Bash: block opening a PR (`gh pr create`, `scripts/pr.py create`, a Bitbucket API POST) until a
+pre-PR review is recorded for HEAD.
 
 The gate verifies that a review was recorded (scripts/mark-pr-review.py) with zero open findings.
 It cannot verify review quality; rules/pre-pr-review.md owns that.
@@ -11,7 +12,9 @@ import re
 import subprocess
 import sys
 
-PR_CREATE = re.compile(r'(^|[;&|\s])gh\s+pr\s+create\b')
+# `gh pr create`, `scripts/pr.py create` (GitHub or Bitbucket), or a raw POST to Bitbucket's pullrequests endpoint.
+PR_CREATE = re.compile(r'(^|[;&|\s])gh\s+pr\s+create\b|pr\.py["\']?\s+create\b'
+                       r'|\bcurl\b[^;&|]*api\.bitbucket\.org/[^;&|\s]*/pullrequests/?["\']?(\s|$)')
 STATE_ROOT = pathlib.Path.home() / '.claude' / 'state' / 'pr-review'
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parent.parent
 

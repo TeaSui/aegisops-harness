@@ -75,6 +75,7 @@ def claude_command(claude, prompt, plugin_dir, config, case, model, extra_args):
         command += ['--model', model]
     command += list(extra_args or [])
     tools = case.get('allowed_tools', config.get('allowed_tools'))
+    tools = list(tools or []) + list(case.get('allowed_tools_extra') or [])
     if tools:
         command += ['--allowedTools', *tools]  # variadic: keep it last
     return command

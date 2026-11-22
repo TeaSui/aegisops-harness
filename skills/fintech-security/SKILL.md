@@ -12,7 +12,7 @@ Candidate controls — cite one only when a STRIDE finding earns it; this is a l
 - **`/tea-sdlc:fix` (escape hatch):** the main session uses it for the short security pass in `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` — assets, threats, controls; no subagent.
 - **`/tea-sdlc:spec`:** threat model, rule numbering and output format (the spec's `### Security`) belong to `tea-sdlc:security-engineer-subagent`. Copy the control into a numbered rule under its section prefix (`AUTH-NN`, `AUTHZ-NN`, `INPUT-NN`, `CRYPTO-NN`, `DATA-NN`, `LOG-NN`, `NET-NN`, `RATE-NN`, `DEP-NN`, `SECRET-NN`, `COMPLIANCE-NN`; payment controls under `DATA`), phrased as what must be true, citing the finding.
 
-Numbers marked **(default — project must confirm)** are starting points, not regulatory facts; confirm with the compliance owner before they become rules. Name frameworks (MAS TRM Guidelines, MAS Notice on Cyber Hygiene, PCI DSS, PDPA) without clause numbers unless checked against the current text. Data levels (Level 1 highly sensitive … Level 3 internal): `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`.
+Numbers marked **(default — project must confirm)** are starting points, not regulatory facts; confirm with the compliance owner before they become rules. Name frameworks without clause numbers unless checked against the current text. There is no default jurisdiction: the regime comes from `docs/security.md`, the spec's `### Security`, the customers' country in the code and docs, then Rovo; still open → the stricter of that country's data-protection law and the group baseline, recorded as an assumption. Data levels (Level 1 highly sensitive … Level 3 internal): `${CLAUDE_PLUGIN_ROOT}/references/data-privacy-patterns.md`.
 
 ## AUTH
 
@@ -91,10 +91,11 @@ Numbers marked **(default — project must confirm)** are starting points, not r
 
 ## COMPLIANCE
 
-- MAS TRM / Cyber Hygiene: MFA, session controls, audit trail, notification for every financial transaction, customer-configurable limits.
+Apply the project's regime; these are what each one typically demands:
+- Any data-protection law (POPIA in South Africa, PDPA in Singapore, GDPR in the EU): purpose limitation, minimum data (national IDs such as SAID or NRIC masked or replaced by an internal ID in events and logs), consent before Level 1/2 collection, retention/deletion per data-privacy-patterns.md, breach notification.
+- Banking regulator (SARB / Prudential Authority, MAS TRM / Cyber Hygiene, …): MFA, session controls, audit trail, notification for every financial transaction, customer-configurable limits.
 - PCI DSS: tokenization, no CVV/full PAN, scoped cardholder-data environment.
-- PDPA: purpose limitation, consent before Level 1/2 collection, retention/deletion per data-privacy-patterns.md.
-- Unclear compliance scope → escalate (in a spec: `tea-sdlc:security-engineer-subagent`; in `/tea-sdlc:fix`: stop and name `/tea-sdlc:aidlc`), never guess.
+- Regime not written anywhere → record the assumption above (in a spec: the security subagent lists it under `Open decisions`; in `/tea-sdlc:fix`: name it in the report).
 
 ## AWS serverless checks
 

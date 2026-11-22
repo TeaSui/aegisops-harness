@@ -17,9 +17,9 @@ Before opening a PR or handing a change to review, review it in a fresh context,
 5. `aidlc advance <f> reviewed` checks all of it and writes the pre-PR record for HEAD; no `mark-pr-review.py` call.
 
 ## Enforcement
-- `hooks/pr-review-gate.py` (PreToolUse on `gh pr create`) blocks unless a record for HEAD has zero open findings. On a branch bound to a spec it decides from the `reviewed` gate instead (keyed to the code fingerprint, so committing `review.md` or the ledger afterwards is fine).
+- `hooks/pr-review-gate.py` (PreToolUse on `pr.py create`, `gh pr create` or a Bitbucket API POST to `pullrequests`) blocks unless a record for HEAD has zero open findings. On a branch bound to a spec it decides from the `reviewed` gate instead (keyed to the code fingerprint, so committing `review.md` or the ledger afterwards is fine).
 - It also blocks while an active spec with `contract: external` fails `scripts/check-contract.py --scan`.
-- It checks the record is current, not review quality, and guards only `gh`: on other remotes still run and record the pass, then hand the PR description to the user.
+- It checks the record is current, not review quality. It guards GitHub and Bitbucket Cloud; on other hosts still run and record the pass, then hand the PR description to the user.
 
 ## Limits
 One pass plus one diff-only re-review; no loops. Without a spec: record `--open-findings 0` only when every finding is fixed or cleared; a finding deferred to the human reviewer counts as cleared only if the PR description lists it with the reason. With a spec: an open finding blocks `reviewed`; the user decides it when it is theirs to decide, otherwise the spec goes back to `building`.
