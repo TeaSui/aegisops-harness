@@ -19,7 +19,7 @@ Add `delegation` ("do not dispatch; return the dispatch plan") if the agent coul
 Non-fork subagents inherit neither conversation nor skills: make task context self-contained, but don't copy global rules (the SubagentStart hook injects them). Security precedence: the spec's security decisions (legacy: `security.md`), else the agent's embedded checklist.
 
 ## Model
-Agent frontmatter sets model and effort; override only when the task differs: implementers → `opus` for ambiguous bugs, cross-cutting refactors or when `high` still fails; tea-sdlc:code-reviewer → `high` effort (or `opus`) for large or trust-boundary diffs; security → `opus`/`fable` for novel auth, crypto or payment designs.
+Agent frontmatter sets model and effort; override only when the task differs: implementers → `opus` for ambiguous bugs, cross-cutting refactors or when `high` still fails; aegisops-harness:code-reviewer → `high` effort (or `opus`) for large or trust-boundary diffs; security → `opus`/`fable` for novel auth, crypto or payment designs.
 
 ## Before dispatching
 - Verify every input path with Read/Glob; only `status="new"` may be missing. A fabricated input path is as bad as fabricated evidence.

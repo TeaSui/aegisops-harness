@@ -50,7 +50,7 @@ jobs:
       - name: Configure git identity for fixture repositories
         run: |
           git config --global user.email "evals@example.invalid"
-          git config --global user.name "tea-sdlc evals"
+          git config --global user.name "AegisOps-Harness evals"
       - name: Run headless suites
         run: |
           args=(--suite "$SUITES" --runs "$RUNS" --parallel 4 --out "$RUNNER_TEMP/evals" --compare)

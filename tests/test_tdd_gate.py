@@ -95,7 +95,7 @@ class TddGateTest(unittest.TestCase):
 
     def test_env_off_and_bad_input_fail_open(self):
         off = self.run_hook('check', {'tool_name': 'Edit', 'tool_input': {'file_path': '/r/src/main/A.java'}},
-                            {'TEA_SDLC_TDD_GATE': 'off'})
+                            {'AEGISOPS_HARNESS_TDD_GATE': 'off'})
         self.assertEqual(off.returncode, 0)
         bad = subprocess.run([sys.executable, str(HOOK), 'check'], input='not json', capture_output=True,
                              text=True, env={**os.environ, 'HOME': str(self.home)})

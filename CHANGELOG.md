@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.0.0 — 2026-11-22
+
+Renamed from `tea-sdlc` to `AegisOps-Harness`. This is a breaking change: commands, the marketplace and the environment variables change name.
+
+### Changed (breaking)
+- Plugin identifier `aegisops-harness`. Every command is `/aegisops-harness:<name>` (for example `/aegisops-harness:aidlc`). Agents are `aegisops-harness:<agent>`.
+- Marketplace `aegisops-harness`. Install with `/plugin marketplace add TeaSui/aegisops-harness`, then `/plugin install aegisops-harness@aegisops-harness`, and remove `tea-sdlc@tea-sdlc`.
+- Environment variables `TEA_SDLC_*` are now `AEGISOPS_HARNESS_*`. Update any that were set in settings.
+- State folder is `~/.claude/state/aegisops-harness/`. The old `~/.claude/state/tea-sdlc/` is no longer read.
+- Repository moved to `TeaSui/aegisops-harness`. GitHub redirects the old URL.
+
+Entries below keep the old name.
+
 ## 4.1.0 — 2026-11-22
 
 Bitbucket Cloud support: the ship stage no longer stops at "gh is signed in to github.com only".

@@ -53,7 +53,7 @@ class DescriptionLintTest(unittest.TestCase):
             path = root / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             text = textwrap.dedent(text).lstrip()
-            if flag and text.startswith('---\n'):  # tea-sdlc skills and commands are slash-command only
+            if flag and text.startswith('---\n'):  # AegisOps-Harness skills and commands are slash-command only
                 text = '---\ndisable-model-invocation: true\n' + text[4:]
             path.write_text(text)
 
@@ -222,11 +222,11 @@ class StatisticsTest(unittest.TestCase):
 class StreamAndJudgeTest(unittest.TestCase):
     def test_parse_stream(self):
         parsed = stream('passive_hit.jsonl')
-        self.assertEqual(parsed['skills'], ['tea-sdlc:expert-lens'])
+        self.assertEqual(parsed['skills'], ['aegisops-harness:expert-lens'])
         self.assertEqual(parsed['result']['total_cost_usd'], 0.25)
         self.assertEqual(parsed['init']['claude_code_version'], '9.9.9')
-        self.assertEqual(parsed['calls'][0]['result'], 'Launching skill: tea-sdlc:expert-lens')
-        self.assertIn('tea-sdlc-autopilot', parsed['notes'][0])
+        self.assertEqual(parsed['calls'][0]['result'], 'Launching skill: aegisops-harness:expert-lens')
+        self.assertIn('AegisOps-Harness-autopilot', parsed['notes'][0])
         self.assertEqual(harness.read_stream(TESTDATA / 'missing.jsonl')['calls'], [])
 
     def test_infra_errors_are_recognised(self):
@@ -272,7 +272,7 @@ class StreamAndJudgeTest(unittest.TestCase):
                                     stream('passive_agent.jsonl'))
         self.assertTrue(agent['pass'])
         self.assertFalse(passive_judge.judge({'silent': True}, stream('passive_hit.jsonl'))['pass'])
-        self.assertIn('activated: tea-sdlc:', passive_judge.judge({'silent': True}, stream('passive_agent.jsonl'))['summary'])
+        self.assertIn('activated: aegisops-harness:', passive_judge.judge({'silent': True}, stream('passive_agent.jsonl'))['summary'])
         miss = passive_judge.judge({'expect': ['review']}, stream('passive_miss.jsonl'))
         self.assertFalse(miss['pass'])
         self.assertIn('code-review', miss['summary'])
@@ -410,7 +410,7 @@ import json, os, sys
 args = sys.argv[1:]
 prompt = args[args.index('-p') + 1]
 assert '--plugin-dir' in args and '--output-format' in args
-skill = 'tea-sdlc:spec' if 'clamp' in prompt else 'code-review'
+skill = 'aegisops-harness:spec' if 'clamp' in prompt else 'code-review'
 print(json.dumps({"type": "system", "subtype": "init", "claude_code_version": "0.0.0-fake", "model": "fake"}))
 print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "1", "name": "Skill",
                                                                "input": {"skill": skill}}]}}))

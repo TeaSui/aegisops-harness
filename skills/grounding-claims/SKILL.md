@@ -21,4 +21,4 @@ A fabricated path, symbol, flag, API, SHA or result is a defect. No claim withou
 | Subagent evidence | Read the cited path; missing = BLOCKED | `path` |
 | Memory from a prior session | re-check it exists now | `path:line` |
 
-Stop and verify when about to write a name, path, flag or SHA not seen in this session's tool output, or "typically / usually / should be / probably" about a checkable fact. Summaries are claims. If verifying costs more than the claim is worth, drop the claim. Speculation is fine only where the user asked for brainstorming. Success claims also follow `/tea-sdlc:verify`.
+Stop and verify when about to write a name, path, flag or SHA not seen in this session's tool output, or "typically / usually / should be / probably" about a checkable fact. Summaries are claims. If verifying costs more than the claim is worth, drop the claim. Speculation is fine only where the user asked for brainstorming. Success claims also follow `/aegisops-harness:verify`.

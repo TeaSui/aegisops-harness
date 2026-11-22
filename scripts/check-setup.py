@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Structural checks for the tea-sdlc plugin: manifests, frontmatter, bundled path
+"""Structural checks for the AegisOps-Harness plugin: manifests, frontmatter, bundled path
 references and the SessionStart hook. No model, network or plugin-runtime calls.
 When --project (default: the current directory) is a git repository other than the
 plugin, also warns about repository setup that hides instructions or docs from
@@ -219,20 +219,20 @@ def main():
     invocable = {p.parent.name for p in skills} | {p.stem for p in commands}
     referenced = set()
     for path, rel in scanned_files(root):
-        for name in re.findall(r'(?<![\w-])tea-sdlc:([a-z0-9][a-z0-9-]*[a-z0-9])', path.read_text(errors='replace')):
+        for name in re.findall(r'(?<![\w-])aegisops-harness:([a-z0-9][a-z0-9-]*[a-z0-9])', path.read_text(errors='replace')):
             referenced.add((name, rel))
-    # No passive activation: the model may never load a tea-sdlc skill or command on its own.
+    # No passive activation: the model may never load an AegisOps-Harness skill or command on its own.
     for path in list(skills) + list(commands):
         head = path.read_text(errors='replace')[:1500]
         if not re.search(r'^disable-model-invocation:\s*true\s*$', head, re.M):
-            errors.append('%s: needs disable-model-invocation: true (tea-sdlc runs only from slash commands)'
+            errors.append('%s: needs disable-model-invocation: true (AegisOps-Harness runs only from slash commands)'
                           % path.relative_to(root).as_posix())
     agent_names = {p.stem for p in agents}
     for name, rel in sorted(referenced):
-        if name not in invocable | agent_names and name != 'tea-sdlc':
-            errors.append('%s: tea-sdlc:%s is not a skill, command or agent of this plugin' % (rel, name))
+        if name not in invocable | agent_names and name != 'aegisops-harness':
+            errors.append('%s: aegisops-harness:%s is not a skill, command or agent of this plugin' % (rel, name))
 
-    # Plugin agents are registered as `tea-sdlc:<name>`: a bare name sent as subagent_type fails with
+    # Plugin agents are registered as `aegisops-harness:<name>`: a bare name sent as subagent_type fails with
     # "Agent type '<name>' not found". Text the model reads must name them with the prefix.
     if agent_names:
         bare = re.compile(r'(?<![:\w/.-])(%s)(?![\w-]|\.md)' % '|'.join(map(re.escape, sorted(agent_names))))
@@ -243,7 +243,7 @@ def main():
                 if rel.startswith('agents/') and line.startswith('name:'):
                     continue
                 for match in bare.finditer(line):
-                    errors.append('%s:%d: agent %s must be named tea-sdlc:%s (plugin agents are namespaced)'
+                    errors.append('%s:%d: agent %s must be named aegisops-harness:%s (plugin agents are namespaced)'
                                   % (rel, number, match[1], match[1]))
 
     # SessionStart hook contract

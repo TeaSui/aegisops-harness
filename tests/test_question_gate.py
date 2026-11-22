@@ -11,7 +11,7 @@ GATE = ROOT / 'hooks' / 'question-gate.py'
 
 
 def command(name, args, uuid):
-    text = (f'<command-message>tea-sdlc:{name}</command-message>\n<command-name>/tea-sdlc:{name}</command-name>\n'
+    text = (f'<command-message>aegisops-harness:{name}</command-message>\n<command-name>/aegisops-harness:{name}</command-name>\n'
             f'<command-args>{args}</command-args>')
     return {'type': 'user', 'uuid': uuid, 'message': {'role': 'user', 'content': text}}
 
@@ -26,7 +26,7 @@ class QuestionGateTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.base = pathlib.Path(self.tmp.name)
         self.env = dict(os.environ, HOME=str(self.base))
-        self.env.pop('TEA_SDLC_QUESTION_GATE', None)
+        self.env.pop('AEGISOPS_HARNESS_QUESTION_GATE', None)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -72,7 +72,7 @@ class QuestionGateTest(unittest.TestCase):
 
     def test_off_switch_other_tools_and_bad_input_pass(self):
         entries = [command('aidlc', 'do not ask', 'u1')]
-        self.assertEqual(self.ask(entries, env={'TEA_SDLC_QUESTION_GATE': 'off'})[0], 0)
+        self.assertEqual(self.ask(entries, env={'AEGISOPS_HARNESS_QUESTION_GATE': 'off'})[0], 0)
         self.assertEqual(self.ask(entries, tool_name='Bash')[0], 0)
         result = subprocess.run([sys.executable, str(GATE)], input='not json', capture_output=True, text=True,
                                 env=self.env)

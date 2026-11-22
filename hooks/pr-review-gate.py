@@ -44,7 +44,7 @@ def spec_review(top, cwd):
     "no opinion" and the HEAD record below decides, as before."""
     try:
         import importlib.util
-        spec = importlib.util.spec_from_file_location('tea_sdlc_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
+        spec = importlib.util.spec_from_file_location('aegisops_harness_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
         aidlc = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(aidlc)
         branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd).stdout.strip()
@@ -62,7 +62,7 @@ def spec_review(top, cwd):
         if problems:
             return False, ('pr-review-gate: this branch carries a full-workflow spec whose review stage is not done.\n  '
                            + '\n  '.join(problems)
-                           + f'\nFinish it (/tea-sdlc:review, or the pass in rules/pre-pr-review.md), then `python3 "{PLUGIN_ROOT}/scripts/'
+                           + f'\nFinish it (/aegisops-harness:review, or the pass in rules/pre-pr-review.md), then `python3 "{PLUGIN_ROOT}/scripts/'
                              'aidlc.py" advance <spec> reviewed`, then retry.')
         return True, None
     except Exception:

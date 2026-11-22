@@ -1,6 +1,6 @@
 ---
 name: backend-languages
-description: Backend service conventions for Go, Spring Boot (Java), Python/FastAPI and Rust/axum, routed to the matching language reference; Read by /tea-sdlc:build, /tea-sdlc:fix and tea-sdlc:backend-engineer-subagent when the repository has build.gradle, pom.xml, go.mod, Cargo.toml or a Python web framework.
+description: Backend service conventions for Go, Spring Boot (Java), Python/FastAPI and Rust/axum, routed to the matching language reference; Read by /aegisops-harness:build, /aegisops-harness:fix and aegisops-harness:backend-engineer-subagent when the repository has build.gradle, pom.xml, go.mod, Cargo.toml or a Python web framework.
 disable-model-invocation: true
 user-invocable: false
 ---

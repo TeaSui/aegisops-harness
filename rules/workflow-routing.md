@@ -1,9 +1,9 @@
 # Workflow routing
 
-tea-sdlc starts only from a command (`skills/session-bootstrap/SKILL.md` lists them). This file decides what runs inside one.
+AegisOps-Harness starts only from a command (`skills/session-bootstrap/SKILL.md` lists them). This file decides what runs inside one.
 
-## /tea-sdlc:fix or /tea-sdlc:aidlc
-`/tea-sdlc:fix` takes a bug fix or small change with no new decision. It stops and names `/tea-sdlc:aidlc` (one line, why) when the change: adds an endpoint, event, schema or migration, or a dependency; needs more than one user story; or crosses a trust boundary with a new decision (fails the escape hatch below).
+## /aegisops-harness:fix or /aegisops-harness:aidlc
+`/aegisops-harness:fix` takes a bug fix or small change with no new decision. It stops and names `/aegisops-harness:aidlc` (one line, why) when the change: adds an endpoint, event, schema or migration, or a dependency; needs more than one user story; or crosses a trust boundary with a new decision (fails the escape hatch below).
 
 ## Trust-boundary check
 Any YES or unsure → trust boundary.
@@ -14,8 +14,8 @@ Any YES or unsure → trust boundary.
 5. Integrates a new external vendor, partner API or third-party script.
 6. Changes a security-relevant dependency, config key or secret-handling path (TLS, JWT keys, IAM, encryption).
 
-## Escape hatch (trust boundary inside /tea-sdlc:fix)
-All must hold, else `/tea-sdlc:aidlc`:
+## Escape hatch (trust boundary inside /aegisops-harness:fix)
+All must hold, else `/aegisops-harness:aidlc`:
 1. ≤ 30 lines of production code across ≤ 3 files (tests excluded).
 2. No new endpoint, external surface, dependency, schema or migration.
 3. A touch, not a new decision (renaming a field already classified as PII, not adding one).

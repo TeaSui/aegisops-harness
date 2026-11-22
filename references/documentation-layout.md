@@ -13,7 +13,7 @@ No role-based trees (`docs/requirements/`, `docs/security/`, `docs/contracts/`, 
 
 ## 2. Service scope — `<service>/docs/`
 
-Living files are written only by `/tea-sdlc:generate-service-docs` (build/normalize) and `/tea-sdlc:upgrade-service-docs` (promote); workflow agents read them.
+Living files are written only by `/aegisops-harness:generate-service-docs` (build/normalize) and `/aegisops-harness:upgrade-service-docs` (promote); workflow agents read them.
 
 ```
 <service>/docs/
@@ -98,7 +98,7 @@ Only `aidlc advance` changes `status:`; never edit it by hand.
 2. **Accept.** Only explicit user/team approval, recorded in `accepted_by`. Implementers use `accepted`+ specs (`proposed` only if the dispatch says so).
 3. **Decide.** A decision that outlives the change → ADR, linked from the spec. A smaller build-time decision → ruling in `ledger.md`.
 4. **Implement.** Implementers apply the accepted `contracts/` delta to the authoritative contract source (§6.4). They never rewrite spec files; contradictions found in code → `DONE_WITH_CONCERNS`.
-5. **Promote.** After merge, `/tea-sdlc:upgrade-service-docs <service> <feature>` folds verified behaviour into living files, appends active security rules to the living register as `<feature>/AUTH-01`, writes `## Traceability`, sets `source_revision` (must contain the change: `git merge-base --is-ancestor`), advances to `implemented` or `partially-implemented`. Never rewrite intent to match what shipped. Not merged yet → keep status, report it.
+5. **Promote.** After merge, `/aegisops-harness:upgrade-service-docs <service> <feature>` folds verified behaviour into living files, appends active security rules to the living register as `<feature>/AUTH-01`, writes `## Traceability`, sets `source_revision` (must contain the change: `git merge-base --is-ancestor`), advances to `implemented` or `partially-implemented`. Never rewrite intent to match what shipped. Not merged yet → keep status, report it.
 6. **Supersede.** New slug; old README gets `superseded_by`; its rules are retired in the register.
 
 ## 6. Resolution rules
@@ -108,7 +108,7 @@ Only `aidlc advance` changes `status:`; never edit it by hand.
 3. **One writer per file** (§2–§4); everyone else reads and cites. External contract → `scripts/check-contract.py` passes on `contracts/` before implementation.
 4. **Authoritative contract source.** Contract-first: the schema folder the build consumes (`api/`, `openapi/`, `proto/`). Code-first (springdoc, NestJS, FastAPI): the code, with `api-contracts.md` linking the generated spec. Prose links, never re-types, schemas.
 5. **Glossary.** Top-scope `GLOSSARY.md` (system root, or repo root for single repos; an existing `glossary.md` or `CONTEXT.md` is it): domain terms only, written during grilling. ADRs in `docs/adr/NNNN-<slug>.md`, only for hard-to-reverse, surprising, real trade-offs. Per-service entities in `data-model.md`; cross-service in `03-cross-cutting/shared-concepts.md`.
-6. **`/tea-sdlc:fix`** creates no spec folder; if it changes documented behaviour, update the living file in the same change.
+6. **`/aegisops-harness:fix`** creates no spec folder; if it changes documented behaviour, update the living file in the same change.
 7. **Docs are tracked.** If `git check-ignore -q docs/specs/x.md` succeeds (often a personal `core.excludesFile`), add `!/docs/` and `!/docs/**` to the repo `.gitignore`. `scripts/check-setup.py` warns about this.
 
 ## 7. Staleness

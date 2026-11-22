@@ -1,4 +1,4 @@
-# Contributing to tea-sdlc
+# Contributing to AegisOps-Harness
 
 Maintainer guide for editing this plugin's instruction artifacts. It is not loaded into agent sessions.
 
@@ -39,4 +39,4 @@ Rare. If you must restate, add a provenance marker so drift is detectable: `sync
 
 ## Reachability
 
-`rules/` and `references/` are never auto-loaded. Every file in them must be named from the session bootstrap, a skill or command, an agent, or a hook message (as `${CLAUDE_PLUGIN_ROOT}/…` in agents, commands and `SKILL.md`; plugin-root-relative inside `rules/` and `references/`). Prefer one hop; a `rules/` stub that only points to a reference is a smell. `python3 scripts/check-setup.py` verifies that every `tea-sdlc:<name>` and bundled path resolves.
+`rules/` and `references/` are never auto-loaded. Every file in them must be named from the session bootstrap, a skill or command, an agent, or a hook message (as `${CLAUDE_PLUGIN_ROOT}/…` in agents, commands and `SKILL.md`; plugin-root-relative inside `rules/` and `references/`). Prefer one hop; a `rules/` stub that only points to a reference is a smell. `python3 scripts/check-setup.py` verifies that every `aegisops-harness:<name>` and bundled path resolves.

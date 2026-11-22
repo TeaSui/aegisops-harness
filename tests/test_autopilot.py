@@ -24,7 +24,7 @@ class HookCase(unittest.TestCase):
         self.tmp.cleanup()
 
     def env(self, extra=None):
-        env = {k: v for k, v in os.environ.items() if not k.startswith('TEA_SDLC_')}
+        env = {k: v for k, v in os.environ.items() if not k.startswith('AEGISOPS_HARNESS_')}
         env['HOME'] = str(self.home)
         env.update(extra or {})
         return env
@@ -44,7 +44,7 @@ class HookCase(unittest.TestCase):
 
 
 class NoPassiveActivationTest(HookCase):
-    """tea-sdlc starts only from slash commands: no hook adds a note naming skills to a prompt or a tool result."""
+    """AegisOps-Harness starts only from slash commands: no hook adds a note naming skills to a prompt or a tool result."""
 
     def test_prompt_hook_is_not_registered(self):
         hooks = json.loads((ROOT / 'hooks' / 'hooks.json').read_text())['hooks']
@@ -138,7 +138,7 @@ class VerifyGateTest(HookCase):
 
     def test_can_be_turned_off(self):
         self.edit('src/fee.ts')
-        self.assertIsNone(self.blocked(self.stop(env={'TEA_SDLC_VERIFY_GATE': 'off'})))
+        self.assertIsNone(self.blocked(self.stop(env={'AEGISOPS_HARNESS_VERIFY_GATE': 'off'})))
 
     def test_reminders_are_capped_per_session(self):
         for name in ('a', 'b', 'c', 'd'):
@@ -153,7 +153,7 @@ class SubagentRulesTest(HookCase):
         return self.context(self.run_hook('subagent', {'agent_type': agent_type, 'agent_id': 'a1'}, env), 'SubagentStart')
 
     def test_implementers_get_the_house_rules(self):
-        ctx = self.start('tea-sdlc:backend-engineer-subagent')
+        ctx = self.start('aegisops-harness:backend-engineer-subagent')
         for fragment in ('BLOCKED', 'requirement ID', 'tdd-gate', 'contracts/', 'do not dispatch'):
             self.assertIn(fragment, ctx)
         self.assertLess(len(ctx), 2000)
@@ -187,7 +187,7 @@ class SessionSnapshotTest(HookCase):
         ctx = self.start()['hookSpecificOutput']['additionalContext']
         self.assertIn('docs/specs/refund', ctx)
         self.assertIn('1/3', ctx)
-        self.assertIn('Next command (the user runs it): /tea-sdlc:plan', ctx)
+        self.assertIn('Next command (the user runs it): /aegisops-harness:plan', ctx)
 
     def test_spec_paths_are_resolved_from_the_repo_root(self):
         git_env = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1'}
@@ -212,7 +212,7 @@ class SessionSnapshotTest(HookCase):
         settings = self.repo / '.claude'
         settings.mkdir(exist_ok=True)
         (settings / 'settings.json').write_text(json.dumps({'enabledPlugins': {
-            'superpowers@anthropic-plugin-directory': True, 'tea-sdlc@tea-sdlc': True}}))
+            'superpowers@anthropic-plugin-directory': True, 'aegisops-harness@AegisOps-Harness': True}}))
         if local_override is not None:
             (settings / 'settings.local.json').write_text(json.dumps({'enabledPlugins': {
                 'superpowers@anthropic-plugin-directory': local_override}}))

@@ -16,7 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PR = ROOT / 'scripts' / 'pr.py'
 SHIP_GATE = ROOT / 'hooks' / 'ship-gate.py'
 REVIEW_GATE = ROOT / 'hooks' / 'pr-review-gate.py'
-_spec = importlib.util.spec_from_file_location('tea_sdlc_pr', PR)
+_spec = importlib.util.spec_from_file_location('aegisops_harness_pr', PR)
 pr = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(pr)
 
@@ -114,7 +114,7 @@ class Base(unittest.TestCase):
         FakeBitbucket.state = {'prs': {}, 'statuses': [], 'comments': [], 'replies': [], 'sha': self.sha}
         self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), FakeBitbucket)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        self.env = {k: v for k, v in os.environ.items() if not k.startswith(('BITBUCKET_', 'TEA_SDLC_'))}
+        self.env = {k: v for k, v in os.environ.items() if not k.startswith(('BITBUCKET_', 'AEGISOPS_HARNESS_'))}
         self.env.update({'BITBUCKET_API': f'http://127.0.0.1:{self.server.server_port}/2.0',
                          'BITBUCKET_EMAIL': 'me@x.io', 'BITBUCKET_API_TOKEN': 'api', 'HOME': self.tmp.name})
 
@@ -147,7 +147,7 @@ class ProviderTest(unittest.TestCase):
 class BitbucketTest(Base):
     def test_provider_and_auth(self):
         self.assertTrue(self.cli('provider')[1].startswith('bitbucket\t'))
-        self.assertTrue(self.cli('provider', env={'TEA_SDLC_PR_PROVIDER': 'github'})[1].startswith('github'))
+        self.assertTrue(self.cli('provider', env={'AEGISOPS_HARNESS_PR_PROVIDER': 'github'})[1].startswith('github'))
         self.assertEqual(self.cli('auth')[0], 0)
         code, _, err = self.cli('auth', env={'BITBUCKET_API_TOKEN': 'wrong'})
         self.assertEqual(code, 1)

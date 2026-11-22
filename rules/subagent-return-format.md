@@ -17,7 +17,7 @@ The final message of every dispatched subagent carries three things, in any shap
 - A check that ran and found nothing is `DONE`; a tool failure is not an empty result.
 - Every count names what was counted and the command that produced it (e.g. `20 baseline entries — grep -vc '^#' baseline.txt`).
 - Implementers also list the requirement IDs covered and the tests proving each; test names carry the ID (e.g. `RFD-1 rejects over-capture`).
-- tea-sdlc:security-engineer-subagent returns only its `### Security` subsection (it writes no files); never paste a contract into a return.
+- aegisops-harness:security-engineer-subagent returns only its `### Security` subsection (it writes no files); never paste a contract into a return.
 
 ## Dispatcher
 - Read every cited path (missing → `BLOCKED` whatever the claim), the decisive results and open concerns. Report what the subagent said, unreshaped.

@@ -1,5 +1,5 @@
 {"type": "system", "subtype": "init", "claude_code_version": "9.9.9", "model": "test-model", "session_id": "s", "tools": [], "skills": []}
-{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "tea-sdlc:test-driven-development"}}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "aegisops-harness:test-driven-development"}}]}}
 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "s", "content": "Launching", "is_error": false}]}}
 {"type": "assistant", "message": {"content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "w", "name": "Write", "input": {"file_path": "/x/repo/test/clamp.test.js", "content": "..."}}]}}
 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w", "content": "File created", "is_error": false}]}}

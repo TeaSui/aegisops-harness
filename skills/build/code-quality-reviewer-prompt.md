@@ -1,6 +1,6 @@
 # Code quality reviewer template (per ticket)
 
-Dispatch only after the spec compliance review passes. Send to `tea-sdlc:code-reviewer` the template `skills/review/code-reviewer.md`, filled with:
+Dispatch only after the spec compliance review passes. Send to `aegisops-harness:code-reviewer` the template `skills/review/code-reviewer.md`, filled with:
 
 ```
 AXIS: standards

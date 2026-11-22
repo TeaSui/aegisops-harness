@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Stage 6 of the backend lifecycle (/tea-sdlc:ship, run by /tea-sdlc:aidlc) — for a spec at reviewed, opens the PR, waits for CI, writes the changelog per the project's convention and ship.md (GO/NO-GO, rollback, post-release verification), advances to shipped, merges through the ship gate on request and promotes the spec with /tea-sdlc:upgrade-service-docs. no-spec.md delivers /tea-sdlc:fix work.
+description: Stage 6 of the backend lifecycle (/aegisops-harness:ship, run by /aegisops-harness:aidlc) — for a spec at reviewed, opens the PR, waits for CI, writes the changelog per the project's convention and ship.md (GO/NO-GO, rollback, post-release verification), advances to shipped, merges through the ship gate on request and promotes the spec with /aegisops-harness:upgrade-service-docs. no-spec.md delivers /aegisops-harness:fix work.
 disable-model-invocation: true
 ---
 
@@ -8,9 +8,9 @@ disable-model-invocation: true
 
 `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run every step yourself. Gate and `ship.md` format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §1 (`shipped` row) and §2 `ship.md`.
 
-**Applies** when `aidlc status` shows the branch's spec at `reviewed` (or `shipped`, to resume). Earlier stage → `/tea-sdlc:review` first. No spec (`/tea-sdlc:fix`) → `skills/ship/no-spec.md`.
+**Applies** when `aidlc status` shows the branch's spec at `reviewed` (or `shipped`, to resume). Earlier stage → `/aegisops-harness:review` first. No spec (`/aegisops-harness:fix`) → `skills/ship/no-spec.md`.
 
-**User consent.** Merge and deploy only when the request covers delivery ("ship it", "merge", "release", "deploy", a `/tea-sdlc:aidlc` hand-off). Otherwise stop after step 5 and ask once whether to merge.
+**User consent.** Merge and deploy only when the request covers delivery ("ship it", "merge", "release", "deploy", a `/aegisops-harness:aidlc` hand-off). Otherwise stop after step 5 and ask once whether to merge.
 
 ## 1. PR
 
@@ -48,7 +48,7 @@ Only the required sections:
 
 1. Merge with the repository's method (`pr merge <pr> --strategy squash`, or `merge` / `rebase` as configured). The `ship-gate` hook blocks until the `shipped` gate passes; fix what it reports and retry.
 2. Release through the project's deploy path; wait for and read its result.
-3. Run each post-release check and append results (command, outcome, time) under `## Post-release verification`. On failure, tell the user what failed and the rollback; roll back production only on their word unless `ship.md` makes it automatic. After a rollback, add a regression test for the defect with `/tea-sdlc:fix`.
+3. Run each post-release check and append results (command, outcome, time) under `## Post-release verification`. On failure, tell the user what failed and the rollback; roll back production only on their word unless `ship.md` makes it automatic. After a rollback, add a regression test for the defect with `/aegisops-harness:fix`.
 4. On the merge target branch, follow `${CLAUDE_PLUGIN_ROOT}/commands/upgrade-service-docs.md` (traceability, spec → `implemented` or `partially-implemented`).
 
 ## 7. NO-GO
@@ -56,7 +56,7 @@ Only the required sections:
 Real CI failure, QA `NO-GO`, code changed after review, or a conflict needing code:
 1. `decision: NO-GO` with the reason in `## Checks`.
 2. `aidlc advance <f> building --back --reason "<why>"`.
-3. Fix via `/tea-sdlc:build` (new work = new `tickets.md` ticket), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`/tea-sdlc:review` §2a re-entry), stamp, advance `reviewed`, return here.
+3. Fix via `/aegisops-harness:build` (new work = new `tickets.md` ticket), `aidlc verify`, advance `verified`, one diff-only review of the fixes appended to `review.md` (`/aegisops-harness:review` §2a re-entry), stamp, advance `reviewed`, return here.
 
 ## Report
 

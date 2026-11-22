@@ -1374,7 +1374,7 @@ def gh_checks(root, branch):
     if not branch or branch.startswith('-'):
         return None
     try:
-        spec = importlib.util.spec_from_file_location('tea_sdlc_pr', pathlib.Path(__file__).with_name('pr.py'))
+        spec = importlib.util.spec_from_file_location('aegisops_harness_pr', pathlib.Path(__file__).with_name('pr.py'))
         pr = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(pr)
         if pr.provider(root)[0] == 'bitbucket':

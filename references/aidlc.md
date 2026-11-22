@@ -11,9 +11,9 @@ A question about business rules, domain terms, existing behaviour, limits, owner
 3. **Recorded assumption:** still open → take the most reasonable answer and continue; at the spec stage write it into spec.md (story or decision, listed for the approval), later `aidlc ruling … --why "<no source; reasoning>"`.
 4. **Ask the user** only after step 2 ran for that question, when no safe default exists and the answer is one of: accepting a security or compliance risk, money movement or regulatory behaviour with no source, an irreversible or production action, sources that contradict each other on observable behaviour. One batched question per stage, each with your recommended answer. A missing contract, endpoint or integration detail with a configurable default (a connector with the path in config, confirmed before release) is step 3, not 4.
 
-**Delegated input** (`do not ask`, `not available for questions`, `end to end`, or a spec with `Status: ready-for-agent`): there is no step 4. Take the recommended option, record it (spec.md `Assumptions:`, or `aidlc ruling`) with the decision starting `RISK-ACCEPTANCE NEEDED:` when it accepts a security or compliance risk, and list those first in the final report. The only stops are the ones `/tea-sdlc:aidlc` names (merge and deploy need words for it).
+**Delegated input** (`do not ask`, `not available for questions`, `end to end`, or a spec with `Status: ready-for-agent`): there is no step 4. Take the recommended option, record it (spec.md `Assumptions:`, or `aidlc ruling`) with the decision starting `RISK-ACCEPTANCE NEEDED:` when it accepts a security or compliance risk, and list those first in the final report. The only stops are the ones `/aegisops-harness:aidlc` names (merge and deploy need words for it).
 
-Rovo not connected or failing → say so once in the stage report and go on with 3–4. Subagents have no Rovo: they return NEEDS_CONTEXT with a recommended answer, the main session answers through this order. Never ask what steps 1–2 answer. `hooks/question-gate.py` enforces this: inside a tea-sdlc command it blocks every question in delegated input, and otherwise the first question asked before any Rovo call.
+Rovo not connected or failing → say so once in the stage report and go on with 3–4. Subagents have no Rovo: they return NEEDS_CONTEXT with a recommended answer, the main session answers through this order. Never ask what steps 1–2 answer. `hooks/question-gate.py` enforces this: inside an AegisOps-Harness command it blocks every question in delegated input, and otherwise the first question asked before any Rovo call.
 
 ## 1. Stages
 
@@ -161,7 +161,7 @@ One blind pass by a fresh agent that read only the spec, when the spec was not g
 ```markdown
 ---
 fingerprint: 8a01c6e95f3b…   # written by `aidlc stamp review` (in full)
-reviewers: spec=tea-sdlc:code-reviewer standards=tea-sdlc:code-reviewer
+reviewers: spec=aegisops-harness:code-reviewer standards=aegisops-harness:code-reviewer
 ---
 ## Spec
 - [x] S1 (must): RFD-2 is not implemented — fixed: src/refunds/api.ts:41, test RFD-2 "rejects over-capture"
@@ -172,7 +172,7 @@ reviewers: spec=tea-sdlc:code-reviewer standards=tea-sdlc:code-reviewer
 Verdict: GO
 ```
 
-Spec axis: vs spec.md stories and decisions, ADRs, contracts (missing, scope creep, wrong behaviour). Standards: quality, the spec's security decisions, conventions. Never merged or re-ranked. Severities `must` | `should` | `nit`. A finding-ID bullet that is not a checkbox fails the gate. `## QA` = tea-sdlc:qa-subagent verdict.
+Spec axis: vs spec.md stories and decisions, ADRs, contracts (missing, scope creep, wrong behaviour). Standards: quality, the spec's security decisions, conventions. Never merged or re-ranked. Severities `must` | `should` | `nit`. A finding-ID bullet that is not a checkbox fails the gate. `## QA` = aegisops-harness:qa-subagent verdict.
 
 ### `ship.md`
 

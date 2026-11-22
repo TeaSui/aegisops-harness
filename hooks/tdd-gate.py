@@ -7,7 +7,7 @@
   record  PostToolUse Bash: remember that a test command failed (the RED evidence) for this session.
 
 Skipped for test files, non-code files, repositories without a recognizable test setup, and when
-TEA_SDLC_TDD_GATE=off. Any internal error allows the action. State: ~/.claude/state/tdd/<session>.json
+AEGISOPS_HARNESS_TDD_GATE=off. Any internal error allows the action. State: ~/.claude/state/tdd/<session>.json
 """
 import json
 import os
@@ -118,7 +118,7 @@ def result_text(payload):
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else 'check'
-    if os.environ.get('TEA_SDLC_TDD_GATE', '').lower() == 'off':
+    if os.environ.get('AEGISOPS_HARNESS_TDD_GATE', '').lower() == 'off':
         return 0
     try:
         payload = json.load(sys.stdin)

@@ -18,7 +18,7 @@ Stable kebab-case slug; a 2-6 letter key unused by other specs (`aidlc status`).
 - New domain term settled → add it to `GLOSSARY.md`. A decision that is hard to reverse, surprising and a real trade-off → an ADR in `docs/adr/`.
 
 ## 3. Security
-Trust boundary → Read `${CLAUDE_PLUGIN_ROOT}/skills/fintech-security/SKILL.md`, dispatch `tea-sdlc:security-engineer-subagent` on the draft spec, and put its returned assets, threats and numbered controls under `### Security` in Implementation Decisions (a pasted spec's own Security section is kept and extended, not replaced). It runs while you finish the rest.
+Trust boundary → Read `${CLAUDE_PLUGIN_ROOT}/skills/fintech-security/SKILL.md`, dispatch `aegisops-harness:security-engineer-subagent` on the draft spec, and put its returned assets, threats and numbered controls under `### Security` in Implementation Decisions (a pasted spec's own Security section is kept and extended, not replaced). It runs while you finish the rest.
 
 ## 4. Contract
 External contract change (HTTP/RPC API, event, shared schema; tighter validation on an existing endpoint is not one) → `contracts/` and `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-contract.py" <spec-dir>` until it passes.
@@ -29,4 +29,4 @@ Only for a spec you wrote that was not grilled with the user: dispatch one fresh
 ## 6. One approval
 Present once: summary, stories, decisions incl. security, seams, contract result, assumptions and sources. Skip asking when the input delegated it or the pasted spec says `Status: ready-for-agent`; record `accepted_by: <name> (<date>)`, `<name> (delegated in request)` or `<name> (handed over ready-for-agent)`. Then `aidlc advance <feature> accepted`; fix what the gate lists and rerun (not a new approval unless the fix changes what was approved). Approval never authorizes destructive actions, external publishing or bypassing native controls.
 
-Next: `/tea-sdlc:plan` (inside `/tea-sdlc:aidlc`: continue).
+Next: `/aegisops-harness:plan` (inside `/aegisops-harness:aidlc`: continue).

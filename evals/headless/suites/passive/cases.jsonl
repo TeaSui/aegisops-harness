@@ -1,5 +1,5 @@
-# No passive activation: natural prompts (no slash command) that used to trigger tea-sdlc skills by keyword.
-# silent: pass when the session invokes no tea-sdlc skill, command or agent. setup: none | failing | pending.
+# No passive activation: natural prompts (no slash command) that used to trigger AegisOps-Harness skills by keyword.
+# silent: pass when the session invokes no AegisOps-Harness skill, command or agent. setup: none | failing | pending.
 {"id": "01-feature", "setup": "none", "prompt": "Add a function clamp(value, min, max) to src/math.js.", "silent": true}
 {"id": "02-failing", "setup": "failing", "prompt": "npm test is red since this morning, sort it out.", "silent": true}
 {"id": "03-expert", "setup": "none", "prompt": "What would a seasoned payments engineer notice first about how src/wallet.js keeps balances?", "silent": true}

@@ -1,5 +1,5 @@
 {
-  "description": "No passive activation: a natural prompt without a slash command must invoke no tea-sdlc skill, command or agent (Skill tool, Agent/Task subagent_type).",
+  "description": "No passive activation: a natural prompt without a slash command must invoke no AegisOps-Harness skill, command or agent (Skill tool, Agent/Task subagent_type).",
   "max_turns": 8,
   "timeout_s": 420,
   "permission_mode": null,

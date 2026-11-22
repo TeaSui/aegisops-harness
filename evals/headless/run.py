@@ -110,8 +110,8 @@ def execute(suite, case, index, args, claude):
         suite['fixture'].build(run_dir / 'repo', case)
         command = claude_command(claude, case['prompt'], args.plugin_dir, suite['config'], case, args.model,
                                  args.extra_arg)
-        env = {k: v for k, v in os.environ.items() if not k.startswith('TEA_SDLC_')}
-        env.update({k: str(v) for k, v in (case.get('env') or {}).items()})  # e.g. TEA_SDLC_WORKFLOW=full
+        env = {k: v for k, v in os.environ.items() if not k.startswith('AEGISOPS_HARNESS_')}
+        env.update({k: str(v) for k, v in (case.get('env') or {}).items()})  # e.g. AEGISOPS_HARNESS_WORKFLOW=full
         if (run_dir / 'bin').is_dir():  # fixture tools (e.g. a fake gh) shadow the real ones
             env['PATH'] = str(run_dir / 'bin') + os.pathsep + env.get('PATH', '')
         timeout = case.get('timeout_s', suite['config'].get('timeout_s', 900))

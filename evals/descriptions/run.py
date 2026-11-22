@@ -4,7 +4,7 @@
 Deterministic and free. Per file:
   - frontmatter present and valid YAML (the same Ruby YAML check as scripts/check-setup.py; skipped with a warning
     when Ruby is missing), a `description`, and for skills a `name` equal to the folder name;
-  - `disable-model-invocation: true` (tea-sdlc runs only from slash commands; the description is menu text, not a
+  - `disable-model-invocation: true` (AegisOps-Harness runs only from slash commands; the description is menu text, not a
     trigger), with a warning when it still reads like a model trigger ("when the user says …");
   - its length is within bounds (too short cannot carry triggers; too long is truncated in the skill listing).
 Across files, a collision check: TF-IDF cosine similarity between every pair of descriptions (stdlib implementation).
@@ -32,15 +32,15 @@ TRIGGER = re.compile(r'\b(use|load|run|invoke)\b(?:\s+[\w/-]+){0,3}?\s+(when|whe
                      r'once|only|right)\b|\btriggers? on\b', re.I)
 STOPWORDS = frozenset('''a an and are as at be before by can do does for from has have how i if in into is it its
 of on or that the their them then this to use used uses using when whenever which with without you your not no
-only each any all also one so than what who will while via per e g eg etc tea sdlc follows routing tiers hook gates
-triggers tea-sdlc'''.split())
+only each any all also one so than what who will while via per e g eg etc aegisops harness follows routing tiers hook gates
+triggers'''.split())
 TOKEN = re.compile(r'[a-z][a-z0-9+#.-]*[a-z0-9+#]|[a-z]')
 
 
 def load_check_setup(root):
     """scripts/check-setup.py as a module (its file name has a hyphen); None when it cannot be loaded."""
     try:
-        spec = importlib.util.spec_from_file_location('tea_sdlc_check_setup_eval', root / 'scripts' / 'check-setup.py')
+        spec = importlib.util.spec_from_file_location('aegisops_harness_check_setup_eval', root / 'scripts' / 'check-setup.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
@@ -115,7 +115,7 @@ def lint(root, items, check_setup=None):
         elif len(flat) > WARN_LEN:
             warnings.append('%s: description is %d chars (over %d)' % (rel, len(flat), WARN_LEN))
         if not re.search(r'(?m)^disable-model-invocation:\s*true\s*$', block):
-            errors.append(rel + ': needs disable-model-invocation: true (tea-sdlc runs only from slash commands)')
+            errors.append(rel + ': needs disable-model-invocation: true (AegisOps-Harness runs only from slash commands)')
         if TRIGGER.search(flat) and re.search(r'\b(user says|user asks|when the user)\b', flat, re.I):
             warnings.append(rel + ': description reads as a model trigger; say what it does and which command runs it')
         descriptions[name] = flat
