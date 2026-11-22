@@ -30,10 +30,10 @@ README `status:` holds the stage; active = `proposed`…`shipped`. Only `aidlc a
 | `building` | README `branch:` = current branch, not the default branch |
 | `verified` | `planned` checks still pass; every ticket `Status: done` with a green `task-done` event and every criterion ticked; every `Verify: test` story referenced by ≥1 test file; latest `verify` green (exit 0, code unchanged during run, fingerprint = current; with JUnit: every `Verify: test` story has a passing test, none failed) |
 | `reviewed` | `review.md` has `## Spec` and `## Standards`, no open finding, each closed one says `fixed:`/`cleared:`; `## QA` says `Verdict: GO` or `Verdict: CONDITIONAL GO — <conditions>` (unless README `qa: not-applicable — <reason>`); `fingerprint:` = current; evidence chain holds; no uncommitted code. On pass writes the pre-PR record for HEAD |
-| `shipped` | `ship.md` `decision: GO`, non-empty `## Rollback` and `## Post-release verification`; CI green (`gh pr checks` if available, else a `CI:` line in `## Checks` saying green/pass); `version:` mentioned in `CHANGELOG.md` when both exist; fingerprint = reviewed one; evidence chain holds; no uncommitted code |
+| `shipped` | `ship.md` `decision: GO`, non-empty `## Rollback` and `## Post-release verification`; CI green (`scripts/pr.py checks`: gh for GitHub, PR statuses for Bitbucket Cloud, when it can tell; else a `CI:` line in `## Checks` saying green/pass); `version:` mentioned in `CHANGELOG.md` when both exist; fingerprint = reviewed one; evidence chain holds; no uncommitted code |
 | `implemented` | README `## Traceability` (`aidlc trace --write`); set by `upgrade-service-docs` |
 
-`ship-gate` blocks `gh pr merge` on a spec-bound branch until `shipped` passes.
+`ship-gate` blocks a merge (`pr.py merge`, `gh pr merge`, a Bitbucket API merge) on a spec-bound branch until `shipped` passes.
 
 - **Code fingerprint:** over all non-ignored files except `docs/**`, `**/docs/specs/**`, `*.md`, `CHANGELOG*`, `LICENSE*`. Code, config or manifest edits invalidate a test run — bump a manifest version **before** `verify`. Prefixes match only at ≥12 hex chars.
 - **Evidence chain:** latest `verify` green on F, review stamped on F, working tree = F with no uncommitted code (so HEAD = F).

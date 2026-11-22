@@ -38,8 +38,19 @@ Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commit
 |---|---|
 | `python3` | All hooks and `scripts/` |
 | [`gitleaks`](https://github.com/gitleaks/gitleaks) | Secret gate on `git commit` / `git push` (fails closed when missing) |
-| `gh` | PR review gate (`gh pr create`) |
+| `gh` (GitHub) or Bitbucket Cloud credentials | Opening, checking and merging PRs (`scripts/pr.py`), the PR and ship gates |
 | `ruby` (optional) | Full YAML parsing in `scripts/check-setup.py` and `scripts/check-contract.py` (when PyYAML is absent) |
+
+### Bitbucket Cloud
+
+`scripts/pr.py` picks Bitbucket when `origin` is on `bitbucket.org` (SSH or HTTPS). Pushing uses your git credentials, as today. The API calls (create, checks, merge, comments) read these from the environment, for example in `~/.claude/settings.json` under `env` or your shell profile:
+
+| Variable | Value |
+|---|---|
+| `BITBUCKET_EMAIL` + `BITBUCKET_API_TOKEN` | your Atlassian account email and an [API token](https://support.atlassian.com/bitbucket-cloud/docs/using-api-tokens/) with the scopes `read:repository:bitbucket`, `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket` |
+| or `BITBUCKET_ACCESS_TOKEN` | a repository, project or workspace access token (sent as Bearer) |
+
+Check with `python3 <plugin>/scripts/pr.py auth` in the repository: exit 0 means PRs can be opened. CI status comes from the build statuses your CI posts to the PR (Bitbucket Pipelines, Jenkins, CodeBuild…).
 
 ---
 

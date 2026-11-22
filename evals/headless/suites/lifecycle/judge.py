@@ -192,7 +192,7 @@ def outcome(case, stream, repo):
     except (OSError, ValueError):
         checks['pr_opened'] = False
     creates = ' '.join(c for c in (str(call['input'].get('command', '')) for call in stream['calls']
-                                   if call['name'] == 'Bash') if 'gh pr create' in c)
+                                   if call['name'] == 'Bash') if re.search(r'gh pr create|pr\.py["\']? create', c))
     for path in re.findall(r'(?:--body-file|-F)[ =]+["\']?([^\s"\']+)', creates):  # body written with Write first
         creates += ' ' + ' '.join(str(call['input'].get('content', '')) for call in stream['calls']
                                   if call['name'] == 'Write' and str(call['input'].get('file_path', '')).endswith(path))

@@ -1369,9 +1369,20 @@ def gate_shipped(spec):
 
 
 def gh_checks(root, branch):
-    """[(name, state)] from `gh pr checks <branch>`, or None when gh is missing, errors or reports nothing."""
+    """[(name, state)] from the PR's CI: `gh pr checks <branch>`, or Bitbucket's PR statuses (scripts/pr.py); None
+    when nothing can tell (CLI or credentials missing, no checks reported)."""
+    if not branch or branch.startswith('-'):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location('tea_sdlc_pr', pathlib.Path(__file__).with_name('pr.py'))
+        pr = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(pr)
+        if pr.provider(root)[0] == 'bitbucket':
+            return pr.checks_for(root, branch)
+    except Exception:
+        pass
     exe = os.environ['AIDLC_GH'] if 'AIDLC_GH' in os.environ else shutil.which('gh')
-    if not exe or not branch or branch.startswith('-') or not os.access(exe, os.X_OK):
+    if not exe or not os.access(exe, os.X_OK):
         return None
     try:  # `--` ends gh's flags, so a branch name can never be read as an option
         result = subprocess.run([exe, 'pr', 'checks', '--', branch], cwd=root, capture_output=True, text=True,
@@ -1391,9 +1402,9 @@ def _ci_findings(spec, ship, label):
     checks = None if spec.repo.fast else gh_checks(spec.repo.root, branch)
     if checks is not None:
         bad = [f'{name} ({state})' for name, state in checks if state not in ('pass', 'skipping')]
-        return [fail(f'CI is not green (gh pr checks {branch}): {", ".join(bad[:8])}')] if bad else []
+        return [fail(f'CI is not green (pr.py checks {branch}): {", ".join(bad[:8])}')] if bad else []
     if ship['ci'] is None:
-        return [fail(f'{label}: no "CI:" line in ## Checks (and no PR checks from gh)')]
+        return [fail(f'{label}: no "CI:" line in ## Checks (and no PR checks from gh or Bitbucket)')]
     if not says_green(ship['ci']):
         return [fail(f'{label}:{ship["ci_line"]}: CI is not green: {ship["ci"]}')]
     return []

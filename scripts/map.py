@@ -66,8 +66,8 @@ GATES = (
     ('question-gate.py', 'AskUserQuestion', 'inside a tea-sdlc command: blocked when the input delegated every '
      'decision; otherwise the first question before any Rovo search is sent back'),
     ('security-gate.py', 'git commit / push', 'blocked while gitleaks finds a secret'),
-    ('pr-review-gate.py', 'gh pr create', 'blocked until the pre-PR review is recorded for HEAD with 0 open findings'),
-    ('ship-gate.py', 'gh pr merge', 'blocked until the branch\'s spec passes the `shipped` gate'),
+    ('pr-review-gate.py', 'opening a PR', 'blocked until the pre-PR review is recorded for HEAD with 0 open findings'),
+    ('ship-gate.py', 'merging a PR', 'blocked until the branch\'s spec passes the `shipped` gate'),
 )
 
 GLOSSARY = (
@@ -134,8 +134,8 @@ def render():
            '  plan     tickets.md: vertical slices                        gate: every story covered',
            '  build    TDD at the seams, ticket by ticket                 gate: failing test before code',
            '  verify   full suite at this code, stories traced           gate: aidlc verify green',
-           '  review   Spec + Standards axes, QA                          gate: gh pr create',
-           '  ship     PR, CI green, ship.md                             gate: gh pr merge',
+           '  review   Spec + Standards axes, QA                          gate: PR create',
+           '  ship     PR, CI green, ship.md                             gate: PR merge',
            'questions on the way: files → Atlassian Rovo → recorded assumption → (rarely) you',
            '```', '',
            '## Situation → command → what it loads', '',

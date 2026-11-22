@@ -14,13 +14,15 @@ disable-model-invocation: true
 
 ## 1. PR
 
-If `gh pr view --json number,state` shows none: push the `HEAD` that `aidlc advance <f> reviewed` recorded, `gh pr create` from it (body: summary, links to spec, `review.md`, `aidlc trace <f>`, ledger rulings), then commit and push the review-stage files (`review.md`, spec `README.md`, `ledger.md`). If `HEAD` moved before the PR and only spec files changed, the gate still passes; if code changed, take the NO-GO path.
+`pr` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/pr.py"` (GitHub through `gh`, Bitbucket Cloud through its API; `pr auth` says whether this session can open PRs). Every PR action goes through it, never through `curl` or the provider's web UI.
 
-Decide PR creation from what `gh` answers, never from the remote URL: a mirror, Enterprise host or local path may still be served by `gh`. Only when `gh` itself fails (not installed, not authenticated, no host) push, record the CI result the provider shows, and hand the user the PR description.
+If `pr view` exits 1 (no PR): push the `HEAD` that `aidlc advance <f> reviewed` recorded, `pr create --title … --body-file <file>` from it (body: summary, links to spec, `review.md`, `aidlc trace <f>`, ledger rulings, `RISK-ACCEPTANCE NEEDED` items first), then commit and push the review-stage files (`review.md`, spec `README.md`, `ledger.md`). If `HEAD` moved before the PR and only spec files changed, the gate still passes; if code changed, take the NO-GO path.
+
+Only when `pr create` itself fails (push refused, `pr auth` exit 1, API error) stop the stage as BLOCKED: quote the error and name the fix (`git push` refused → repository access or SSH key; Bitbucket credentials → `BITBUCKET_EMAIL` + `BITBUCKET_API_TOKEN`; gh → `gh auth login`), and hand the user the PR description.
 
 ## 2. CI
 
-`gh pr checks <pr> --watch`. Without `gh`, use the provider's CLI; if nothing can see CI, ask the user and record their answer as the `CI:` line. Red is NO-GO unless unrelated and flaky: rerun once and note the rerun in `## Checks`.
+`pr checks <pr> --watch` (exit 0 green, 1 failed, 8 still pending at the timeout, 2 no checks reported). Exit 2, or no credentials to read CI: record what the user or the CI system shows as the `CI:` line, and say where it came from. Red is NO-GO unless unrelated and flaky: rerun once and note the rerun in `## Checks`.
 
 ## 3. Version and changelog
 
@@ -44,7 +46,7 @@ Only the required sections:
 
 ## 6. Merge, release, verify, promote
 
-1. Merge with the repository's method (`gh pr merge <pr> --squash` or as configured). The `ship-gate` hook blocks until the `shipped` gate passes; fix what it reports and retry.
+1. Merge with the repository's method (`pr merge <pr> --strategy squash`, or `merge` / `rebase` as configured). The `ship-gate` hook blocks until the `shipped` gate passes; fix what it reports and retry.
 2. Release through the project's deploy path; wait for and read its result.
 3. Run each post-release check and append results (command, outcome, time) under `## Post-release verification`. On failure, tell the user what failed and the rollback; roll back production only on their word unless `ship.md` makes it automatic. After a rollback, add a regression test for the defect with `/tea-sdlc:fix`.
 4. On the merge target branch, follow `${CLAUDE_PLUGIN_ROOT}/commands/upgrade-service-docs.md` (traceability, spec → `implemented` or `partially-implemented`).

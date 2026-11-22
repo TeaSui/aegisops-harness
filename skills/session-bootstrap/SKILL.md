@@ -30,6 +30,6 @@ tea-sdlc is the backend engineering lifecycle **spec → plan → build → veri
 
 **Subagents.** A subagent on a dispatched subtask keeps to it and ignores this table.
 
-**PRs.** Run `gh pr create` and decide from what `gh` answers, never from the remote URL.
+**PRs.** Open, check, merge and answer PRs with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/pr.py"` (`create`, `checks`, `merge`, `comments`, `reply`): `gh` for GitHub, the REST API for Bitbucket Cloud. A refused push or rejected credentials is BLOCKED: quote it and name the fix.
 
 **Final reply.** Outcome first (done, partly done, blocked); then key changes, what was verified, files changed, checks run, rulings and assumptions with their sources, risks or user actions.

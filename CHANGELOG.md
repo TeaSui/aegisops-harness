@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.1.0 — 2026-11-22
+
+Bitbucket Cloud support: the ship stage no longer stops at "gh is signed in to github.com only".
+
+### Added
+- **`scripts/pr.py`**, one PR interface: `provider`, `auth`, `view`, `create`, `checks [--watch]`, `merge`, `comments`, `reply`, `default-branch`. GitHub goes through `gh`; Bitbucket Cloud (origin on `bitbucket.org`, SSH or HTTPS) through REST API 2.0 with `BITBUCKET_EMAIL` + `BITBUCKET_API_TOKEN` (Atlassian API token, Basic) or `BITBUCKET_ACCESS_TOKEN` (Bearer). Tokens are read from the environment and never printed. Stdlib only.
+- The `shipped` gate reads Bitbucket PR build statuses (latest state per key) the way it reads `gh pr checks`.
+
+### Changed
+- `ship`, `ship/no-spec.md`, `review`, `receiving-code-review` and the bootstrap use `pr.py` for every PR action. A refused push or rejected credentials is BLOCKED with the error and its fix, not a silent hand-off.
+- `pr-review-gate` also guards `pr.py create` and raw `curl` POSTs to Bitbucket's `pullrequests`; `ship-gate` also guards `pr.py merge` and Bitbucket API merges, resolves Bitbucket PR numbers and URLs to their head branch, and compares Bitbucket's 12-character commit hashes by prefix.
+
 ## 4.0.1 — 2026-11-22
 
 Fewer questions to the user inside a command. A Sonnet run on a ready-for-agent login spec asked 3 questions in 2 rounds, two of them before any Rovo search.
