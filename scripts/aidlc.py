@@ -1924,9 +1924,31 @@ def cmd_lint(args):
                              'the trust-boundary check is all NO'))
     if not re.search(r'^\s*Status:\s*ready-for-agent\b', text, re.M | re.I):
         findings.append(warn(f'{label}: no "Status: ready-for-agent" line: the spec stage will ask for approval'))
+    findings += lint_open_decisions(text, label, args.no_security)
     if not failed(findings):
         findings.append(('OK', f'{label}: {len(stories)} stories, every template section filled'))
     return finding_result(findings, {'file': str(path), 'stories': [s['id'] for s in stories]})
+
+
+NATIONAL_ID = re.compile(r'\b(?:SAID|NRIC|national ID|ID number|passport number|social security)\b', re.I)
+ID_RULE = re.compile(r'\b(?:mask\w*|pseudonym\w*|tokeni[sz]\w*|profile ?id|internal id|hash\w*|never (?:log|sen[dt]))',
+                     re.I)
+REGIME = re.compile(r'\b(?:compliance|regime|POPIA|PDPA|GDPR|PCI[ -]?DSS|SARB|MAS|CCPA|LGPD)\b', re.I)
+
+
+def lint_open_decisions(text, label, no_security):
+    """Warnings for what a security review would otherwise have to settle (and might ask about): the compliance
+    regime, and a national ID with no rule for events and logs."""
+    if no_security:
+        return []
+    out = []
+    if not REGIME.search(text):
+        out.append(warn(f'{label}: no compliance regime named (e.g. "Compliance: POPIA + SARB"): the security '
+                        'review will have to assume one'))
+    if NATIONAL_ID.search(text) and not ID_RULE.search(text):
+        out.append(warn(f'{label}: a national ID is used but no decision says how it appears in events and logs '
+                        '(masked, replaced by the profile ID, never logged)'))
+    return out
 
 
 def cmd_trace(args):

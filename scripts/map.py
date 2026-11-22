@@ -63,6 +63,8 @@ GATES = (
     ('autopilot.py', 'Stop', 'code changed since the last test run → run the tests (once per change set)'),
     ('tdd-gate.py', 'Edit / Write', 'first production edit needs a failing test run first (asks once)'),
     ('contract-gate.py', 'Edit / Write / Bash', 'external API contract must pass check-contract.py (advisory)'),
+    ('question-gate.py', 'AskUserQuestion', 'inside a tea-sdlc command: blocked when the input delegated every '
+     'decision; otherwise the first question before any Rovo search is sent back'),
     ('security-gate.py', 'git commit / push', 'blocked while gitleaks finds a secret'),
     ('pr-review-gate.py', 'gh pr create', 'blocked until the pre-PR review is recorded for HEAD with 0 open findings'),
     ('ship-gate.py', 'gh pr merge', 'blocked until the branch\'s spec passes the `shipped` gate'),

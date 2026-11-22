@@ -1307,6 +1307,18 @@ class LintTest(Base):
         code, payload = self.cli_json('lint', bad, '--key', 'RFD', '--no-security')
         self.assertNotIn('security', ' '.join(f['message'] for f in payload['findings'] if f['level'] == 'FAIL'))
 
+    def test_lint_warns_on_open_security_decisions(self):
+        plain = self.write('draft/plain.md', SPEC_MD.replace('Compliance', 'Rules').replace('compliance', 'rules'))
+        risky = self.write('draft/risky.md', SPEC_MD.replace('## Out of Scope', 'Events carry the SAID.\n\n## Out of Scope'))
+        warns = lambda path: ' '.join(f['message'] for f in self.cli_json('lint', path, '--key', 'RFD')[1]['findings']
+                                      if f['level'] == 'WARN')
+        self.assertIn('no compliance regime', warns(plain))
+        self.assertIn('national ID', warns(risky))
+        fixed = self.write('draft/fixed.md', SPEC_MD.replace('## Out of Scope', 'Events carry the profile ID, never the SAID. '
+                                                             'Compliance: POPIA.\n\n## Out of Scope'))
+        self.assertNotIn('national ID', warns(fixed))
+        self.assertNotIn('compliance regime', warns(fixed))
+
 
 class InitTest(Base):
     def test_creates_parsable_skeletons_that_block_acceptance(self):

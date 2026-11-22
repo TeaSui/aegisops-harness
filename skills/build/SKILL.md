@@ -57,7 +57,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" ruling <f> --task T<n> \
   --decision "<what>" --why "<evidence>" --if-wrong "<cost and how to reverse>"
 ```
 
-Ask the user only for: changing a story or decision, accepting a security risk, a new vendor or paid dependency, a scope change, anything irreversible in production. List every ruling in the final report.
+Ask the user (after Rovo, `references/aidlc.md` §0) only for: changing a story or decision, accepting a security risk, a new vendor or paid dependency, a scope change, anything irreversible in production; with delegated input, record even these as rulings (`RISK-ACCEPTANCE NEEDED:` for a risk) instead. A missing integration contract is a ruling: build against a connector with the path in config and name the confirmation in the report. List every ruling in the final report.
 
 ## 4. Done
 

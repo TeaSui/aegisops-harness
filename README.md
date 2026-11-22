@@ -64,7 +64,7 @@ What each command loads, which gate stops it and which files it leaves: [HOW-IT-
 
 ## 🔎 Questions during the lifecycle
 
-Files first (spec, `GLOSSARY.md`, ADRs, code, tests), then **Atlassian Rovo MCP** (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption. A person is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or sources that contradict each other (`references/aidlc.md` §0). Every source and assumption is listed in the spec and the final report.
+Files first (spec, `GLOSSARY.md`, ADRs, code, tests), then **Atlassian Rovo MCP** (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption. A person is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or sources that contradict each other (`references/aidlc.md` §0), and never when the input says "do not ask", "end to end" or `Status: ready-for-agent`: then the decision is recorded (`RISK-ACCEPTANCE NEEDED:` when it accepts a risk) and listed first in the final report. `hooks/question-gate.py` enforces both: inside a tea-sdlc command, a question in delegated input is blocked, and the first question asked before any Rovo search is sent back. Every source and assumption is listed in the spec and the final report.
 
 ## 🤖 Agents
 

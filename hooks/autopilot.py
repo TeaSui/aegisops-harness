@@ -283,7 +283,8 @@ def subagent_rules(agent_type):
         f'Read, and a check of each exit criterion ({rules}/subagent-return-format.md).',
         '- Evidence before claims: cite file:line or command output; never invent paths, flags or results.',
         '- A business-logic or domain question you cannot answer from the files given: return NEEDS_CONTEXT with the '
-        'question; the main session answers it (Atlassian Rovo first). Never guess a business rule.',
+        'question and your recommended answer; the main session answers it (Atlassian Rovo first). Never guess a '
+        'business rule, and never ask the user yourself.',
         '- TDD: the tdd-gate hook blocks the first production edit without a recorded failing test run. Write the '
         'test, run it, see it fail, then change the code. Name each test with the requirement ID it covers '
         '(for example "RFD-1 rejects over-capture") so the trace gate finds it.',

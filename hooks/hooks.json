@@ -1,5 +1,5 @@
 {
-  "description": "tea-sdlc gates (secrets, pre-PR review, TDD, contract, ship, verification) and the session snapshot; no prompt routing: workflows start only from tea-sdlc slash commands",
+  "description": "tea-sdlc gates (secrets, pre-PR review, TDD, contract, ship, verification, Rovo-first questions) and the session snapshot; no prompt routing: workflows start only from tea-sdlc slash commands",
   "hooks": {
     "PreToolUse": [
       {
@@ -44,6 +44,16 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/contract-gate.py\"",
             "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/question-gate.py\"",
+            "timeout": 10
           }
         ]
       }
