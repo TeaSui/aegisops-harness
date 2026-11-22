@@ -1,6 +1,6 @@
 ---
 name: build
-description: Stage 3 of the backend lifecycle — build the tickets of a planned spec test-first at the spec's seams, a lone ticket in this session and disjoint batches through tea-sdlc:backend-engineer-subagent, finishing each through aidlc task-done; also resumes a build after /clear or in a new session.
+description: Stage 3 of the backend lifecycle — build the tickets of a planned spec test-first at the spec's seams, a lone ticket in this session and disjoint batches through aegisops-harness:backend-engineer-subagent, finishing each through aidlc task-done; also resumes a build after /clear or in a new session.
 argument-hint: "[spec slug]"
 disable-model-invocation: true
 ---
@@ -13,7 +13,7 @@ disable-model-invocation: true
 
 Resuming: keep the original goal, constraints and decisions; never redo a ticket at `Status: done`. `aidlc status` (or the session-start snapshot) gives the stage and the next-gate blockers; at `building`, go straight to §2.
 
-1. `aidlc status`: spec at `planned`, `building` gate passing; otherwise run the missing stage first (`/tea-sdlc:spec`, `/tea-sdlc:plan`).
+1. `aidlc status`: spec at `planned`, `building` gate passing; otherwise run the missing stage first (`/aegisops-harness:spec`, `/aegisops-harness:plan`).
 2. On a feature branch, not the default (`git switch -c feat/<slug>` if needed; no need to ask).
 3. `aidlc advance <f> building`.
 
@@ -22,14 +22,14 @@ Resuming: keep the original goal, constraints and decisions; never redo a ticket
 Until `aidlc next <f> --json` returns no ticket:
 
 - **Batch of one** (a ticket without `Files:`, the common case): build it yourself in this session: Read `${CLAUDE_PLUGIN_ROOT}/skills/test-driven-development/SKILL.md` and the stack skills `${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md` names for this repository, then test-first at the spec's seams, unless its `Owner:` names an agent.
-- **Wider batch** (tickets declaring disjoint `Files:`): dispatch it in ONE message, one Agent call per ticket. Agent = the ticket's `Owner:`, else `tea-sdlc:backend-engineer-subagent`.
+- **Wider batch** (tickets declaring disjoint `Files:`): dispatch it in ONE message, one Agent call per ticket. Agent = the ticket's `Owner:`, else `aegisops-harness:backend-engineer-subagent`.
 - **Prompt:** `${CLAUDE_PLUGIN_ROOT}/skills/build/implementer-prompt.md` with the ticket verbatim, the covered stories copied from `spec.md`, the paths of `spec.md` (Implementation and Testing Decisions, `### Security`), `GLOSSARY.md`, cited ADRs and `contracts/`, the matching rulings from `ledger.md`, and the exit command (`Test:`).
 - Owned paths = the ticket's `Files:`. Tests are named with the story ID they prove (`RFD-1 rejects over-capture`) so the gate and `aidlc trace` find them. Each acceptance checkbox is ticked when a test shows it.
 
 When an implementer returns, read its status, evidence and exit checks, and confirm with `git status` it changed only its files. Then per task:
 
 1. **Spec compliance:** `${CLAUDE_PLUGIN_ROOT}/skills/build/spec-reviewer-prompt.md` with the ticket and its stories. A ticket you built yourself skips the per-ticket reviews; the review stage covers it.
-2. **Quality**, after spec passes: `${CLAUDE_PLUGIN_ROOT}/skills/build/code-quality-reviewer-prompt.md` to `tea-sdlc:code-reviewer`.
+2. **Quality**, after spec passes: `${CLAUDE_PLUGIN_ROOT}/skills/build/code-quality-reviewer-prompt.md` to `aegisops-harness:code-reviewer`.
 3. **Fix loop:** verified findings go back to the implementer; each re-review covers only the fix diff. Max 2 fix rounds per review, max 4 review iterations per task in total. Still failing after 2 rounds → re-dispatch the task once, fresh, one model tier up (table), with the findings and failed approaches. That fails too → stop the ticket: split it in `tickets.md` and rerun `aidlc check <f> --to planned` when it is too big, or take it to the user when the story is unclear or contradictory.
 4. **Finish only through the CLI** (needs every criterion ticked; runs the command; on exit 0 sets `Status: done` and logs `task-done`; on failure changes nothing). Never set the status by hand:
 
@@ -43,8 +43,8 @@ Commit after each ticket or batch converges (implementers never commit; parallel
 |---|---|---|
 | Implementer (domain engineer) | `sonnet`, high | `opus` |
 | Implementer already on `opus` | `opus` | `fable` |
-| Spec and quality reviewer (`tea-sdlc:code-reviewer`) | `sonnet`, medium | effort high |
-| `tea-sdlc:qa-subagent` (review stage) | `sonnet`, medium | effort high |
+| Spec and quality reviewer (`aegisops-harness:code-reviewer`) | `sonnet`, medium | effort high |
+| `aegisops-harness:qa-subagent` (review stage) | `sonnet`, medium | effort high |
 
 Override with the Agent call's `model` only when the task differs from the agent's normal job.
 
@@ -61,7 +61,7 @@ Ask the user (after Rovo, `references/aidlc.md` §0) only for: changing a story 
 
 ## 4. Done
 
-Every ticket `Status: done` and committed → `/tea-sdlc:verify` (inside `/tea-sdlc:aidlc`: continue). Do not run `aidlc verify` here.
+Every ticket `Status: done` and committed → `/aegisops-harness:verify` (inside `/aegisops-harness:aidlc`: continue). Do not run `aidlc verify` here.
 
 ## 5. Rules for every batch
 

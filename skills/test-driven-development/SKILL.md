@@ -1,6 +1,6 @@
 ---
 name: test-driven-development
-description: Red-green-refactor before any production code — the new test run and shown failing for the expected reason, then made to pass; prose and config changes get proportionate structural checks. Read by /tea-sdlc:build, /tea-sdlc:fix and /tea-sdlc:receiving-code-review.
+description: Red-green-refactor before any production code — the new test run and shown failing for the expected reason, then made to pass; prose and config changes get proportionate structural checks. Read by /aegisops-harness:build, /aegisops-harness:fix and /aegisops-harness:receiving-code-review.
 disable-model-invocation: true
 user-invocable: false
 ---

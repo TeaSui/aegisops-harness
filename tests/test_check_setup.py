@@ -164,30 +164,30 @@ class PluginIntegrityTest(unittest.TestCase):
 
     def test_dangling_skill_reference_fails(self):
         rule = self.root / 'rules' / 'agents.md'
-        rule.write_text(rule.read_text() + '\nThen run /tea-sdlc:no-such-skill.\n')
+        rule.write_text(rule.read_text() + '\nThen run /aegisops-harness:no-such-skill.\n')
         (self.root / 'hooks' / 'autopilot.py').write_text(
-            (self.root / 'hooks' / 'autopilot.py').read_text() + '\n# see tea-sdlc:missing-command\n')
+            (self.root / 'hooks' / 'autopilot.py').read_text() + '\n# see aegisops-harness:missing-command\n')
         errors = ' '.join(self.check()['errors'])
-        self.assertIn('tea-sdlc:missing-command', errors)
+        self.assertIn('aegisops-harness:missing-command', errors)
         self.assertIn('no-such-skill', errors)
 
     def test_model_invocable_skill_fails(self):
-        # tea-sdlc runs only from slash commands: a skill the model could load on its own is an error.
+        # AegisOps-Harness runs only from slash commands: a skill the model could load on its own is an error.
         skill = self.root / 'skills' / 'plan' / 'SKILL.md'
         skill.write_text(skill.read_text().replace('disable-model-invocation: true\n', '', 1))
         self.assertIn('skills/plan/SKILL.md: needs disable-model-invocation: true', ' '.join(self.check()['errors']))
 
     def test_bare_agent_name_fails(self):
-        # Claude Code registers plugin agents as tea-sdlc:<name>; a bare subagent_type is "not found".
+        # Claude Code registers plugin agents as aegisops-harness:<name>; a bare subagent_type is "not found".
         rule = self.root / 'rules' / 'agents.md'
         rule.write_text(rule.read_text() + '\nDispatch `backend-engineer-subagent` for the API.\n')
         errors = ' '.join(self.check()['errors'])
         self.assertIn('rules/agents.md', errors)
-        self.assertIn('must be named tea-sdlc:backend-engineer-subagent', errors)
+        self.assertIn('must be named aegisops-harness:backend-engineer-subagent', errors)
 
     def test_namespaced_agent_name_and_agent_file_paths_pass(self):
         rule = self.root / 'rules' / 'agents.md'
-        rule.write_text(rule.read_text() + '\nDispatch `tea-sdlc:qa-subagent`; template '
+        rule.write_text(rule.read_text() + '\nDispatch `aegisops-harness:qa-subagent`; template '
                         'skills/review/code-reviewer.md.\n')
         self.assertEqual(self.check()['errors'], [])
 
@@ -206,7 +206,7 @@ class PluginIntegrityTest(unittest.TestCase):
 
     def test_each_root_is_checked_on_its_own(self):
         rule = self.root / 'rules' / 'agents.md'
-        rule.write_text(rule.read_text() + '\nThen run /tea-sdlc:no-such-skill.\n')
+        rule.write_text(rule.read_text() + '\nThen run /aegisops-harness:no-such-skill.\n')
         probe = (
             'import importlib.util, json, sys, io, contextlib\n'
             'spec = importlib.util.spec_from_file_location("cs", sys.argv[1]); m = importlib.util.module_from_spec(spec)\n'

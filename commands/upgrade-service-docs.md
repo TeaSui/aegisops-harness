@@ -1,5 +1,5 @@
 ---
-description: After the merge, promote a shipped spec into the living service and system docs — writes the traceability table and moves the spec to implemented (a pre-AIDLC spec from accepted). /tea-sdlc:ship runs it as its last step; by hand for a spec still at shipped after its merge or docs gone stale.
+description: After the merge, promote a shipped spec into the living service and system docs — writes the traceability table and moves the spec to implemented (a pre-AIDLC spec from accepted). /aegisops-harness:ship runs it as its last step; by hand for a spec still at shipped after its merge or docs gone stale.
 argument-hint: "[service-name] [feature-slug or short description]"
 disable-model-invocation: true
 ---
@@ -12,9 +12,9 @@ Promote a merged change into the living docs and close its spec: the AIDLC promo
 - **This command owns** the living files and the lifecycle fields of the spec's `README.md`. It never edits the spec's `spec.md`, `tickets.md`, `contracts/`, `ledger.md`, `review.md`, `ship.md`, legacy files (`requirements.md`, `security.md`, `design.md`, `plan.md`) or ADRs.
 
 ## Steps
-1. **Resolve** the service root, the system root and the spec folder. With no spec (`/tea-sdlc:fix`), skip steps 2, 3 and 7 and compare the code changes with the living docs directly.
+1. **Resolve** the service root, the system root and the spec folder. With no spec (`/aegisops-harness:fix`), skip steps 2, 3 and 7 and compare the code changes with the living docs directly.
 2. **Confirm the ship.** The spec is at `shipped` and its commits are on the target branch (merge or squash). Run promotion on that branch, never in an implementation worktree.
-   - Spec at an earlier stage: finish that stage first (`/tea-sdlc:ship`).
+   - Spec at an earlier stage: finish that stage first (`/aegisops-harness:ship`).
    - Change not merged: stop with `NEEDS_CONTEXT`.
    - Pre-AIDLC spec (no `key:`): QA `GO` or the merge is enough, and steps 3 and 7 are done by hand.
 3. **Trace.** Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" trace <spec> --write`, which writes README `## Traceability`. Compare the actual code changes (classes, endpoints, events, tables, config) with the table and the contract delta. A requirement shown as pending or failing stays pending.

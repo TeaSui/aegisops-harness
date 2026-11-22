@@ -10,7 +10,7 @@ disable-model-invocation: true
 `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`, `<f>` = spec folder or slug; run every command yourself.
 
 ## 1. Spec stage
-1. `aidlc status`: spec at `building` with every ticket `Status: done` (else `/tea-sdlc:build`).
+1. `aidlc status`: spec at `building` with every ticket `Status: done` (else `/aegisops-harness:build`).
 2. **Version:** a manifest that holds the release version (`package.json`, `pyproject.toml`, `build.gradle`, `plugin.json`, `VERSION`) gets its semver bump now (breaking major, capability minor, fix patch; skip when release tooling owns it): a manifest change after `verify` invalidates the evidence.
 3. **Full suite through the CLI**, with `--junit` when the runner writes JUnit XML so failing story tests are seen:
 ```bash
@@ -21,9 +21,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full test su
 6. `aidlc trace <f>`: every `Verify: test` story has a passing test; `check`/`manual` stories have their evidence.
 7. `aidlc advance <f> verified`. Fails → `aidlc check <f> --to verified` names it (open ticket or criterion, story without a test, failing story test, code changed after `verify`): fix test-first and rerun from 3.
 
-Next: `/tea-sdlc:review`.
+Next: `/aegisops-harness:review`.
 
-## 2. Without a spec (`/tea-sdlc:fix`)
+## 2. Without a spec (`/aegisops-harness:fix`)
 Run the full suite (not a selection) and read exit code and counts; the regression test was seen failing before the fix.
 
 ## 3. Evidence for any claim

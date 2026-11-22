@@ -12,7 +12,7 @@
   pr.py reply PR COMMENT_ID (--body B | --body-file F)
   pr.py default-branch
 
-PR = number or URL; omitted = the PR of the current branch. Provider: TEA_SDLC_PR_PROVIDER (github | bitbucket),
+PR = number or URL; omitted = the PR of the current branch. Provider: AEGISOPS_HARNESS_PR_PROVIDER (github | bitbucket),
 else bitbucket when origin's host is bitbucket.org (incl. ssh.bitbucket.org), else github, where `gh` decides
 (Enterprise hosts, mirrors and local paths included).
 Bitbucket Cloud auth, from the environment only (never printed):
@@ -59,9 +59,9 @@ def remote(cwd=None):
 
 def provider(cwd=None):
     """(name, reason)."""
-    forced = os.environ.get('TEA_SDLC_PR_PROVIDER', '').strip().lower()
+    forced = os.environ.get('AEGISOPS_HARNESS_PR_PROVIDER', '').strip().lower()
     if forced in ('github', 'bitbucket'):
-        return forced, 'TEA_SDLC_PR_PROVIDER'
+        return forced, 'AEGISOPS_HARNESS_PR_PROVIDER'
     host, _ = remote(cwd)
     if host and (host == 'bitbucket.org' or host.endswith('.bitbucket.org')):
         return 'bitbucket', f'origin is on {host}'

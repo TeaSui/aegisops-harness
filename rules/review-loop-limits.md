@@ -1,6 +1,6 @@
 # Review loop limits
 
-`/tea-sdlc:fix` has no review loops: one pre-PR pass plus one diff-only re-review. Any leaf dispatch: 2 failed fix attempts on the same issue → return `BLOCKED`. Debugging: 3 failed fixes → stop and question the approach.
+`/aegisops-harness:fix` has no review loops: one pre-PR pass plus one diff-only re-review. Any leaf dispatch: 2 failed fix attempts on the same issue → return `BLOCKED`. Debugging: 3 failed fixes → stop and question the approach.
 
 ## Per task in the build stage
 - Max 2 fix rounds per review (spec compliance, code quality); max 4 review iterations per task in total.
@@ -8,7 +8,7 @@
 - At the limit the same implementer gets no further round. Re-dispatch the task once to a fresh implementer one model tier up (haiku → sonnet → opus → fable) with the findings and the failed approaches. If that fails too → stop and escalate (below); wait for the user's decision.
 
 ## Review stage
-Spec and Standards once each (in parallel with QA), then at most ONE diff-only re-review of the fixes by a single tea-sdlc:code-reviewer with `AXIS: both`.
+Spec and Standards once each (in parallel with QA), then at most ONE diff-only re-review of the fixes by a single aegisops-harness:code-reviewer with `AXIS: both`.
 
 ## Convergence
 - A re-review covers the fix diff only, unless the fix touched shared behaviour.

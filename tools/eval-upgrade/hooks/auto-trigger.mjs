@@ -25,7 +25,7 @@ import { TOOL_ROOT, ARENA_DIR, CONFIG_PATH } from '../lib/paths.mjs';
 const LOG_PATH = join(ARENA_DIR, 'auto-trigger.log');
 const STATE_PATH = join(ARENA_DIR, 'auto-trigger-state.json');
 
-// Plugin assets arrive namespaced ("tea-sdlc:goal"); arena ids use the bare name.
+// Plugin assets arrive namespaced ("aegisops-harness:goal"); arena ids use the bare name.
 const bare = (name) => String(name).split(':').pop();
 
 function log(line) {

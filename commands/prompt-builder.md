@@ -1,19 +1,19 @@
 ---
-description: Turn a rough description into an input that meets the AIDLC standard — a /tea-sdlc:aidlc prompt carrying a spec in the to-spec template, checked with aidlc lint, or a /tea-sdlc:fix prompt for a bug — or, for non-software work, a structured Claude prompt.
+description: Turn a rough description into an input that meets the AIDLC standard — a /aegisops-harness:aidlc prompt carrying a spec in the to-spec template, checked with aidlc lint, or a /aegisops-harness:fix prompt for a bug — or, for non-software work, a structured Claude prompt.
 argument-hint: "[what you want built, fixed or prompted]"
 disable-model-invocation: true
 ---
 
-# /tea-sdlc:prompt-builder
+# /aegisops-harness:prompt-builder
 
 Turn `$ARGUMENTS` into one ready-to-paste input. Empty → ask "What do you want built, fixed or prompted?" and wait. You write a prompt here; you change no code and create no spec folder.
 
 ## 1. Pick the track
-- **Feature or behaviour change** in a backend service → §2, output starts with `/tea-sdlc:aidlc`.
-- **Bug fix or small change with no new decision** (`${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`, "/tea-sdlc:fix or /tea-sdlc:aidlc") → §3, output starts with `/tea-sdlc:fix`.
+- **Feature or behaviour change** in a backend service → §2, output starts with `/aegisops-harness:aidlc`.
+- **Bug fix or small change with no new decision** (`${CLAUDE_PLUGIN_ROOT}/rules/workflow-routing.md`, "/aegisops-harness:fix or /aegisops-harness:aidlc") → §3, output starts with `/aegisops-harness:fix`.
 - **Anything else** → §4.
 
-## 2. Feature: `/tea-sdlc:aidlc` + spec.md
+## 2. Feature: `/aegisops-harness:aidlc` + spec.md
 1. **Gather** in the order of `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §0: the repository (code, tests, `GLOSSARY.md`, ADRs, `docs/`), then Atlassian Rovo (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`) for the business rules, terms, limits and decisions the description names. Ask the user only what neither answers and a test would observe: one question at a time with your recommended answer, at most 3 rounds; then take defaults and list them.
 2. **Write the spec** in the template of `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 `spec.md`:
    - Markdown structure kept exactly: `# <title>`, `## <section>` headings, stories numbered `1.` … `n.` in one list (a paste that loses them fails the gate);
@@ -34,15 +34,15 @@ Turn `$ARGUMENTS` into one ready-to-paste input. Empty → ask "What do you want
 
 Output:
 ```text
-/tea-sdlc:aidlc <one line: the outcome; when the user delegates every choice: "End to end, do not ask: take your recommended default for any open decision, record it, and list it in the final report.">
+/aegisops-harness:aidlc <one line: the outcome; when the user delegates every choice: "End to end, do not ask: take your recommended default for any open decision, record it, and list it in the final report.">
 
 <the spec>
 ```
 
-## 3. Bug: `/tea-sdlc:fix`
+## 3. Bug: `/aegisops-harness:fix`
 Gather as in §2.1, then output one block:
 ```text
-/tea-sdlc:fix <one sentence: what is wrong>
+/aegisops-harness:fix <one sentence: what is wrong>
 Reproduce: <steps, request or failing test>
 Expected: <behaviour, with its source (spec, Rovo page, issue)>
 Actual: <behaviour, log line or error, no secrets or PII>

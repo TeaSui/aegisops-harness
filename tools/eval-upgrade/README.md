@@ -2,7 +2,7 @@
 
 Evaluate & upgrade system for Claude Code assets — **agents, commands, rules, skills** —
 in any `.claude` directory or plugin checkout (defaults to `~/.claude`). Zero dependencies;
-requires Node ≥ 20. Ships inside the tea-sdlc plugin; `/eval-upgrade` is its slash command.
+requires Node ≥ 20. Ships inside the AegisOps-Harness plugin; `/eval-upgrade` is its slash command.
 
 Hooks are deliberately out of scope: they are executable code, not instruction files.
 
@@ -118,7 +118,7 @@ duel is due for that artifact:
 - **Never touches the transcript**: no stdout, exits 0 unconditionally; everything is logged
   to `arena/auto-trigger.log`.
 
-tea-sdlc 4.0 starts nothing on its own, so the plugin does **not** register this hook. To opt in, add it to your
+AegisOps-Harness 4.0 starts nothing on its own, so the plugin does **not** register this hook. To opt in, add it to your
 own `.claude/settings.json` (`hooks.PostToolUse`, matcher `Skill|Task|Agent`, command
 `node <plugin>/tools/eval-upgrade/hooks/auto-trigger.mjs`) and set `autoTrigger.enabled` to `true` in the state
 directory's `config.json`.

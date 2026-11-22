@@ -1,6 +1,6 @@
 ---
 name: reframe
-description: Challenge a consequential plan, decision or belief (/tea-sdlc:reframe) — the strongest case against, the load-bearing assumption, a different framing, the cheapest check that settles it and a verdict. An opinion, no code.
+description: Challenge a consequential plan, decision or belief (/aegisops-harness:reframe) — the strongest case against, the load-bearing assumption, a different framing, the cheapest check that settles it and a verdict. An opinion, no code.
 disable-model-invocation: true
 ---
 

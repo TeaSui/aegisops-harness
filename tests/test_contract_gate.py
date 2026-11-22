@@ -80,7 +80,7 @@ class ContractGateTest(unittest.TestCase):
         self.contract(BAD)
         self.assertEqual(self.edit('core/src/test/java/ATest.java').returncode, 0)
         self.assertEqual(self.edit('README.md').returncode, 0)
-        self.assertEqual(self.edit(env={'TEA_SDLC_CONTRACT_GATE': 'off'}).returncode, 0)
+        self.assertEqual(self.edit(env={'AEGISOPS_HARNESS_CONTRACT_GATE': 'off'}).returncode, 0)
 
     def record_review(self, open_findings=0):
         sha = self.git('rev-parse', 'HEAD').stdout.strip()

@@ -45,7 +45,7 @@ class ShipGateTest(unittest.TestCase):
 
     def run_hook(self, command, env=None):
         payload = {'session_id': 's1', 'cwd': str(self.repo), 'tool_name': 'Bash', 'tool_input': {'command': command}}
-        clean = {k: v for k, v in os.environ.items() if not k.startswith('TEA_SDLC_')}
+        clean = {k: v for k, v in os.environ.items() if not k.startswith('AEGISOPS_HARNESS_')}
         full_env = {**clean, **GIT_ENV, 'HOME': str(self.home), 'AIDLC_GH': str(self.gh), **(env or {})}
         return subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), env=full_env,
                               capture_output=True, text=True, timeout=60)
@@ -81,7 +81,7 @@ class ShipGateTest(unittest.TestCase):
 
     def test_off_switch(self):
         self.spec('reviewed')
-        self.assertEqual(self.run_hook('gh pr merge', {'TEA_SDLC_SHIP_GATE': 'off'}).returncode, 0)
+        self.assertEqual(self.run_hook('gh pr merge', {'AEGISOPS_HARNESS_SHIP_GATE': 'off'}).returncode, 0)
 
     def test_bad_input_fails_open(self):
         result = subprocess.run([sys.executable, str(HOOK)], input='nope', capture_output=True, text=True,

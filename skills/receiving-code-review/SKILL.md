@@ -1,6 +1,6 @@
 ---
 name: receiving-code-review
-description: "Handle review feedback (/tea-sdlc:receiving-code-review, and step d of /tea-sdlc:review) — verify each finding from tea-sdlc:code-reviewer, the code-review skill, a PR comment or the user against the code, fix it test-first or clear it with evidence, push back when it is wrong; with a spec, close each review.md line with fixed: or cleared: and re-stamp."
+description: "Handle review feedback (/aegisops-harness:receiving-code-review, and step d of /aegisops-harness:review) — verify each finding from aegisops-harness:code-reviewer, the code-review skill, a PR comment or the user against the code, fix it test-first or clear it with evidence, push back when it is wrong; with a spec, close each review.md line with fixed: or cleared: and re-stamp."
 disable-model-invocation: true
 ---
 
@@ -39,6 +39,6 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> reviewed
 
 A stamp is valid only for the code it was taken on; any later code change needs a new `verify` and stamp. Still open after the re-review → the user only if the decision is theirs; otherwise `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" advance <f> building --back --reason "<finding>"`.
 
-## Without a spec (`/tea-sdlc:fix` work)
+## Without a spec (`/aegisops-harness:fix` work)
 
 Run the full suite (`${CLAUDE_PLUGIN_ROOT}/skills/verify/SKILL.md` §2), one diff-only re-review of the fixes, then commit and record the pass per `${CLAUDE_PLUGIN_ROOT}/skills/review/SKILL.md` §3 (`mark-pr-review.py --open-findings` = findings neither fixed nor cleared). Findings still open go to the user as explicit open items, not another loop.

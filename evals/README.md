@@ -1,4 +1,4 @@
-# tea-sdlc evals
+# AegisOps-Harness evals
 
 These suites measure whether a session picks the right skill, command and gate when the user describes the work without naming any of them. They are written for maintainers and are not loaded into agent sessions.
 
@@ -7,7 +7,7 @@ These suites measure whether a session picks the right skill, command and gate w
 | Suite | Measures | Cost | Where it runs |
 |---|---|---|---|
 | `descriptions/` | Lint of every `skills/*/SKILL.md` and `commands/*.md` description, plus a collision check between descriptions | Free, under 1 s | CI, every push and PR |
-| `headless/` `passive` | Real `claude -p` sessions: a natural prompt with no slash command must invoke no tea-sdlc skill, command or agent (no passive activation) | About $0.45 per case per run (18 cases) | Manual, weekly workflow |
+| `headless/` `passive` | Real `claude -p` sessions: a natural prompt with no slash command must invoke no AegisOps-Harness skill, command or agent (no passive activation) | About $0.45 per case per run (18 cases) | Manual, weekly workflow |
 | `headless/` `tdd` | Real sessions on code-change and bug prompts: a failing test run before the first production edit, and a test run after the last edit | About $0.50 per case per run (4 cases) | Manual, weekly workflow |
 | `headless/` `lifecycle` | One real session asked for a trust-boundary feature end to end. Scores how far the AIDLC lifecycle got and whether its gates were passed through `aidlc advance` | Several dollars per run, up to 45 min | Manual |
 
@@ -27,7 +27,7 @@ Checks for each file:
 
 - The frontmatter is valid YAML. This uses the same Ruby check as `scripts/check-setup.py`; when Ruby is missing it prints a warning and skips the check.
 - There is a `description`. For a skill, `name` equals the folder name.
-- `disable-model-invocation: true` is set (tea-sdlc runs only from slash commands); a description that still reads like a model trigger is a warning.
+- `disable-model-invocation: true` is set (AegisOps-Harness runs only from slash commands); a description that still reads like a model trigger is a warning.
 - The description is 80 to 1024 characters long. Over 700 characters gives a warning.
 
 **Collision check.** Every pair of descriptions gets a TF-IDF cosine similarity (stdlib implementation, threshold 0.25). Two descriptions that read alike make Claude guess between the two files.
@@ -70,7 +70,7 @@ Output:
 
 Each suite is a folder in `headless/suites/` with four files: `suite.json` (turn limit, timeout, permission mode, allowed tools), `cases.jsonl`, `fixture.py` (`build(repo, case)`) and `judge.py` (`judge(case, stream, repo, plugin_dir)`). `headless/fixtures/node_shop.py` is the shared fixture: a small Node repository with `src/math.js`, `src/wallet.js` (float balances, on purpose) and `node --test` tests.
 
-- **passive.** A `silent` case passes when the session called neither the `Skill` tool with a tea-sdlc skill nor the `Agent`/`Task` tool with a tea-sdlc agent. Allowed tools are read-only, with a turn limit of 8. A tool call is counted even when permissions deny it.
+- **passive.** A `silent` case passes when the session called neither the `Skill` tool with an AegisOps-Harness skill nor the `Agent`/`Task` tool with an AegisOps-Harness agent. Allowed tools are read-only, with a turn limit of 8. A tool call is counted even when permissions deny it.
 - **tdd.** The judge orders the tool calls into test edits, production edits (`src/`, not test files, including shell writes), red test runs and green test runs. An edit that a gate blocked counts as nothing. A run passes when a red run comes before the first production edit and a test run comes after the last edit. `score` gives half a point for each of the two conditions.
 - **lifecycle.** The judge scores six artifacts in the fixture's spec folder, one point each, against `references/aidlc.md`:
   1. spec: a README with `key:`, and `spec.md` (to-spec template, ≥1 numbered user story)

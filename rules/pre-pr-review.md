@@ -2,18 +2,18 @@
 
 Before opening a PR or handing a change to review, review it in a fresh context, not the implementation conversation.
 
-## Without a spec (`/tea-sdlc:fix`, `skills/review/SKILL.md` §3)
+## Without a spec (`/aegisops-harness:fix`, `skills/review/SKILL.md` §3)
 1. Run verification and show its output.
-2. Built-in `code-review` skill once on the diff: `low` effort, default on a trust-boundary change (unavailable → tea-sdlc:code-reviewer, `AXIS: both`). Trust boundary: it also checks the security pass (threats listed and tested, no PII or secrets in logs).
+2. Built-in `code-review` skill once on the diff: `low` effort, default on a trust-boundary change (unavailable → aegisops-harness:code-reviewer, `AXIS: both`). Trust boundary: it also checks the security pass (threats listed and tested, no PII or secrets in logs).
 3. Fix each finding or clear it with a reason backed by evidence; a note alone clears nothing.
 4. Re-review only the fix diff.
 5. Commit, then `python3 scripts/mark-pr-review.py --reviewer <name> --open-findings <n>`.
 
 ## With a spec: the review stage
 1. Spec at `verified` (latest `aidlc verify` green and current).
-2. Spec axis (spec.md stories and decisions, ADRs, contracts/) and Standards axis (quality, the spec's security decisions, conventions, `REVIEW.md` if present): two separate tea-sdlc:code-reviewer dispatches, once each, in parallel with tea-sdlc:qa-subagent. Findings go into `review.md` as returned, never merged or re-ranked.
+2. Spec axis (spec.md stories and decisions, ADRs, contracts/) and Standards axis (quality, the spec's security decisions, conventions, `REVIEW.md` if present): two separate aegisops-harness:code-reviewer dispatches, once each, in parallel with aegisops-harness:qa-subagent. Findings go into `review.md` as returned, never merged or re-ranked.
 3. Close each finding `fixed:` or `cleared:` with evidence.
-4. Re-run `aidlc verify`, then at most ONE diff-only re-review of the fixes by a single tea-sdlc:code-reviewer with `AXIS: both`; then `aidlc stamp <f> review`.
+4. Re-run `aidlc verify`, then at most ONE diff-only re-review of the fixes by a single aegisops-harness:code-reviewer with `AXIS: both`; then `aidlc stamp <f> review`.
 5. `aidlc advance <f> reviewed` checks all of it and writes the pre-PR record for HEAD; no `mark-pr-review.py` call.
 
 ## Enforcement

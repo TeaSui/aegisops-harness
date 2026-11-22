@@ -5,7 +5,7 @@ argument-hint: "[feature request | pasted spec | spec slug]"
 disable-model-invocation: true
 ---
 
-# /tea-sdlc:aidlc
+# /aegisops-harness:aidlc
 
 `aidlc` = `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"`; run every command yourself. Input: `$ARGUMENTS`.
 
@@ -30,7 +30,7 @@ Read the stage's file and follow it to its end, then go straight to the next row
 
 1. **The one approval** at the end of `spec`, skipped when the input delegates it ("don't ask", "end to end") or is a pasted spec marked `Status: ready-for-agent`.
 2. **A blocking user decision** per `references/aidlc.md` §0 step 4 (security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, contradictory sources), after Rovo was searched for it. Ask once, batched, with your recommendation; continue the rest while you wait only when it is independent. Delegated input has no such stop: record the decision (`RISK-ACCEPTANCE NEEDED:` when it accepts a risk) and continue.
-3. **Merge and deploy** need words for it in the input ("merge", "release", "deploy"); otherwise stop with the PR open and `shipped`, and give `/tea-sdlc:ship merge` as the next command.
+3. **Merge and deploy** need words for it in the input ("merge", "release", "deploy"); otherwise stop with the PR open and `shipped`, and give `/aegisops-harness:ship merge` as the next command.
 
 A gate that fails is not a stop: fix what it names and rerun.
 

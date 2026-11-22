@@ -104,7 +104,7 @@ def read_stream(path):
 
 
 def bare(name):
-    """`tea-sdlc:spec` -> `spec`."""
+    """`aegisops-harness:spec` -> `spec`."""
     return str(name).split(':')[-1]
 
 

@@ -47,7 +47,7 @@ Below, `aidlc` is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py"` and `<f>` i
 Give every finding a `file:line` verified with Read or Grep, and a confidence. Do not self-filter. Check:
 - Conformance with `${CLAUDE_PLUGIN_ROOT}/rules/patterns.md`: the envelope, boundary error handling, the repository pattern, DTO validation.
 - Each control in the spec's security decisions. Without them: no committed secrets, parameterized queries, boundary validation, no PII in logs, least privilege.
-- Docs: the spec artifacts its stage requires exist and match the code, and architectural changes have ADRs. Living docs are promoted after GO, so do not block on them. A `/tea-sdlc:fix` change (no spec) must update the affected living docs itself.
+- Docs: the spec artifacts its stage requires exist and match the code, and architectural changes have ADRs. Living docs are promoted after GO, so do not block on them. A `/aegisops-harness:fix` change (no spec) must update the affected living docs itself.
 - Commits are atomic and `type(scope): description`.
 
 | Severity | Meaning | Release |

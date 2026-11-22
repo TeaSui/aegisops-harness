@@ -1,15 +1,15 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
-  "name": "tea-sdlc",
-  "version": "4.1.0",
-  "description": "Slash-command driven backend lifecycle for Claude Code: spec \u2192 plan \u2192 build \u2192 verify \u2192 review \u2192 ship with code-enforced gates, requirement-to-test traceability and parallel backend subagents; /tea-sdlc:fix for bug fixes without a spec.",
+  "name": "aegisops-harness",
+  "version": "5.0.0",
+  "description": "Slash-command driven backend lifecycle for Claude Code: spec \u2192 plan \u2192 build \u2192 verify \u2192 review \u2192 ship with code-enforced gates, requirement-to-test traceability and parallel backend subagents; /aegisops-harness:fix for bug fixes without a spec.",
   "author": {
     "name": "Tea Nguyen",
     "email": "nguyenminhtung.developer@gmail.com",
     "url": "https://github.com/TeaSui"
   },
-  "homepage": "https://github.com/TeaSui/tea-sdlc",
-  "repository": "https://github.com/TeaSui/tea-sdlc",
+  "homepage": "https://github.com/TeaSui/aegisops-harness",
+  "repository": "https://github.com/TeaSui/aegisops-harness",
   "license": "MIT",
   "keywords": [
     "agents",

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Question gate hook (PreToolUse AskUserQuestion; fails open). Enforces references/aidlc.md §0 inside tea-sdlc commands.
+"""Question gate hook (PreToolUse AskUserQuestion; fails open). Enforces references/aidlc.md §0 inside AegisOps-Harness commands.
 
-Only acts after a tea-sdlc work command (`/tea-sdlc:aidlc`, a stage command, `fix`, `prompt-builder`) ran in this
-session; plain Claude Code sessions and `/tea-sdlc:grilling` (an interview by design) are untouched.
+Only acts after an AegisOps-Harness work command (`/aegisops-harness:aidlc`, a stage command, `fix`, `prompt-builder`) ran in this
+session; plain Claude Code sessions and `/aegisops-harness:grilling` (an interview by design) are untouched.
   * Delegated input (`do not ask`, `not available for questions`, `end to end`, `Status: ready-for-agent`, ...):
     every question is blocked. The decision becomes a recorded assumption, marked RISK-ACCEPTANCE NEEDED when it
     accepts a security or compliance risk, and the final report lists it.
   * Otherwise: the first question of a command run is blocked when no Atlassian (Rovo) tool was called since the
     command started. A retry passes, so a session without Rovo is never stuck.
-Off with TEA_SDLC_QUESTION_GATE=off. State: ~/.claude/state/question-gate/<session>.json
+Off with AEGISOPS_HARNESS_QUESTION_GATE=off. State: ~/.claude/state/question-gate/<session>.json
 """
 import json
 import os
@@ -18,7 +18,7 @@ import sys
 
 STATE_DIR = pathlib.Path.home() / '.claude' / 'state' / 'question-gate'
 COMMANDS = ('aidlc', 'spec', 'plan', 'build', 'verify', 'review', 'ship', 'fix', 'prompt-builder')
-COMMAND = re.compile(r'<command-name>/?tea-sdlc:([\w-]+)</command-name>')
+COMMAND = re.compile(r'<command-name>/?aegisops-harness:([\w-]+)</command-name>')
 ARGS = re.compile(r'<command-args>(.*?)</command-args>', re.S)
 DELEGATED = re.compile(r"\b(?:do not|don't|dont|never) ask\b|\bnot available for questions\b|\bwithout asking\b"
                        r"|\bno questions\b|\bend[ -]to[ -]end\b|^\s*Status:\s*ready-for-agent\s*$", re.I | re.M)
@@ -34,7 +34,7 @@ def text_of(content):
 
 
 def scan(transcript):
-    """(command, args, command entry uuid, Rovo called since it) for the latest tea-sdlc command in the transcript."""
+    """(command, args, command entry uuid, Rovo called since it) for the latest AegisOps-Harness command in the transcript."""
     command = args = uuid = None
     rovo = False
     try:
@@ -63,7 +63,7 @@ def scan(transcript):
 
 
 def main():
-    if os.environ.get('TEA_SDLC_QUESTION_GATE', '').lower() == 'off':
+    if os.environ.get('AEGISOPS_HARNESS_QUESTION_GATE', '').lower() == 'off':
         return 0
     try:
         payload = json.load(sys.stdin)
@@ -77,7 +77,7 @@ def main():
     command, args, uuid, rovo = found
     if DELEGATED.search(args):
         sys.stderr.write(
-            f'question-gate: /tea-sdlc:{command} was started with every decision delegated ("do not ask", '
+            f'question-gate: /aegisops-harness:{command} was started with every decision delegated ("do not ask", '
             '"end to end" or Status: ready-for-agent), so do not ask the user. For each open question: take your '
             'recommended option and record it (at the spec stage under Assumptions in spec.md, later with '
             '`aidlc ruling <spec> --decision "<decision>" --why "<reasoning; sources checked>" --if-wrong "<impact>"`). When it accepts a security or '
@@ -98,7 +98,7 @@ def main():
     except OSError:
         pass
     sys.stderr.write(
-        f'question-gate: no Atlassian Rovo search ran since /tea-sdlc:{command} started. Before asking the user, '
+        f'question-gate: no Atlassian Rovo search ran since /aegisops-harness:{command} started. Before asking the user, '
         'search Rovo for each question (`search` with the domain terms, then `fetch` / `getConfluencePage` / '
         '`getJiraIssue`), record what settled it under Sources, and drop the questions it answers. A question with '
         'a safe default that is not a security, compliance, money or irreversible decision is a recorded assumption, '

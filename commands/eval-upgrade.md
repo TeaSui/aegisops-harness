@@ -4,7 +4,7 @@ disable-model-invocation: true
 argument-hint: "[eval | dashboard | arena <challenger|duel|status|promote|discard> <artifact-id> [rounds] | config] [--target <dir>] [--types agents,commands,rules,skills] [--llm]"
 ---
 
-# /tea-sdlc:eval-upgrade
+# /aegisops-harness:eval-upgrade
 
 Run the bundled tool for `$ARGUMENTS` and report what it printed. With no arguments, run a static evaluation. The tool needs Node ≥20. For anything beyond this page, read `${CLAUDE_PLUGIN_ROOT}/tools/eval-upgrade/README.md`. Hooks are out of scope.
 

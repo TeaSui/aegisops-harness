@@ -1,6 +1,6 @@
 # Spec compliance reviewer template (per ticket)
 
-Send to `tea-sdlc:code-reviewer` (or `general-purpose`). Fill every `[…]`.
+Send to `aegisops-harness:code-reviewer` (or `general-purpose`). Fill every `[…]`.
 
 ```
 description: "Spec compliance review T<n>"

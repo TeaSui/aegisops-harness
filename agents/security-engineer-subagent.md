@@ -43,7 +43,7 @@ Open decisions:
 
 `Open decisions` lists every question you could not settle from the files, each with your recommended answer and the rules written for it; "none" when there are none. The rules already assume the recommendation, so the spec is complete either way.
 
-Never edit the living `docs/security.md`; `/tea-sdlc:upgrade-service-docs` promotes the rules as `<feature>/AUTHZ-01`. Keep secrets and PII out of the text.
+Never edit the living `docs/security.md`; `/aegisops-harness:upgrade-service-docs` promotes the rules as `<feature>/AUTHZ-01`. Keep secrets and PII out of the text.
 
 ## Open decisions, not blockers
 These go under `Open decisions` with options and a recommendation, never as a question for the user:

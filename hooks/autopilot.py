@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tea-sdlc session hooks. Nothing here starts a workflow or loads a skill: tea-sdlc acts only through its
+"""AegisOps-Harness session hooks. Nothing here starts a workflow or loads a skill: AegisOps-Harness acts only through its
 slash commands (skills/session-bootstrap/SKILL.md lists them).
 
   post      PostToolUse   Edit|Write|MultiEdit|Bash: remember code edited since the last test run.
@@ -8,8 +8,8 @@ slash commands (skills/session-bootstrap/SKILL.md lists them).
   subagent  SubagentStart the rules a dispatched subagent must follow (it never sees the bootstrap).
   snapshot  (session-start) the active specs, their stage and the next command.
 
-Any internal error is silent. Off with TEA_SDLC_VERIFY_GATE=off (stop).
-State: ~/.claude/state/tea-sdlc/autopilot/<session>.json
+Any internal error is silent. Off with AEGISOPS_HARNESS_VERIFY_GATE=off (stop).
+State: ~/.claude/state/aegisops-harness/autopilot/<session>.json
 """
 import hashlib
 import importlib.util
@@ -21,7 +21,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 PLUGIN_ROOT = HERE.parent
-STATE_DIR = pathlib.Path.home() / '.claude' / 'state' / 'tea-sdlc' / 'autopilot'
+STATE_DIR = pathlib.Path.home() / '.claude' / 'state' / 'aegisops-harness' / 'autopilot'
 NOTE_LIMIT = 1500
 MAX_STOP_REMINDERS = 3
 
@@ -37,7 +37,7 @@ tdd = _load_tdd()
 
 
 def command(name):
-    return '/tea-sdlc:' + name
+    return '/aegisops-harness:' + name
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -156,7 +156,7 @@ def stop(payload, session, cwd):
     state.setdefault('reminded', []).append(fingerprint)
     save_state(session, state)
     shown = ', '.join(dirty[:6]) + (f' and {len(dirty) - 6} more' if len(dirty) > 6 else '')
-    return (f'tea-sdlc verification: code changed since the last test run in this session ({shown}). Before you '
+    return (f'AegisOps-Harness verification: code changed since the last test run in this session ({shown}). Before you '
             f'finish, run the relevant tests and show the result, or say '
             'in your reply why no test applies to this change. This reminder appears once per change set.')
 
@@ -195,7 +195,7 @@ NEXT_STEP = {
     'reviewed': command('ship'),
     'shipped': command('upgrade-service-docs') + ' after the merge',
 }
-STATE_ROOTS = ('tdd', 'contract-gate', 'tea-sdlc/autopilot')
+STATE_ROOTS = ('tdd', 'contract-gate', 'AegisOps-Harness/autopilot')
 STATE_MAX_AGE_DAYS = 30
 
 
@@ -214,7 +214,7 @@ def prune_state(now=None):
 
 
 def load_aidlc():
-    spec = importlib.util.spec_from_file_location('tea_sdlc_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
+    spec = importlib.util.spec_from_file_location('aegisops_harness_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -264,7 +264,7 @@ def snapshot(cwd, which=None):
     lines, user = spec_lines(root), None
     if not which('gitleaks'):
         lines.append('gitleaks is not installed: the security gate will block git commit/push until it is.')
-        user = 'tea-sdlc: gitleaks is not installed, so git commit/push will be blocked. Install: brew install gitleaks'
+        user = 'aegisops-harness: gitleaks is not installed, so git commit/push will be blocked. Install: brew install gitleaks'
     return lines, user
 
 
@@ -277,7 +277,7 @@ def subagent_rules(agent_type):
         return ''
     rules = PLUGIN_ROOT / 'rules'
     return '\n'.join((
-        'tea-sdlc rules for this subagent (the main session dispatched you; its bootstrap does not reach you):',
+        'AegisOps-Harness rules for this subagent (the main session dispatched you; its bootstrap does not reach you):',
         '- You are a leaf: do not dispatch further agents. If the task needs more, return the dispatch plan and stop.',
         f'- Return a status (DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT or BLOCKED), evidence paths the dispatcher can '
         f'Read, and a check of each exit criterion ({rules}/subagent-return-format.md).',
@@ -311,7 +311,7 @@ def main():
         rules = subagent_rules(payload.get('agent_type', ''))
         if rules:
             emit('SubagentStart', rules)
-    elif mode == 'stop' and session and os.environ.get('TEA_SDLC_VERIFY_GATE', '').lower() != 'off':
+    elif mode == 'stop' and session and os.environ.get('AEGISOPS_HARNESS_VERIFY_GATE', '').lower() != 'off':
         reason = stop(payload, session, cwd)
         if reason:
             print(json.dumps({'decision': 'block', 'reason': reason}))
@@ -319,7 +319,7 @@ def main():
 
 
 def emit(event, note):
-    note = '<tea-sdlc>\n' + note[:NOTE_LIMIT - 60] + '\n</tea-sdlc>'
+    note = '<AegisOps-Harness>\n' + note[:NOTE_LIMIT - 60] + '\n</aegisops-harness>'
     print(json.dumps({'hookSpecificOutput': {'hookEventName': event, 'additionalContext': note}}, ensure_ascii=False))
 
 

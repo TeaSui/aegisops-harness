@@ -1,10 +1,10 @@
-# tea-sdlc
+# AegisOps-Harness
 
 > The backend engineering lifecycle for Claude Code: **spec → plan → build → verify → review → ship**, started only by slash commands and held by gates.
 
 **Version 4.0.0** · [How it works (one page)](HOW-IT-WORKS.md) · [Changelog](CHANGELOG.md) · MIT
 
-tea-sdlc does nothing until you run one of its commands. No keyword in a prompt starts a workflow and the model cannot load a tea-sdlc skill on its own (every skill has `disable-model-invocation: true`, and `check-setup.py` fails if one does not). Inside a command each stage is a fixed file, support skills are chosen from the repository's files, business questions go to Atlassian Rovo before a person, and every stage ends at an `aidlc` gate.
+AegisOps-Harness does nothing until you run one of its commands. No keyword in a prompt starts a workflow and the model cannot load an AegisOps-Harness skill on its own (every skill has `disable-model-invocation: true`, and `check-setup.py` fails if one does not). Inside a command each stage is a fixed file, support skills are chosen from the repository's files, business questions go to Atlassian Rovo before a person, and every stage ends at an `aidlc` gate.
 
 ---
 
@@ -13,14 +13,14 @@ tea-sdlc does nothing until you run one of its commands. No keyword in a prompt 
 ### From the marketplace (recommended)
 
 ```text
-/plugin marketplace add TeaSui/tea-sdlc
-/plugin install tea-sdlc@tea-sdlc
+/plugin marketplace add TeaSui/aegisops-harness
+/plugin install aegisops-harness@AegisOps-Harness
 ```
 
 ### From a local clone (development)
 
 ```bash
-claude --plugin-dir /path/to/tea-sdlc
+claude --plugin-dir /path/to/aegisops-harness
 ```
 
 ### Updating
@@ -28,7 +28,7 @@ claude --plugin-dir /path/to/tea-sdlc
 Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commits without bumping it does not reach installed users. Third-party marketplaces do not auto-update by default:
 
 ```text
-/plugin marketplace update tea-sdlc
+/plugin marketplace update AegisOps-Harness
 /reload-plugins
 ```
 
@@ -58,33 +58,33 @@ Check with `python3 <plugin>/scripts/pr.py auth` in the repository: exit 0 means
 
 | Situation | Command |
 |---|---|
-| Turn a rough idea into an input that meets the AIDLC standard | `/tea-sdlc:prompt-builder <idea>` |
-| New backend feature or behaviour change (request or pasted to-spec spec) | `/tea-sdlc:aidlc <request or spec>` |
-| Interview me first on open decisions | `/tea-sdlc:grilling <topic>` |
-| One stage at a time | `/tea-sdlc:spec` · `/tea-sdlc:plan` · `/tea-sdlc:build` · `/tea-sdlc:verify` · `/tea-sdlc:review` · `/tea-sdlc:ship` |
-| Where is every spec, and what next | `/tea-sdlc:aidlc` (no argument) |
-| Resume after `/clear` or a new session | `/tea-sdlc:aidlc <slug>` |
-| Bug fix or small change, no new decision | `/tea-sdlc:fix <bug>` |
-| Review comments arrived | `/tea-sdlc:receiving-code-review <PR or comments>` |
-| After the merge | `/tea-sdlc:upgrade-service-docs` |
-| Service has no living docs | `/tea-sdlc:generate-service-docs` |
-| A second opinion | `/tea-sdlc:reframe` · `/tea-sdlc:expert-lens` |
-| Score, upgrade or A/B-duel part of the plugin | `/tea-sdlc:eval-upgrade` |
+| Turn a rough idea into an input that meets the AIDLC standard | `/aegisops-harness:prompt-builder <idea>` |
+| New backend feature or behaviour change (request or pasted to-spec spec) | `/aegisops-harness:aidlc <request or spec>` |
+| Interview me first on open decisions | `/aegisops-harness:grilling <topic>` |
+| One stage at a time | `/aegisops-harness:spec` · `/aegisops-harness:plan` · `/aegisops-harness:build` · `/aegisops-harness:verify` · `/aegisops-harness:review` · `/aegisops-harness:ship` |
+| Where is every spec, and what next | `/aegisops-harness:aidlc` (no argument) |
+| Resume after `/clear` or a new session | `/aegisops-harness:aidlc <slug>` |
+| Bug fix or small change, no new decision | `/aegisops-harness:fix <bug>` |
+| Review comments arrived | `/aegisops-harness:receiving-code-review <PR or comments>` |
+| After the merge | `/aegisops-harness:upgrade-service-docs` |
+| Service has no living docs | `/aegisops-harness:generate-service-docs` |
+| A second opinion | `/aegisops-harness:reframe` · `/aegisops-harness:expert-lens` |
+| Score, upgrade or A/B-duel part of the plugin | `/aegisops-harness:eval-upgrade` |
 
 What each command loads, which gate stops it and which files it leaves: [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 
 ## 🔎 Questions during the lifecycle
 
-Files first (spec, `GLOSSARY.md`, ADRs, code, tests), then **Atlassian Rovo MCP** (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption. A person is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or sources that contradict each other (`references/aidlc.md` §0), and never when the input says "do not ask", "end to end" or `Status: ready-for-agent`: then the decision is recorded (`RISK-ACCEPTANCE NEEDED:` when it accepts a risk) and listed first in the final report. `hooks/question-gate.py` enforces both: inside a tea-sdlc command, a question in delegated input is blocked, and the first question asked before any Rovo search is sent back. Every source and assumption is listed in the spec and the final report.
+Files first (spec, `GLOSSARY.md`, ADRs, code, tests), then **Atlassian Rovo MCP** (`search`, then `fetch` / `getConfluencePage` / `getJiraIssue`), then a recorded assumption. A person is asked only for a security or compliance risk, money or regulatory behaviour with no source, an irreversible or production action, or sources that contradict each other (`references/aidlc.md` §0), and never when the input says "do not ask", "end to end" or `Status: ready-for-agent`: then the decision is recorded (`RISK-ACCEPTANCE NEEDED:` when it accepts a risk) and listed first in the final report. `hooks/question-gate.py` enforces both: inside an AegisOps-Harness command, a question in delegated input is blocked, and the first question asked before any Rovo search is sent back. Every source and assumption is listed in the spec and the final report.
 
 ## 🤖 Agents
 
 | Agent | Used in | Model |
 |---|---|---|
-| `tea-sdlc:security-engineer-subagent` | spec: the `### Security` section of a trust-boundary spec | sonnet |
-| `tea-sdlc:backend-engineer-subagent` | build: tickets of a parallel batch (a lone ticket is built in the main session) | sonnet |
-| `tea-sdlc:code-reviewer` | build and review: Spec and Standards axes | sonnet |
-| `tea-sdlc:qa-subagent` | review: QA verdict against the stories | sonnet |
+| `aegisops-harness:security-engineer-subagent` | spec: the `### Security` section of a trust-boundary spec | sonnet |
+| `aegisops-harness:backend-engineer-subagent` | build: tickets of a parallel batch (a lone ticket is built in the main session) | sonnet |
+| `aegisops-harness:code-reviewer` | build and review: Spec and Standards axes | sonnet |
+| `aegisops-harness:qa-subagent` | review: QA verdict against the stories | sonnet |
 
 ## ✅ Validating changes
 

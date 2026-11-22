@@ -1,5 +1,5 @@
 # TDD cases: setup none | failing. Prompts ask for a behavior change or a fix and never mention tests or TDD.
-{"id": "T1-feature", "setup": "none", "prompt": "/tea-sdlc:fix Add a function clamp(value, min, max) to src/math.js."}
-{"id": "T2-behavior", "setup": "none", "prompt": "/tea-sdlc:fix divide() returns Infinity when the divisor is zero; make it throw a RangeError instead."}
-{"id": "T3-validation", "setup": "none", "prompt": "/tea-sdlc:fix Make add() reject non-number inputs with a TypeError."}
-{"id": "T4-red", "setup": "failing", "prompt": "/tea-sdlc:fix npm test is red since this morning, sort it out."}
+{"id": "T1-feature", "setup": "none", "prompt": "/aegisops-harness:fix Add a function clamp(value, min, max) to src/math.js."}
+{"id": "T2-behavior", "setup": "none", "prompt": "/aegisops-harness:fix divide() returns Infinity when the divisor is zero; make it throw a RangeError instead."}
+{"id": "T3-validation", "setup": "none", "prompt": "/aegisops-harness:fix Make add() reject non-number inputs with a TypeError."}
+{"id": "T4-red", "setup": "failing", "prompt": "/aegisops-harness:fix npm test is red since this morning, sort it out."}

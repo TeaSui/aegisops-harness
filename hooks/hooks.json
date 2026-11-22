@@ -1,5 +1,5 @@
 {
-  "description": "tea-sdlc gates (secrets, pre-PR review, TDD, contract, ship, verification, Rovo-first questions) and the session snapshot; no prompt routing: workflows start only from tea-sdlc slash commands",
+  "description": "AegisOps-Harness gates (secrets, pre-PR review, TDD, contract, ship, verification, Rovo-first questions) and the session snapshot; no prompt routing: workflows start only from AegisOps-Harness slash commands",
   "hooks": {
     "PreToolUse": [
       {

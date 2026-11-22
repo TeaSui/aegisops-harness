@@ -8,7 +8,7 @@ A full-workflow change is bound to its branch by `aidlc advance <spec> building`
 - refuses a PR whose head is not the commit checked locally, and a PR named through a variable.
 Branches with no bound spec (fast path, chores) are not gated. Blocks only on real findings; an infrastructure error
 (gh unavailable, engine unreadable, branch not fetched) lets the merge through with a note. Off with
-TEA_SDLC_SHIP_GATE=off. Spec: references/aidlc.md.
+AEGISOPS_HARNESS_SHIP_GATE=off. Spec: references/aidlc.md.
 """
 import importlib.util
 import json
@@ -87,14 +87,14 @@ def pr_head(target, cwd):
 
 
 def load_pr():
-    spec = importlib.util.spec_from_file_location('tea_sdlc_pr', PLUGIN_ROOT / 'scripts' / 'pr.py')
+    spec = importlib.util.spec_from_file_location('aegisops_harness_pr', PLUGIN_ROOT / 'scripts' / 'pr.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
 def load_engine():
-    spec = importlib.util.spec_from_file_location('tea_sdlc_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
+    spec = importlib.util.spec_from_file_location('aegisops_harness_aidlc', PLUGIN_ROOT / 'scripts' / 'aidlc.py')
     aidlc = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(aidlc)
     return aidlc
@@ -120,7 +120,7 @@ def problems_in(aidlc, root, branch):
 
 def in_worktree(top, ref, fn):
     """Run fn(path) on a temporary detached checkout of `ref`, so the gate sees the branch being merged."""
-    tmp = tempfile.mkdtemp(prefix='tea-sdlc-ship-gate-')
+    tmp = tempfile.mkdtemp(prefix='AegisOps-Harness-ship-gate-')
     try:
         if run(['git', 'worktree', 'add', '--detach', '--quiet', tmp, ref], top, timeout=120) is None:
             raise RuntimeError(f'could not check out {ref}')
@@ -136,7 +136,7 @@ def deny(lines):
 
 
 def main():
-    if os.environ.get('TEA_SDLC_SHIP_GATE', '').lower() == 'off':
+    if os.environ.get('AEGISOPS_HARNESS_SHIP_GATE', '').lower() == 'off':
         return 0
     try:
         payload = json.load(sys.stdin)
@@ -189,7 +189,7 @@ def main():
     for rel, stage, findings in problems:
         lines.append(f'  {rel} (stage {stage}):')
         lines.extend(f'    - {finding}' for finding in findings[:8])
-    lines.append(f'Finish the ship stage (/tea-sdlc:ship): write ship.md (GO, rollback, post-release '
+    lines.append(f'Finish the ship stage (/aegisops-harness:ship): write ship.md (GO, rollback, post-release '
                  f'verification), then `{cli} advance <spec> shipped`, then merge.')
     return deny(lines)
 

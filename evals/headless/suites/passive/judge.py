@@ -1,5 +1,5 @@
-"""Passive suite judge. tea-sdlc starts only from slash commands, so a natural prompt must load nothing of it:
-a case with "silent": true passes when the session invoked no tea-sdlc skill, command or agent. A case with
+"""Passive suite judge. AegisOps-Harness starts only from slash commands, so a natural prompt must load nothing of it:
+a case with "silent": true passes when the session invoked no AegisOps-Harness skill, command or agent. A case with
 "expect" passes when the session invoked any expected skill or agent (kept for command cases)."""
 import harness
 
@@ -8,7 +8,7 @@ def judge(case, stream, repo=None, plugin_dir=None):
     invoked = stream['skills'] + stream['agents']
     first_tools = [call['name'] for call in stream['calls'][:8]]
     if case.get('silent'):
-        ours = [name for name in invoked if str(name).startswith('tea-sdlc:')]
+        ours = [name for name in invoked if str(name).startswith('aegisops-harness:')]
         summary = ('silent' if not ours else 'activated: ' + ', '.join(ours))
         return {'pass': not ours, 'score': 0.0 if ours else 1.0, 'hit': ours, 'skills': stream['skills'],
                 'agents': stream['agents'], 'first_tools': first_tools, 'summary': summary}
