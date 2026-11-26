@@ -48,6 +48,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}  # the head, not the merge commit: the review is stamped on it
           fetch-depth: 0                                   # the base branch and the merge base
+          persist-credentials: false                       # the pull request's own suite runs in this job
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

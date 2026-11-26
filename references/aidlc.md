@@ -281,6 +281,9 @@ Three layers; only the last one is enforcement.
 3. **`aidlc ci` as a required status check on a protected branch**, with a required review by a person (CODEOWNERS on `.aidlc.json`, `docs/specs/`, the scripts and workflow the pinned command and the gate job run), enforces: the session cannot write CI's result, the base branch's config, or another person's approval. Switching branch protection on is the repository owner's act.
 
 Limits of the hooks and local gates that this release knows and does not close (each is why layer 3 exists):
+- `git add … && git commit` in one command: the scan runs before the command, when nothing is staged yet, so an untracked file added by the same line is not scanned (`git commit -a` and paths on the line are). Run the add first, or rely on CI and the host's secret scanning. This predates 6.0.0.
+- A merge made with `curl` against GitHub's GraphQL endpoint, or `gh api graphql` with the query in a file, is not seen; `gh pr merge N -R other/repo` is judged by this checkout, not the other repository.
+- A baseline counts as stale when it was measured on another `major.minor` plugin version; a patch release does not flag it.
 - A command read from shell text is read for the forms a session writes by default. A pipe into a shell (`echo "git push" | sh`), a here-string, a line continuation inside a word, an alias or a script are not seen.
 - GitHub MCP tools that write file content (`push_files`, `create_or_update_file`) are not routed to the secret scan; only creating and merging a pull request is gated. CI and the repository's own secret scanning are the backstop.
 - The revert check proves the suite goes red without the change. With JUnit it also needs a story test that stopped passing; without a usable report a red exit is all it can see, so a test that only imports a new module goes red when that file is removed. Keep JUnit on.

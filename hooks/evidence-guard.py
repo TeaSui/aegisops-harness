@@ -169,17 +169,37 @@ def approve_refusal(arguments, transcript):
             'decision, record that instead: `aidlc approve <spec> --delegated`.')
 
 
+COPIERS = ('cp', 'ln', 'install')  # only the last operand is written; the others are read
+
+
 def shell_targets(command, tdd):
-    """Paths a shell command writes, removes or moves: redirect targets, `sed -i` operands and the operands of rm, mv,
-    cp, tee and the like."""
-    targets = list(tdd.REDIRECT.findall(command))
+    """Paths a shell command writes, removes or moves: redirect targets, `sed -i` operands, the operands of rm, mv,
+    tee and the like, the destination of cp, `of=` of dd, and what `git checkout|restore <rev> -- <path>` rewrites.
+    A relative path is read against the folder the last `cd` moved to."""
+    where, targets = '', []
+
+    def at(path):
+        path = path.strip('\'"')
+        return str(pathlib.PurePosixPath(where) / path) if where and not path.startswith('/') else path
+
     for part in tdd.segments(command):
         tokens = words(part)
-        if tokens and (pathlib.PurePosixPath(tokens[0]).name in WRITERS or tdd.INPLACE.search(part)):
-            targets += tokens[1:]
+        if tokens and tokens[0] == 'cd' and len(tokens) > 1 and not tokens[1].startswith('-'):
+            where = str(pathlib.PurePosixPath(where) / tokens[1]) if where else tokens[1]
+            continue
+        found = [at(t) for t in tdd.REDIRECT.findall(part)]
+        name = pathlib.PurePosixPath(tokens[0]).name if tokens else ''
+        if name in COPIERS:
+            operands = [t for t in tokens[1:] if not t.startswith('-')]
+            found += [at(operands[-1])] if operands else []
+        elif name in WRITERS or tdd.INPLACE.search(part):
+            found += [at(t[3:] if t.startswith('of=') else t) for t in tokens[1:]]
+        elif name == 'git' and any(t in ('checkout', 'restore', 'apply') for t in tokens[1:3]) and '--' in tokens:
+            found += [at(t) for t in tokens[tokens.index('--') + 1:]]
         if 'tee' in tokens:
-            targets += tokens[tokens.index('tee') + 1:]
-    return [target.strip('\'"') for target in targets]
+            found += [at(t) for t in tokens[tokens.index('tee') + 1:]]
+        targets += found
+    return targets
 
 
 def main():
@@ -207,7 +227,7 @@ def main():
                                       'agent returns (hooks/record-returns.py), not by the session that was reviewed. '
                                       'Dispatch the reviewer in the foreground and its return is recorded; a person can '
                                       'record one from their own terminal.')
-        if refusal is None and 'docs/specs/' in command.replace('\\', '/'):
+        if refusal is None and re.search(r'specs|ledger\.md|returns', command):
             tdd = load('tdd_gate', 'tdd-gate.py')
             written = next((t for t in shell_targets(command, tdd) if EVIDENCE.search(t.replace('\\', '/'))), None)
             if written:

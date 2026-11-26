@@ -123,6 +123,21 @@ class ApprovalGuardTest(GuardCase):
 class EvidenceFilesTest(GuardCase):
     """ETA-7: the ledger and the stored reviewer returns are written by `aidlc` only."""
 
+    def test_eta_7_a_relative_path_after_cd_and_other_write_shapes_are_refused(self):
+        entries = [command('review', 'refunds')]
+        for text in ('cd docs/specs/refunds && echo x >> ledger.md', 'cd docs/specs/refunds && rm ledger.md',
+                     'cd docs/specs/refunds; rm returns/a.md', 'dd if=/tmp/x of=docs/specs/refunds/ledger.md',
+                     'git checkout abc123 -- docs/specs/refunds/ledger.md',
+                     'git restore --source=HEAD~3 -- docs/specs/refunds/returns', 'cp /tmp/x docs/specs/refunds/ledger.md',
+                     'mv /tmp/x docs/specs/refunds/ledger.md', 'cd docs && cd specs/refunds && tee ledger.md'):
+            self.assertEqual(self.bash(text, entries)[0], 2, text)
+
+    def test_eta_7_reading_the_ledger_is_not_writing_it(self):
+        entries = [command('review', 'refunds')]
+        for text in ('cp docs/specs/refunds/ledger.md /tmp/backup', 'cd docs/specs/refunds && cat ledger.md',
+                     'cd docs/specs/refunds && cp ledger.md /tmp/l.md', 'ln -s docs/specs/refunds/ledger.md /tmp/l'):
+            self.assertEqual(self.bash(text, entries)[0], 0, text)
+
     def test_eta_7_the_model_cannot_store_a_reviewers_return_itself(self):
         code, err = self.bash(AIDLC + ' attest refunds --agent aegisops-harness:code-reviewer --axis spec --file r.md',
                               [command('review', 'refunds')])
