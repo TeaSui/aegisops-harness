@@ -125,6 +125,22 @@ def version_drift(root, version):
     return errors
 
 
+def stale_baseline(root, version):
+    """Warn when the eval baseline was measured on another minor version: its numbers describe that plugin."""
+    try:
+        suites = json.loads((root / 'evals' / 'headless' / 'baseline.json').read_text()).get('suites', {})
+    except (OSError, ValueError, AttributeError):
+        return []
+    now = version.split('.')[:2]
+    old = sorted({str(entry.get('plugin_version')) for entry in suites.values()
+                  if isinstance(entry, dict) and entry.get('plugin_version')
+                  and str(entry['plugin_version']).split('.')[:2] != now})
+    if not old:
+        return []
+    return ['evals/headless/baseline.json was measured on plugin %s; this is %s. Its scores describe that version: '
+            're-run the paid suites with --update-baseline.' % (', '.join(old), version)]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent)
@@ -161,6 +177,7 @@ def main():
         if 'version' in entry and entry['version'] != plugin.get('version'):
             errors.append('marketplace.json version differs from plugin.json')
     errors.extend(version_drift(root, str(plugin.get('version', ''))))
+    warnings.extend(stale_baseline(root, str(plugin.get('version', ''))))
     try:
         hooks = json.loads((root / 'hooks/hooks.json').read_text())
         for command in re.findall(r'\$\{CLAUDE_PLUGIN_ROOT\}/([^"\s]+)', json.dumps(hooks)):

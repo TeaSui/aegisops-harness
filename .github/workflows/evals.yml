@@ -33,6 +33,12 @@ jobs:
       RUNS: ${{ github.event.inputs.runs || '1' }}
       MODEL: ${{ github.event.inputs.model || '' }}
     steps:
+      - name: Stop without an API key (a session that reaches no model is not a measurement)
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY is not set: add the repository secret, or disable this schedule."
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:

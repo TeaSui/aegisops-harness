@@ -9,7 +9,8 @@ These suites cost money (each run is a full Claude Code session). Suites live in
 
 Examples
   run.py --suite passive --runs 1 --parallel 6
-  run.py --suite passive,tdd --runs 3 --compare            # exit 1 on a regression against baseline.json
+  run.py --suite passive,tdd --runs 3 --compare            # exit 1 on a regression against baseline.json,
+                                                           # exit 3 when too few runs were judged (no signal)
   run.py --suite tdd --rejudge evals/headless/results/X    # re-judge recorded sessions, no model calls
   run.py --suite passive --cases 01-feature,03-expert --runs 1
   run.py --suite tdd --runs 3 --update-baseline            # accept these scores as the new baseline
@@ -179,6 +180,9 @@ def main(argv=None):
                         help='allowed pass-rate drop before a regression is considered (default 0.10)')
     parser.add_argument('--strict', action='store_true',
                         help='fail on any drop beyond the tolerance, even when the Wilson interval reaches the baseline')
+    parser.add_argument('--min-judged', type=float, default=0.8,
+                        help='share of the planned runs that must be judged (not excluded as infrastructure) for a '
+                             'suite to count; below it --compare and --update-baseline exit 3 (default 0.8)')
     parser.add_argument('--update-baseline', action='store_true', help='write these scores into the baseline file')
     args = parser.parse_args(argv)
 
@@ -228,7 +232,8 @@ def main(argv=None):
         baseline = json.loads(args.baseline.read_text())
     except (OSError, ValueError):
         baseline = {}
-    verdicts = harness.compare(summaries, baseline, args.tolerance, noise_guard=not args.strict)
+    verdicts = harness.compare(summaries, baseline, args.tolerance, noise_guard=not args.strict,
+                               min_judged=args.min_judged, plugin_version=meta['plugin_version'])
     results = {'meta': meta, 'suites': summaries, 'compare': verdicts, 'runs': all_runs,
                'tolerance': args.tolerance, 'strict': args.strict}
     (args.out / 'results.json').write_text(json.dumps(results, indent=2, default=str))
@@ -237,18 +242,23 @@ def main(argv=None):
     print('\n' + report.split('\n## ')[0])
     print('Results: %s\nReport:  %s' % (args.out / 'results.json', args.out / 'report.md'))
 
+    silent = [name for name, verdict in verdicts.items() if verdict.get('no_signal')]
     if args.update_baseline:
-        baseline.setdefault('suites', {})
-        for name, summary in summaries.items():
-            baseline['suites'][name] = harness.baseline_entry(summary, meta)
-        args.baseline.write_text(json.dumps(baseline, indent=2) + '\n')
-        print('Baseline updated: ' + ', '.join(summaries))
-    if args.compare:
-        regressions = [name for name, verdict in verdicts.items() if verdict['regression']]
-        if regressions:
-            print('REGRESSION: ' + ', '.join(regressions))
-            return 1
-    return 0
+        accepted = [name for name in summaries if name not in silent]  # never record a score nobody measured
+        if accepted:
+            baseline.setdefault('suites', {})
+            for name in accepted:
+                baseline['suites'][name] = harness.baseline_entry(summaries[name], meta)
+            args.baseline.write_text(json.dumps(baseline, indent=2) + '\n')
+            print('Baseline updated: ' + ', '.join(accepted))
+    regressions = [name for name, verdict in verdicts.items() if verdict['regression']] if args.compare else []
+    if regressions:
+        print('REGRESSION: ' + ', '.join(regressions))
+    if silent and (args.compare or args.update_baseline):
+        print('NO SIGNAL: ' + '; '.join('%s (%s)' % (name, verdicts[name]['notes'][0]) for name in silent))
+    if regressions:
+        return 1
+    return 3 if silent and (args.compare or args.update_baseline) else 0
 
 
 if __name__ == '__main__':

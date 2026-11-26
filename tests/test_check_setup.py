@@ -212,6 +212,22 @@ class PluginIntegrityTest(unittest.TestCase):
         changelog.write_text(changelog.read_text().replace('\n## ', '\n## 0.0.1 — 2020-01-01\n\nOld.\n\n## ', 1))
         self.assertIn('CHANGELOG.md leads with 0.0.1', ' '.join(self.check()['errors']))
 
+    def test_eta_12_stale_eval_baseline_is_a_warning(self):
+        baseline = self.root / 'evals' / 'headless' / 'baseline.json'
+        data = json.loads(baseline.read_text())
+        for entry in data['suites'].values():
+            entry['plugin_version'] = '0.1.0'
+        baseline.write_text(json.dumps(data))
+        report = self.check()
+        self.assertEqual(report['errors'], [])
+        self.assertTrue(any('baseline.json was measured on plugin 0.1.0' in w for w in report['warnings']),
+                        report['warnings'])
+        version = json.loads((self.root / '.claude-plugin' / 'plugin.json').read_text())['version']
+        for entry in data['suites'].values():
+            entry['plugin_version'] = version
+        baseline.write_text(json.dumps(data))
+        self.assertFalse(any('baseline.json' in w for w in self.check()['warnings']))
+
     def test_hook_with_syntax_error_fails(self):
         (self.root / 'hooks' / 'broken.py').write_text('def oops(:\n')
         self.assertIn('hooks/broken.py', ' '.join(self.check()['errors']))

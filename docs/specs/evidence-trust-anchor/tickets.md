@@ -13,11 +13,11 @@ Test: python3 -m unittest tests.test_autopilot tests.test_check_setup
 ## T2: Evals fail closed
 Blocked by: none
 Covers: ETA-10, ETA-12
-Status: ready-for-agent
+Status: done
 What to build: a session that never reached a model is excluded as infrastructure, a comparison with too few judged runs fails with its own exit code, and the report flags a baseline measured on another plugin version.
-- [ ] A result with no cost and no output tokens is reported as an infrastructure failure
-- [ ] A suite whose runs were all excluded fails the comparison
-- [ ] The report names a baseline from another plugin version
+- [x] A result with no cost and no output tokens is reported as an infrastructure failure
+- [x] A suite whose runs were all excluded fails the comparison
+- [x] The report names a baseline from another plugin version
 Test: python3 -m unittest tests.test_evals
 
 ## T3: Evals score the outcome

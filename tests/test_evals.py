@@ -206,6 +206,40 @@ class StatisticsTest(unittest.TestCase):
         verdict = harness.compare({'tdd': self.summary(1, 1, ['a'])}, base)['tdd']
         self.assertIn('case set differs from the baseline', verdict['notes'])
 
+    def test_eta_10_compare_needs_enough_judged_runs(self):
+        # 10 planned, 3 cut off: 7 judged is below the default 80%, so the comparison carries no signal.
+        runs = [{'case': 'c%d' % i, 'pass': True} for i in range(7)]
+        runs += [{'case': 'x%d' % i, 'pass': False, 'infra_error': 'usage limit'} for i in range(3)]
+        summary = harness.summarize(runs)
+        self.assertEqual((summary['total'], summary['planned']), (7, 10))
+        verdict = harness.compare({'tdd': summary}, self.BASELINE)['tdd']
+        self.assertEqual(verdict['status'], 'no-signal')
+        self.assertTrue(verdict['no_signal'])
+        self.assertIn('judged 7 of 10', ' '.join(verdict['notes']))
+        enough = harness.summarize(runs[:7] + [{'case': 'c8', 'pass': True}] + runs[7:9])
+        self.assertFalse(harness.compare({'tdd': enough}, self.BASELINE)['tdd'].get('no_signal'))
+        loose = harness.compare({'tdd': summary}, self.BASELINE, min_judged=0.5)['tdd']
+        self.assertFalse(loose.get('no_signal'))
+
+    def test_eta_10_no_signal_also_without_a_baseline(self):
+        empty = harness.summarize([{'case': 'c', 'pass': False, 'infra_error': 'no model turn'}])
+        verdict = harness.compare({'new-suite': empty}, {'suites': {}})['new-suite']
+        self.assertEqual(verdict['status'], 'no-signal')
+        self.assertTrue(verdict['no_signal'])
+
+    def test_eta_12_stale_baseline_is_flagged(self):
+        base = {'suites': {'tdd': {'passed': 8, 'total': 8, 'plugin_version': '4.0.0'}}}
+        verdict = harness.compare({'tdd': self.summary(8, 8)}, base, plugin_version='5.0.0')['tdd']
+        self.assertTrue(verdict['stale'])
+        self.assertIn('baseline measured on plugin 4.0.0, this is 5.0.0', ' '.join(verdict['notes']))
+        report = harness.markdown_report({'meta': {}, 'suites': {'tdd': self.summary(8, 8)}, 'compare': {'tdd': verdict},
+                                          'runs': {}})
+        self.assertIn('baseline measured on plugin 4.0.0', report)
+        patch = harness.compare({'tdd': self.summary(8, 8)}, base, plugin_version='4.0.3')['tdd']
+        self.assertFalse(patch['stale'])  # a patch release keeps the baseline
+        unknown = harness.compare({'tdd': self.summary(8, 8)}, self.BASELINE, plugin_version='5.0.0')['tdd']
+        self.assertFalse(unknown['stale'])  # a baseline that names no version cannot be called stale
+
     def test_summary_and_report(self):
         runs = [{'case': 'a', 'run': 1, 'pass': True, 'score': 1.0, 'cost_usd': 0.5, 'duration_ms': 3000,
                  'judge': {'summary': 'hit x|y'}},
@@ -244,6 +278,30 @@ class StreamAndJudgeTest(unittest.TestCase):
             parsed = harness.parse_stream([json.dumps({'type': 'result', 'is_error': True, 'result': text})])
             self.assertIsNotNone(harness.infra_error(parsed), text)
 
+    def test_eta_10_session_without_a_model_turn_is_infra(self):
+        # CI run 45165209409: the API key was empty, every session ended in 1-2 s at $0.000, and the passive suite
+        # scored 18/18 because a session that does nothing also invokes nothing. The stream is rebuilt from that log.
+        reason = harness.infra_error(stream('no_model_turn.jsonl'))
+        self.assertIsNotNone(reason)
+        self.assertIn('no model turn', reason)
+        for name in ('passive_hit.jsonl', 'passive_miss.jsonl', 'tdd_red_first.jsonl'):
+            self.assertIsNone(harness.infra_error(stream(name)), name)
+        # Cost unreported but tokens produced: a model ran.
+        ran = harness.parse_stream([json.dumps({'type': 'result', 'total_cost_usd': 0, 'usage': {'output_tokens': 12},
+                                                'result': 'done'})])
+        self.assertIsNone(harness.infra_error(ran))
+        # No cost or usage field at all (older CLI): nothing to conclude from.
+        bare = harness.parse_stream([json.dumps({'type': 'result', 'subtype': 'success', 'result': 'done'})])
+        self.assertIsNone(harness.infra_error(bare))
+        # Several result events (a session that waited on background agents): one paid segment is enough.
+        mixed = harness.parse_stream([json.dumps({'type': 'result', 'total_cost_usd': 0.4, 'result': 'waiting'}),
+                                      json.dumps({'type': 'result', 'total_cost_usd': 0, 'result': 'done'})])
+        self.assertIsNone(harness.infra_error(mixed))
+
+    def test_passive_judge_alone_would_pass_a_dead_session(self):
+        # Why the exclusion above matters: silence is also what a session that never started looks like.
+        self.assertTrue(passive_judge.judge({'silent': True}, stream('no_model_turn.jsonl'))['pass'])
+
     def test_summary_excludes_infra_errors(self):
         runs = [{'case': 'a', 'pass': True}, {'case': 'b', 'pass': False},
                 {'case': 'c', 'pass': False, 'infra_error': 'usage limit'}]
@@ -252,7 +310,8 @@ class StreamAndJudgeTest(unittest.TestCase):
         empty = harness.summarize([{'case': 'c', 'pass': False, 'infra_error': 'usage limit'}])
         self.assertEqual(empty['total'], 0)
         verdict = harness.compare({'x': empty}, {'suites': {'x': {'passed': 3, 'total': 3}}})['x']
-        self.assertFalse(verdict['regression'])
+        self.assertFalse(verdict['regression'])  # not a regression of the plugin ...
+        self.assertTrue(verdict['no_signal'])    # ... and not a result either
 
     def test_lifecycle_judge_ignores_template_comments(self):
         import importlib.util
@@ -466,6 +525,53 @@ class HeadlessRunnerTest(unittest.TestCase):
             self.assertEqual(json.loads(baseline.read_text())['suites']['passive']['total'], 4)
 
 
+DEAD_CLAUDE = '''#!/usr/bin/env python3
+import json, sys
+print(json.dumps({"type": "system", "subtype": "init", "claude_code_version": "0.0.0-fake", "model": "fake"}))
+print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "num_turns": 1, "total_cost_usd": 0,
+                  "usage": {"input_tokens": 0, "output_tokens": 0}, "result": "Invalid API key"}))
+sys.exit(1)
+'''
+
+
+class NoSignalTest(unittest.TestCase):
+    """ETA-10: an eval run that reached no model is not a green run."""
+
+    def run_suite(self, tmp, script, *extra):
+        fake = tmp / 'claude'
+        fake.write_text(script.replace('#!/usr/bin/env python3', '#!' + sys.executable))
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        baseline = tmp / 'baseline.json'
+        if not baseline.exists():
+            baseline.write_text(json.dumps({'suites': {'passive': {'passed': 2, 'total': 2}}}))
+        code, printed = quiet(runner.main, ['--suite', 'passive', '--cases', '01-feature,03-expert', '--runs', '1',
+                                            '--parallel', '2', '--claude-bin', str(fake), '--out', str(tmp / 'out'),
+                                            '--baseline', str(baseline), *extra])
+        return code, printed, json.loads((tmp / 'out' / 'results.json').read_text()), baseline
+
+    def test_eta_10_dead_sessions_fail_the_comparison(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, printed, results, _ = self.run_suite(pathlib.Path(tmp), DEAD_CLAUDE, '--compare')
+            self.assertEqual(results['suites']['passive']['total'], 0)
+            self.assertEqual(results['suites']['passive']['infra_errors'], 2)
+            self.assertEqual(results['compare']['passive']['status'], 'no-signal')
+            self.assertEqual(code, 3, printed)
+            self.assertIn('NO SIGNAL: passive', printed)
+
+    def test_eta_10_baseline_is_not_overwritten_without_signal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, printed, _, baseline = self.run_suite(pathlib.Path(tmp), DEAD_CLAUDE, '--update-baseline')
+            self.assertEqual(code, 3, printed)
+            self.assertEqual(json.loads(baseline.read_text())['suites']['passive'], {'passed': 2, 'total': 2})
+
+    def test_live_sessions_still_compare(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, printed, results, _ = self.run_suite(pathlib.Path(tmp), FAKE_CLAUDE, '--compare')
+            self.assertEqual(results['suites']['passive']['total'], 2)
+            self.assertFalse(results['compare']['passive'].get('no_signal'))
+            self.assertNotEqual(code, 3, printed)
+
+
 class WorkflowFilesTest(unittest.TestCase):
     def test_ci_runs_the_deterministic_evals(self):
         ci = (ROOT / '.github' / 'workflows' / 'ci.yml').read_text()
@@ -474,6 +580,13 @@ class WorkflowFilesTest(unittest.TestCase):
         evals = (ROOT / '.github' / 'workflows' / 'evals.yml').read_text()
         self.assertIn('ANTHROPIC_API_KEY', evals)
         self.assertIn('--compare', evals)
+
+    def test_eta_10_eval_workflow_stops_without_a_key(self):
+        # The only scheduled run so far had an empty key and spent its time scoring dead sessions.
+        evals = (ROOT / '.github' / 'workflows' / 'evals.yml').read_text()
+        preflight, _, rest = evals.partition('Run headless suites')
+        self.assertIn('ANTHROPIC_API_KEY is not set', preflight)
+        self.assertIn('exit 1', preflight)
 
 
 if __name__ == '__main__':
