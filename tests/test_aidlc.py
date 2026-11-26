@@ -167,6 +167,22 @@ class Base(unittest.TestCase):
         except ValueError:
             self.fail(f'not JSON: {out!r} {err!r}')
 
+    def pin(self, cmd='true', junit='none — the fixture runner writes no JUnit', revert_check=False, **top):
+        """Write the repository config (.aidlc.json) in the working tree. With none on main this is onboarding mode,
+        which the engine accepts with a warning; reading it from the default branch is tested in test_trust_anchor.py.
+        CI and reviewer returns are waived here so that each can be tested on its own."""
+        config = {'schema': 1, 'verify': {'cmd': cmd, 'junit': junit, 'revert_check': revert_check},
+                  'ci': 'none — the fixture has no CI', 'review': {'returns': 'none — the fixture has no reviewers'}}
+        config.update(top)
+        return self.write('.aidlc.json', json.dumps(config, indent=2) + '\n')
+
+    def verify(self, cmd='true', junit=None, as_json=False, **config):
+        """Pin `cmd` (and a JUnit glob) and run `aidlc verify`: the command is the config's, not an argument."""
+        if junit:
+            config['junit'] = junit
+        self.pin(cmd, **config)
+        return (self.cli_json if as_json else self.cli)('verify', 'refunds')
+
     def fails(self, findings):
         return [m for level, m in findings if level == 'FAIL']
 
@@ -199,15 +215,19 @@ class Base(unittest.TestCase):
         code, out, err = self.cli('advance', 'refunds', 'building')
         self.assertEqual(code, 0, out + err)
 
-    def verified_ready(self):
+    def verified_ready(self, verify=True):
+        """verify=False: the caller pinned its own config and runs `aidlc verify` itself."""
         self.building()
         self.write('src/refunds/model.py', 'def refund(amount):\n    return amount\n')
         self.write('tests/test_refunds.py', '# RFD-1: refund a captured payment\n')
         self.write('load/refund-visibility.js', 'export default function () {}\n')
+        if verify:
+            self.pin()
         self.commit('code')  # the reviewed gate needs the verified code committed
         self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
         self.assertEqual(self.cli('task-done', 'refunds', 'T2', '--cmd', 'true')[0], 0)
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        if verify:
+            self.assertEqual(self.verify()[0], 0)
 
     def reviewed_ready(self):
         self.verified_ready()
@@ -691,19 +711,19 @@ class VerifyTest(Base):
         return [e for e in events if e['kind'] == 'verify'][-1]
 
     def test_logs_exit_and_fingerprint(self):
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         event = self.last_verify()
         self.assertEqual((event['exit'], event['fingerprint'], event['junit']), (0, aidlc.fingerprint(self.repo), None))
 
     def test_failing_command_is_logged_and_exits_1(self):
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'echo red; exit 4')
+        code, out, _ = self.verify('echo red; exit 4')
         self.assertEqual(code, 1)
         self.assertIn('red', out)
         self.assertEqual(self.last_verify()['exit'], 4)
 
     def test_pytest_junit(self):
         self.write('reports/a.xml', JUNIT_PYTEST)
-        code, payload = self.cli_json('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/*.xml')
+        code, payload = self.verify('true', junit='reports/*.xml', as_json=True)
         self.assertEqual(code, 0)
         self.assertEqual(payload['junit']['passed'], 1)
         self.assertEqual(payload['junit']['failed'], 1)
@@ -714,26 +734,26 @@ class VerifyTest(Base):
 
     def test_jest_junit_failure_of_a_requirement_test(self):
         self.write('reports/jest.xml', JUNIT_JEST)
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/**/*.xml')
+        code, out, _ = self.verify('true', junit='reports/**/*.xml')
         self.assertEqual(code, 1)
         self.assertIn('RFD-1', out)
         self.assertEqual(self.last_verify()['req_fail'], ['RFD-1'])
 
     def test_gradle_junit_does_not_confuse_rfd_10_with_rfd_1(self):
         self.write('build/test-results/test/TEST-com.x.RefundTest.xml', JUNIT_GRADLE)
-        code, payload = self.cli_json('verify', 'refunds', '--cmd', 'true', '--junit', 'build/test-results/**/*.xml')
+        code, payload = self.verify('true', junit='build/test-results/**/*.xml', as_json=True)
         self.assertEqual(code, 0)
         self.assertEqual(payload['junit']['req_pass'], ['RFD-1'])
         self.assertEqual(payload['junit']['req_fail'], [])
 
     def test_glob_without_match_is_recorded_as_missing(self):
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'nothing/*.xml')
+        code, out, _ = self.verify('true', junit='nothing/*.xml')
         self.assertEqual(code, 1)
         self.assertEqual(self.last_verify()['junit'], 'missing')
 
     def test_malformed_junit_reports_file_and_line(self):
         self.write('reports/bad.xml', '<testsuite>\n<testcase name="x">\n')
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/bad.xml')
+        code, out, _ = self.verify('true', junit='reports/bad.xml')
         self.assertEqual(code, 1)
         self.assertRegex(out, r'reports/bad\.xml:\d+')
         self.assertEqual(self.last_verify()['junit'], 'unreadable')
@@ -749,7 +769,7 @@ class VerifiedGateTest(Base):
         self.write('tests/test_refunds.py', '# RFD-1\n')
         self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
         plan = self.spec / 'plan.md'
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'T2 is not done')
         plan.write_text(plan.read_text().replace('- [ ] T2', '- [x] T2'))
         self.assertFails(aidlc.check(self.spec, 'verified'), 'T2 is ticked but has no green task-done')
@@ -757,21 +777,23 @@ class VerifiedGateTest(Base):
     def test_requirement_without_test_reference(self):
         self.verified_ready()
         self.write('tests/test_refunds.py', '# RFD-10 only\n')
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1 (Verify: test) is not referenced')
 
     def test_requirement_reference_forms(self):
         self.verified_ready()
         for text in ('def test_rfd_1_refund(): pass\n', 'it("RFD-1 refunds", () => {})\n'):
             self.write('tests/test_refunds.py', text)
-            self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+            self.assertEqual(self.verify()[0], 0)
             self.assertPasses(aidlc.check(self.spec, 'verified'))
 
     def test_no_verify_or_failed_verify(self):
         self.building()
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'no pinned verify command')
+        self.pin()
         self.assertFails(aidlc.check(self.spec, 'verified'), 'no verify event')
         self.verified_ready_from_building()
-        self.cli('verify', 'refunds', '--cmd', 'exit 1')
+        self.verify('exit 1')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'exited 1')
 
     def verified_ready_from_building(self):
@@ -798,18 +820,18 @@ class VerifiedGateTest(Base):
 
     def test_latest_verify_wins(self):
         self.verified_ready()
-        self.cli('verify', 'refunds', '--cmd', 'exit 2')
+        self.verify('exit 2')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'exited 2')
-        self.cli('verify', 'refunds', '--cmd', 'true')
+        self.verify()
         self.assertPasses(aidlc.check(self.spec, 'verified'))
 
     def test_failed_requirement_test_and_unreadable_junit_block(self):
         self.verified_ready()
         self.write('reports/jest.xml', JUNIT_JEST)
-        self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/jest.xml')
+        self.verify('true', junit='reports/jest.xml')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1')
         self.write('reports/jest.xml', '<oops')
-        self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/jest.xml')
+        self.verify('true', junit='reports/jest.xml')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'JUnit')
 
 
@@ -1274,7 +1296,7 @@ class SpecTemplateLifecycleTest(Base):
         text = tickets.read_text()
         self.assertEqual(text.count('Status: done'), 2)
         self.assertNotIn('ready-for-agent', text)
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         self.assertPasses(aidlc.check(self.spec, 'verified'))
         rows = {r['id']: r for r in aidlc.trace_rows(aidlc.Spec(self.spec))}
         self.assertEqual((rows['RFD-1']['tasks'], rows['RFD-1']['result']), (['T1'], 'pass'))
@@ -1492,14 +1514,14 @@ class MarkPrReviewTest(Base):
 class EvidenceChainTest(Base):
     def test_red_latest_verify_blocks_reviewed_and_shipped(self):
         self.shipped_ready()
-        self.cli('verify', 'refunds', '--cmd', 'exit 1')
+        self.verify('exit 1')
         self.assertFails(aidlc.check(self.spec, 'reviewed'), 'exited 1')
         self.assertFails(aidlc.check(self.spec, 'shipped'), 'exited 1')
 
     def test_dirty_code_blocks_reviewed_and_writes_no_record(self):
         self.reviewed_ready()
         self.write('src/refunds/extra.py', 'x = 1\n')
-        self.cli('verify', 'refunds', '--cmd', 'true')
+        self.verify()
         self.cli('stamp', 'refunds', 'review')
         findings = aidlc.check(self.spec, 'reviewed')
         self.assertEqual(len(self.fails(findings)), 1, findings)
@@ -1525,7 +1547,7 @@ class EvidenceChainTest(Base):
         self.reviewed_ready()
         self.write('src/refunds/model.py', 'v = 2\n')
         self.commit()
-        self.cli('verify', 'refunds', '--cmd', 'true')
+        self.verify()
         findings = aidlc.evidence_findings(self.spec)
         self.assertFails(findings, 'review stamp')
 
@@ -1656,10 +1678,10 @@ class TraceabilityMatchingTest(Base):
         skipped = ('<testsuite><testcase classname="t" name="test_RFD_1_refund"><skipped/></testcase>'
                    '<testcase classname="t" name="test_other"/></testsuite>')
         self.write('reports/a.xml', skipped)
-        self.cli('verify', 'refunds', '--cmd', 'touch reports/a.xml', '--junit', 'reports/a.xml')
+        self.verify('touch reports/a.xml', junit='reports/a.xml')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1 has no passing test')
         self.write('reports/a.xml', '<testsuite><testcase classname="t" name="test_RFD_1_refund"/></testsuite>')
-        self.cli('verify', 'refunds', '--cmd', 'touch reports/a.xml', '--junit', 'reports/a.xml')
+        self.verify('touch reports/a.xml', junit='reports/a.xml')
         findings = aidlc.check(self.spec, 'verified')
         self.assertPasses(findings)
         self.assertFalse(any('static' in m for _, m in findings))
@@ -1674,10 +1696,10 @@ class TraceabilityMatchingTest(Base):
         self.verified_ready()
         report = self.write('reports/old.xml', '<testsuite><testcase classname="t" name="test_RFD_1_x"/></testsuite>')
         os.utime(report, (report.stat().st_atime - 600, report.stat().st_mtime - 600))
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/*.xml')[0], 1)
+        self.assertEqual(self.verify('true', junit='reports/*.xml')[0], 1)
         self.assertIn('junit=missing', self.ledger().splitlines()[-1])
         self.write('reports/new.xml', '<testsuites><testsuite name="empty"/></testsuites>')
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/new.xml')[0], 1)
+        self.assertEqual(self.verify('true', junit='reports/new.xml')[0], 1)
         self.assertIn('junit=missing', self.ledger().splitlines()[-1])
 
 
@@ -1699,13 +1721,13 @@ class VerifyHardeningTest(Base):
         self.write('tests/test_refunds.py', '# RFD-1\n')
 
     def test_json_exit_is_the_cli_exit(self):
-        code, payload = self.cli_json('verify', 'refunds', '--cmd', 'exit 4')
+        code, payload = self.verify('exit 4', as_json=True)
         self.assertEqual((code, payload['exit'], payload['command_exit']), (1, 1, 4))
         code, payload = self.cli_json('task-done', 'refunds', 'T1', '--cmd', 'exit 5')
         self.assertEqual((code, payload['exit'], payload['command_exit']), (1, 1, 5))
 
     def test_code_changed_during_the_run_is_not_green(self):
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'echo "y = 1" >> src/app.py')
+        code, out, _ = self.verify('echo "y = 1" >> src/app.py')
         self.assertEqual(code, 1)
         self.assertIn('changed code', out)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'changed code during')

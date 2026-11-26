@@ -33,11 +33,11 @@ Test: python3 -m unittest tests.test_evals tests.test_eval_cases
 ## T4: Pinned verify command and dynamic traceability
 Blocked by: none
 Covers: ETA-1, ETA-2
-Status: ready-for-agent
+Status: done
 What to build: verify runs the command pinned in the default branch's config, another command is refused, and with a JUnit glob every story verified by test needs a passing executed test.
-- [ ] Verify without a config is refused with the onboarding hint
-- [ ] A branch that rewrites the config still runs the default branch's command
-- [ ] A story whose ID appears only in a comment fails the verified gate
+- [x] Verify without a config is refused with the onboarding hint
+- [x] A branch that rewrites the config still runs the default branch's command
+- [x] A story whose ID appears only in a comment fails the verified gate
 Test: python3 -m unittest tests.test_aidlc tests.test_trust_anchor
 
 ## T5: Revert check

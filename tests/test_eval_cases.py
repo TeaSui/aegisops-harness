@@ -92,6 +92,47 @@ class CaseFilesTest(unittest.TestCase):
             self.assertGreaterEqual(len(stories), 5, case_id)
 
 
+class OnboardedFixtureTest(unittest.TestCase):
+    """ETA-1: the gates need a pinned verify command, so the fixture a session works in ships one on main."""
+
+    def build(self, tmp, case_id):
+        repo = pathlib.Path(tmp).resolve() / 'repo'
+        with mock.patch.dict(os.environ, GIT_ENV):
+            fixture.build(repo, CASES[case_id])
+        return repo
+
+    def test_eta_1_fixture_pins_its_verify_command_on_main(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, GIT_ENV):
+            repo = self.build(tmp, 'L1-refund')
+            config = aidlc.load_config(aidlc.Repo(repo), [repo])
+            self.assertEqual(config['source'], 'base')
+            self.assertEqual([m for level, m in config['findings'] if level != 'OK'], [])
+            self.assertEqual(config['junit'], 'reports/*.xml')
+            self.assertTrue(config['revert_check'])
+            self.assertIsNone(config['ci_waiver'])  # the fixture's gh reports real checks
+            ignored = subprocess.run(['git', 'check-ignore', '-q', 'reports/junit.xml'], cwd=repo)
+            self.assertEqual(ignored.returncode, 0, 'the JUnit report must be git-ignored or every run changes the code')
+
+    @unittest.skipUnless(NODE and shutil.which('npm'), 'needs node and npm')
+    def test_eta_2_pinned_command_writes_a_report_the_engine_reads(self):
+        for case_id in ('L1-refund',) + tuple(HARDER):
+            with self.subTest(case=case_id), tempfile.TemporaryDirectory() as tmp:
+                repo = self.build(tmp, case_id)
+                with mock.patch.dict(os.environ, GIT_ENV):
+                    root = aidlc.Repo(repo)
+                    config = aidlc.load_config(root, [repo])
+                    before = root.fingerprint
+                    code, tail = aidlc.run_command(config['cmd'], repo, 120)
+                    self.assertEqual(code, 0, tail)
+                    self.assertEqual(aidlc.Repo(repo).fingerprint, before)  # the run changed no code file
+                reports = sorted(repo.glob(config['junit']))
+                self.assertTrue(reports, 'no JUnit report at ' + config['junit'])
+                summary, problems = aidlc.parse_junit(reports, [], aidlc.Repo(repo))
+                self.assertEqual(problems, [])
+                self.assertGreaterEqual(summary['passed'], 3)
+                self.assertEqual(summary['failed'], 0)
+
+
 @unittest.skipUnless(NODE, 'needs node')
 class HiddenCheckTest(unittest.TestCase):
     def setUp(self):

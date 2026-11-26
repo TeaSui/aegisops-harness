@@ -115,6 +115,12 @@ FINDING = re.compile(r'^([A-Z]+\d+)\b\s*(?:\(([^)]*)\))?\s*:?\s*(.*)$')
 GH_STATES = ('pass', 'fail', 'pending', 'skipping', 'cancel')
 TAIL_BYTES = 2048
 DEFAULT_TIMEOUT = 1800
+CONFIG_NAME = '.aidlc.json'  # the repository config: pins the verify command (parse_config)
+SCHEMA = 1  # of the repository config and the spec README; a file written for a newer schema is refused
+WAIVER = re.compile(r'^none\b' + DASH + r'(.*)$', re.I)
+NO_CONFIG = ('no pinned verify command: {name} is on neither the default branch nor this branch. The command that '
+             'counts as gate evidence is not the session\'s to choose: a person adds the file (aidlc config init '
+             '--cmd "<full test suite>" --junit "<report glob>" writes it) and merges it to the default branch')
 
 
 class UsageError(Exception):
@@ -699,6 +705,120 @@ def ship_findings(ship, label):
     return findings
 
 
+def _switch(value, name, label, findings):
+    """The reason of a `none — <reason>` waiver, or None for `required` (the default)."""
+    if value is None or (isinstance(value, str) and value.strip().lower() == 'required'):
+        return None
+    waiver = WAIVER.match(value.strip()) if isinstance(value, str) else None
+    if not waiver:
+        findings.append(fail(f'{label}: {name} must be "required" or "none — <reason>"'))
+    elif not waiver.group(1).strip():
+        findings.append(fail(f'{label}: {name}: "none" needs a reason ("none — <reason>")'))
+    else:
+        return waiver.group(1).strip()
+    return None
+
+
+def parse_config(text, label):
+    """(config, findings) for the repository config, schema 1:
+
+      {"schema": 1,
+       "verify": {"cmd": "<the full test suite>",
+                  "junit": "<glob of the reports it writes>" | "none — <reason>",
+                  "revert_check": true},                          optional, default true
+       "ci": "required" | "none — <reason>",                      optional, default required
+       "review": {"returns": "required" | "none — <reason>"}}     optional, default required
+
+    config: cmd, junit (glob or None), junit_waiver, revert_check, ci_waiver, returns_waiver. Waivers hold the reason."""
+    try:
+        data = json.loads(text)
+    except ValueError as err:
+        return {}, [fail(f'{label}: not valid JSON ({err})')]
+    if not isinstance(data, dict):
+        return {}, [fail(f'{label}: must be a JSON object')]
+    findings = []
+    schema = data.get('schema')
+    if not isinstance(schema, int) or isinstance(schema, bool) or schema < 1:
+        findings.append(fail(f'{label}: "schema": {SCHEMA} is required'))
+    elif schema > SCHEMA:
+        findings.append(fail(f'{label}: schema {schema} is newer than this plugin reads ({SCHEMA}): update the plugin'))
+    verify = data.get('verify')
+    if not isinstance(verify, dict):
+        verify = {}
+    cmd = verify.get('cmd')
+    if not isinstance(cmd, str) or not cmd.strip():
+        findings.append(fail(f'{label}: "verify.cmd" must be the command that runs the full test suite'))
+        cmd = ''
+    junit, glob, junit_waiver = verify.get('junit'), None, None
+    if not isinstance(junit, str) or not junit.strip():
+        findings.append(fail(f'{label}: "verify.junit" must be the glob of the JUnit reports the command writes, or '
+                             '"none — <reason>"'))
+    else:
+        waiver = WAIVER.match(junit.strip())
+        if waiver and not waiver.group(1).strip():
+            findings.append(fail(f'{label}: "verify.junit": "none" needs a reason ("none — <reason>")'))
+        elif waiver:
+            junit_waiver = waiver.group(1).strip()
+        else:
+            glob = junit.strip()
+    revert = verify.get('revert_check', True)
+    if not isinstance(revert, bool):
+        findings.append(fail(f'{label}: "verify.revert_check" must be true or false'))
+        revert = True
+    review = data.get('review', {})
+    if not isinstance(review, dict):
+        findings.append(fail(f'{label}: "review" must be an object'))
+        review = {}
+    return {'cmd': cmd.strip(), 'junit': glob, 'junit_waiver': junit_waiver, 'revert_check': revert,
+            'ci_waiver': _switch(data.get('ci'), '"ci"', label, findings),
+            'returns_waiver': _switch(review.get('returns'), '"review.returns"', label, findings)}, findings
+
+
+def _canonical(text):
+    try:
+        return json.dumps(json.loads(text), sort_keys=True)
+    except ValueError:
+        return text.strip()
+
+
+def load_config(repo, folders):
+    """The repository config for the first of `folders` that has one, or None.
+
+    The gates read it from the trusted ref (the default branch; `--base` in CI): the command that verifies a branch
+    is not the branch's to choose. A config that exists only on this branch is `onboarding` (trust on first use, with
+    a warning a person is meant to read). Adds: source ('base' | 'onboarding'), ref, dir (where the command runs),
+    label, findings."""
+    trusted = repo.trusted_ref
+    for folder in folders:
+        rel = repo.rel(folder / CONFIG_NAME)
+        base = repo.show(trusted, rel) if trusted else None
+        local, _ = read_text(folder / CONFIG_NAME, rel)
+        if base is None and local is None:
+            continue
+        if base is not None:
+            text = base.decode('utf-8', 'replace').replace('\r\n', '\n')
+            config, findings = parse_config(text, f'{rel} on {trusted}')
+            if local is None:
+                findings.append(warn(f'{rel} is missing here: the gates use the version on {trusted}'))
+            elif _canonical(local) != _canonical(text):
+                findings.append(warn(f'{rel} differs from {trusted}: the gates use the version on {trusted} until this '
+                                     'change is merged (a branch does not choose the command that verifies it)'))
+            source = 'base'
+        else:
+            config, findings = parse_config(local, rel)
+            where = f'not on {trusted} yet' if trusted else 'no default branch was found to read it from'
+            findings.append(warn(f'onboarding: {rel} exists only on this branch ({where}). A person must read it '
+                                 'before the merge: it names the command every later gate trusts'))
+            source = 'onboarding'
+        config.update(source=source, ref=trusted, dir=folder, label=rel, findings=findings)
+        return config
+    return None
+
+
+def same_command(a, b):
+    return ' '.join(str(a).split()) == ' '.join(str(b).split())
+
+
 def says_green(value):
     value = (value or '').lower()
     return bool(re.search(r'\b(green|pass(ed|es|ing)?)\b', value)) and \
@@ -893,11 +1013,14 @@ def _digest(entries):
 class Repo:
     """A repository root with cached file listing, fingerprint and test-file contents.
 
-    fast=True (status for the session-start snapshot) skips gh and the contract gate; only cheap git runs."""
+    fast=True (status for the session-start snapshot) skips gh and the contract gate; only cheap git runs.
+    base: the ref the repository config is read from and the branch is compared with (CI passes the PR's base ref);
+    default: the default branch."""
 
-    def __init__(self, root, fast=False):
+    def __init__(self, root, fast=False, base=None):
         self.root = pathlib.Path(root).resolve()
         self.fast = fast
+        self.base = base
 
     def git(self, *args, stdin=None):
         try:
@@ -1033,6 +1156,30 @@ class Repo:
         return {'main', 'master'} | extra
 
     @cached_property
+    def trusted_ref(self):
+        """`base` when given, else the default branch as the remote has it (a session can commit to its local default
+        branch, not move the remote's without a push), else the local one. None outside git or when none resolves."""
+        if not self.is_git:
+            return None
+        names = [self.base] if self.base else [ref for name in sorted(self.default_branches())
+                                               for ref in (f'origin/{name}', name)]
+        for ref in names:
+            if not ref or str(ref).startswith('-'):
+                continue
+            found = self.git('rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}')
+            if found is not None and found.returncode == 0:
+                return ref
+        return None
+
+    def show(self, ref, rel):
+        """The bytes of `rel` at `ref`, or None when it is not there."""
+        try:
+            result = subprocess.run(['git', 'show', f'{ref}:{rel}'], cwd=self.root, capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result.stdout if result.returncode == 0 else None
+
+    @cached_property
     def spec_dirs_cached(self):
         dirs = {(self.root / rel).parent for rel in self.files if SPEC_README.search(rel)}
         return sorted((d for d in dirs if (d / 'README.md').is_file()), key=lambda d: self.rel(d))
@@ -1146,6 +1293,18 @@ class Spec:
     @cached_property
     def ship(self):
         return self._parse('ship.md', parse_ship)
+
+    @property
+    def service(self):
+        """The folder that holds this spec's `docs/specs/` (a service root in a monorepo, else the repository)."""
+        nested = self.dir.parent.name == 'specs' and self.dir.parent.parent.name == 'docs'
+        return self.dir.parents[2] if nested else self.repo.root
+
+    @cached_property
+    def config(self):
+        """The repository config that applies to this spec (load_config), the service's own before the root's."""
+        folders = [self.service] if self.repo.root in self.service.parents else []
+        return load_config(self.repo, folders + [self.repo.root])
 
     def last(self, kind):
         return next((e for e in reversed(self.ledger[0]) if e['kind'] == kind), None)
@@ -1270,11 +1429,20 @@ def _open_criteria(spec, task):
 
 
 def _verify_findings(spec):
-    """The latest verify is green and is the current code."""
+    """The latest verify ran the pinned command, is green and is the current code."""
+    config = spec.config
+    if config is None:
+        return [fail(NO_CONFIG.format(name=CONFIG_NAME))]
+    findings = list(config['findings'])
+    if failed(findings):
+        return findings
     event = spec.last('verify')
     if event is None:
-        return [fail(f'{spec.label("ledger.md")}: no verify event (run aidlc verify SPEC --cmd <tests>)')]
-    where, findings = f'{spec.label("ledger.md")}:{event["line"]}', []
+        return findings + [fail(f'{spec.label("ledger.md")}: no verify event (run aidlc verify SPEC)')]
+    where = f'{spec.label("ledger.md")}:{event["line"]}'
+    if event.get('pinned') not in ('base', 'onboarding') or not same_command(event.get('cmd', ''), config['cmd']):
+        findings.append(fail(f'{where}: the latest verify did not run the pinned command ({config["cmd"]!r}, '
+                             f'{config["label"]}): run aidlc verify again'))
     if event['exit'] != 0:
         findings.append(fail(f'{where}: the latest verify exited {event["exit"]}'))
     if event.get('before') and event['before'] != event['fingerprint']:
@@ -1283,7 +1451,11 @@ def _verify_findings(spec):
         findings.append(fail(f'{where}: code changed since the latest verify (fingerprint {short(event["fingerprint"])} '
                              f'≠ current {short(spec.repo.fingerprint)}): run aidlc verify again'))
     if event['junit'] in ('unreadable', 'missing'):
-        findings.append(fail(f'{where}: the latest verify has {event["junit"]} JUnit results: fix --junit and re-run'))
+        findings.append(fail(f'{where}: the latest verify has {event["junit"]} JUnit results: make the pinned command '
+                             f'write {config["junit"] or "its reports"} and re-run'))
+    elif config['junit'] and not isinstance(event['junit'], dict):
+        findings.append(fail(f'{where}: the latest verify recorded no JUnit results ({config["junit"]} is configured): '
+                             'run aidlc verify again'))
     elif event['req_fail']:
         findings.append(fail(f'{where}: requirement tests failed: {", ".join(event["req_fail"])}'))
     return findings + _junit_coverage(spec, event, where)
@@ -1294,8 +1466,11 @@ def _junit_coverage(spec, event, where):
     if not tested:
         return []
     if not isinstance(event['junit'], dict):
-        return [warn(f'{where}: traceability is static (test files reference the IDs; no JUnit results were '
-                     'recorded: aidlc verify --junit <glob>)')]
+        config = spec.config or {}
+        if config.get('junit_waiver'):  # a person waived JUnit in the config: the weaker, static check stands
+            return [warn(f'{where}: traceability is static (test files name the story IDs; no test is known to have '
+                         f'run for them). JUnit is waived in {config["label"]}: {config["junit_waiver"]}')]
+        return []  # a missing report is already a failure of the verify itself
     return [fail(f'{where}: {rid} has no passing test in the JUnit results of the latest verify (skipped or absent)')
             for rid in tested if rid not in event['req_pass'] and rid not in event['req_fail']]
 
@@ -1813,32 +1988,67 @@ def _tick(plan, task_id):
     return True
 
 
-def cmd_verify(args):
-    spec = spec_arg(args)
-    before = Repo(spec.repo.root).fingerprint
+def run_pinned(spec, config, timeout):
+    """Run the pinned verify command once in the config's folder: (ledger text of the event, findings, payload).
+    Nothing is written; the caller logs the event (`aidlc verify`) or uses it as it is (`aidlc ci`)."""
+    root = spec.repo.root
+    before = Repo(root).fingerprint
     started = time.time()
-    code, tail = run_command(args.cmd, spec.repo.root, args.timeout)
-    repo = Repo(spec.repo.root)
-    findings, junit, event = [], None, f'verify exit={code} fingerprint={repo.fingerprint} cmd={quoted(args.cmd)}'
+    code, tail = run_command(config['cmd'], config['dir'], timeout)
+    repo = Repo(root)
+    findings, junit = [], None
+    event = f'verify exit={code} fingerprint={repo.fingerprint} cmd={quoted(config["cmd"])} pinned={config["source"]}'
     if code != 0:
-        findings.append(fail(f'test command exited {code}\n{tail}'))
+        findings.append(fail(f'the pinned command exited {code}\n{tail}'))
     if before != repo.fingerprint:  # the tests did not run against one version of the code: not green
-        findings.append(fail('the test command changed code files during the run; fix that and re-run'))
+        findings.append(fail('the test command changed code files during the run (reports and build output belong '
+                             'in git-ignored paths); fix that and re-run'))
         event += f' before={before}'
-    if args.junit:
-        junit, problems, marker = _junit_results(args.junit, started, spec, repo)
+    if config['junit']:
+        junit, problems, marker = _junit_results(config['junit'], started, spec, repo, config['dir'])
         findings += problems
         event += marker
+    return event, findings, {'spec': repo.rel(spec.dir), 'pinned_command': config['cmd'], 'pinned': config['source'],
+                             'command_exit': code, 'fingerprint': repo.fingerprint, 'junit': junit,
+                             'output_tail': tail, 'ledger': event}
+
+
+def pinned_config(spec, args):
+    """The usable config of a spec, or raise UsageError; (None, result) when the config itself has failures."""
+    config = spec.config
+    if config is None:
+        raise UsageError(NO_CONFIG.format(name=CONFIG_NAME))
+    if failed(config['findings']):
+        return None, finding_result(config['findings'], {'spec': spec.repo.rel(spec.dir), 'command_exit': None})
+    source = f'{config["label"]} on {config["ref"]}' if config['source'] == 'base' else config['label']
+    given = getattr(args, 'cmd', None)
+    if given is not None and not same_command(given, config['cmd']):
+        raise UsageError(f'the verify command is pinned by {source}: {config["cmd"]!r}. Run `aidlc verify '
+                         f'{args.spec}` without --cmd; another command is not gate evidence (change the pin in its '
+                         'own change, read by a person)')
+    given = getattr(args, 'junit', None)
+    if given is not None and given != config['junit']:
+        raise UsageError(f'the JUnit reports are pinned by {source}: {config["junit"] or "waived"}. Run `aidlc verify '
+                         f'{args.spec}` without --junit')
+    return config, None
+
+
+def cmd_verify(args):
+    spec = spec_arg(args)
+    config, refused = pinned_config(spec, args)
+    if refused:
+        return refused
+    event, findings, payload = run_pinned(spec, config, args.timeout)
     with spec_lock(spec.dir):
         append_ledger(spec, event)
-    payload = {'spec': spec.repo.rel(spec.dir), 'command_exit': code, 'fingerprint': repo.fingerprint,
-               'junit': junit, 'output_tail': tail, 'ledger': event}
-    return finding_result(findings + [('OK', f'verify logged: exit={code}')], payload)
+    findings = [f for f in config['findings'] if f[0] == 'WARN'] + findings
+    return finding_result(findings + [('OK', f'verify logged: exit={payload["command_exit"]}')], payload)
 
 
-def _junit_results(pattern, started, spec, repo):
+def _junit_results(pattern, started, spec, repo, folder=None):
     """(summary or None, findings, ledger suffix). Reports older than the run (1 s clock slack) are ignored."""
-    paths = sorted(p for p in globlib.glob(os.path.join(str(repo.root), pattern), recursive=True) if os.path.isfile(p))
+    paths = sorted(p for p in globlib.glob(os.path.join(str(folder or repo.root), pattern), recursive=True)
+                   if os.path.isfile(p))
     fresh = [p for p in paths if os.path.getmtime(p) >= started - 1]
     findings = [warn(f'ignored {len(paths) - len(fresh)} JUnit file(s) older than this run')] if len(fresh) < len(paths) else []
     if not fresh:
@@ -1960,6 +2170,47 @@ def lint_open_decisions(text, label, no_security):
         out.append(warn(f'{label}: a national ID is used but no decision says how it appears in events and logs '
                         '(masked, replaced by the profile ID, never logged)'))
     return out
+
+
+CONFIG_SKELETON = {'schema': SCHEMA, 'verify': {'cmd': '', 'junit': '', 'revert_check': True}}
+
+
+def cmd_config(args):
+    """init: write the repository config (never overwrites). show: the config the gates use here, and where from."""
+    root = repo_arg(args)
+    folder = (root / args.dir).resolve() if args.dir else root
+    path = folder / CONFIG_NAME
+    if args.action == 'init':
+        if path.exists():
+            raise UsageError(f'{path} already exists: edit it (in its own change, read by a person)')
+        if not args.cmd or not args.junit:
+            raise UsageError('config init needs --cmd "<full test suite>" and --junit "<report glob>" '
+                             '(or --junit "none — <reason>")')
+        data = json.loads(json.dumps(CONFIG_SKELETON))
+        data['verify'].update(cmd=args.cmd, junit=args.junit, revert_check=not args.no_revert_check)
+        text = json.dumps(data, indent=2, ensure_ascii=False) + '\n'
+        _, findings = parse_config(text, CONFIG_NAME)
+        if failed(findings):
+            raise UsageError('; '.join(m for level, m in findings if level == 'FAIL'))
+        folder.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+        rel = Repo(root).rel(path)
+        return 0, {'path': rel, 'config': data}, [
+            f'OK wrote {rel}', 'Keep the JUnit reports and build output git-ignored, protect this file '
+            '(CODEOWNERS), and merge it to the default branch: until then the gates run in onboarding mode.']
+    repo = Repo(root)
+    config = load_config(repo, [folder] if folder == root else [folder, root])
+    if config is None:
+        return finding_result([fail(NO_CONFIG.format(name=CONFIG_NAME))], {'config': None})
+    shown = {k: (str(v) if isinstance(v, pathlib.Path) else v) for k, v in config.items() if k != 'findings'}
+    lines = [f'{config["label"]}: {config["source"]}' + (f' (read from {config["ref"]})' if config['source'] == 'base'
+                                                         else ' (only on this branch)'),
+             f'  verify.cmd: {config.get("cmd")}', f'  verify.junit: {config.get("junit") or "none — " + str(config.get("junit_waiver"))}',
+             f'  verify.revert_check: {config.get("revert_check")}',
+             f'  ci: {"none — " + config["ci_waiver"] if config.get("ci_waiver") else "required"}',
+             f'  review.returns: {"none — " + config["returns_waiver"] if config.get("returns_waiver") else "required"}']
+    code, payload, found = finding_result(config['findings'], {'config': shown})
+    return code, payload, lines + found
 
 
 def cmd_trace(args):
@@ -2111,9 +2362,15 @@ def build_parser():
     task_done.add_argument('--cmd')
     task_done.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT)
     verify = add('verify', cmd_verify, 'spec')
-    verify.add_argument('--cmd', required=True)
-    verify.add_argument('--junit')
+    verify.add_argument('--cmd', help='accepted only when it is the pinned command')
+    verify.add_argument('--junit', help='accepted only when it is the pinned glob')
     verify.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT)
+    config = add('config', cmd_config)
+    config.add_argument('action', choices=['init', 'show'])
+    config.add_argument('--cmd')
+    config.add_argument('--junit')
+    config.add_argument('--no-revert-check', action='store_true')
+    config.add_argument('--dir', help='a service folder with its own docs/specs/ (default: the repository root)')
     ruling = add('ruling', cmd_ruling, 'spec')
     for name in ('--decision', '--why', '--if-wrong'):
         ruling.add_argument(name, required=True)
