@@ -17,6 +17,8 @@ Thumbs.db
 
 # Test / Scratch files
 .test_probe
+# JUnit report of the pinned verify command (.aidlc.json): a report in a tracked path would change the code fingerprint
+/reports/
 
 # Skills synced in by the Claude app; not part of this plugin
 skills/synced/

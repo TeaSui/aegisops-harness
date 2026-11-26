@@ -1227,6 +1227,7 @@ class Spec:
         self.dir = pathlib.Path(path).resolve()
         self.repo = repo if repo is not None else Repo(repo_root(self.dir))
         self.slug = self.dir.name
+        self.fresh = {}  # {kind: event} produced by this run (`aidlc ci`); read instead of the ledger's line
 
     def label(self, name):
         return self.repo.rel(self.dir / name)
@@ -1338,7 +1339,13 @@ class Spec:
         return load_config(self.repo, folders + [self.repo.root])
 
     def last(self, kind):
+        if kind in self.fresh:
+            return self.fresh[kind]
         return next((e for e in reversed(self.ledger[0]) if e['kind'] == kind), None)
+
+    def at(self, event):
+        """Where a finding about `event` points: its ledger line, or this run."""
+        return 'this run' if event.get('fresh') else f'{self.label("ledger.md")}:{event["line"]}'
 
 
 def fp_matches(recorded, current):
@@ -1470,7 +1477,7 @@ def _verify_findings(spec):
     event = spec.last('verify')
     if event is None:
         return findings + [fail(f'{spec.label("ledger.md")}: no verify event (run aidlc verify SPEC)')]
-    where = f'{spec.label("ledger.md")}:{event["line"]}'
+    where = spec.at(event)
     if event.get('pinned') not in ('base', 'onboarding') or not same_command(event.get('cmd', ''), config['cmd']):
         findings.append(fail(f'{where}: the latest verify did not run the pinned command ({config["cmd"]!r}, '
                              f'{config["label"]}): run aidlc verify again'))
@@ -1517,7 +1524,7 @@ def _revert_findings(spec):
     event = spec.last('revert-check')
     if event is None:
         return [fail(f'{spec.label("ledger.md")}: no revert check (aidlc verify runs it before the green run)')]
-    where = f'{spec.label("ledger.md")}:{event["line"]}'
+    where = spec.at(event)
     if not fp_matches(event['fingerprint'], spec.repo.fingerprint):
         return [fail(f'{where}: code changed since the revert check: run aidlc verify again')]
     if event['skipped']:
@@ -2383,6 +2390,140 @@ def lint_open_decisions(text, label, no_security):
     return out
 
 
+class Unbound:
+    """What `aidlc ci` runs the pinned suite for when no spec is bound to the branch (a fix, a chore)."""
+
+    def __init__(self, repo):
+        self.repo, self.dir, self.requirements = repo, repo.root, ([], [])
+
+
+CI_GATE = {'accepted': 'accepted', 'planned': 'planned', 'building': 'planned', 'verified': 'verified',
+           'reviewed': 'reviewed', 'shipped': 'reviewed'}  # `shipped` itself waits for this check's result
+
+
+def _fresh(text):
+    """The text of a ledger event as the event the gates read, marked as produced by this run."""
+    kind, _, rest = text.partition(' ')
+    event, problem = _event(kind, rest)
+    if event is None:
+        raise ValueError(problem[1])
+    event.update(kind=kind, ts=utc_now(), line=None, fresh=True)
+    return event
+
+
+def _ci_base(args):
+    if args.base:
+        return args.base
+    for name in ('GITHUB_BASE_REF', 'BITBUCKET_PR_DESTINATION_BRANCH'):
+        if os.environ.get(name):
+            return 'origin/' + os.environ[name]
+    return None
+
+
+def _claims(spec, config):
+    """What CI cannot check and a person should read: who is said to have approved and reviewed, and every waiver."""
+    lines = [f'accepted_by: {spec.meta.get("accepted_by") or "(not set)"}']
+    review = spec.review[0]
+    if review:
+        lines.append(f'reviewers: {review["reviewers"] or "(not named)"}; QA verdict: {review["qa"] or "(none)"}')
+    for event in spec.ledger[0]:
+        if event['kind'] == 'ruling' and 'RISK-ACCEPTANCE NEEDED' in (event.get('decision') or ''):
+            lines.append(f'ruling: {event["decision"]}')
+    return lines + _waivers(config)
+
+
+def _waivers(config):
+    lines = []
+    if config['source'] == 'onboarding':
+        lines.append(f'ONBOARDING: the verify command comes from this change ({config["label"]} is not on '
+                     f'{config["ref"] or "the default branch"} yet): read that file before approving')
+    if config.get('junit_waiver'):
+        lines.append(f'JUnit is waived ({config["junit_waiver"]}): stories are traced by a text search, not by a test '
+                     'that ran')
+    if not config.get('revert_check'):
+        lines.append('the revert check is off: nothing shows that the tests depend on the change')
+    if config.get('ci_waiver'):
+        lines.append(f'CI is waived ({config["ci_waiver"]})')
+    if config.get('returns_waiver'):
+        lines.append(f'reviewer returns are waived ({config["returns_waiver"]}): review.md is the session\'s own account')
+    return lines
+
+
+def cmd_ci(args):
+    """Recompute the evidence on the checked-out head with the config of the base ref. Reads no verify or revert line
+    from a ledger and writes nothing to a spec folder: the local files are a cache of what this run finds."""
+    root = repo_arg(args)
+    base = _ci_base(args)
+    repo = Repo(root, base=base)
+    trusted = repo.trusted_ref
+    if trusted is None:
+        what = f'--base {base} is not a commit in this checkout' if base else 'no base ref found'
+        raise UsageError(f'{what}: fetch the base branch with its history (actions/checkout fetch-depth: 0, or '
+                         '`git fetch origin <branch>`) and pass --base origin/<branch>')
+    branch = args.branch or os.environ.get('GITHUB_HEAD_REF') or os.environ.get('BITBUCKET_BRANCH') or repo.branch()
+    head = repo.git('rev-parse', 'HEAD')
+    head = head.stdout.strip()[:12] if head is not None and head.returncode == 0 else '?'
+    specs = [spec for spec in (Spec(folder, repo) for folder in repo.spec_dirs())
+             if branch and spec.meta.get('branch') == branch and spec.stage in ACTIVE]
+    findings, rows = [], []
+    if repo.code_dirty:
+        findings.append(fail('the checkout has uncommitted code: this check judges a commit'))
+    for spec in specs or [Unbound(repo)]:
+        bound = isinstance(spec, Spec)
+        name = repo.rel(spec.dir) if bound else f'(no spec bound to {branch or "this checkout"})'
+        config = spec.config if bound else load_config(repo, [root])
+        row = {'name': name, 'stage': spec.stage if bound else '-', 'config': None, 'claims': []}
+        rows.append(row)
+        if config is None:
+            findings.append(fail(NO_CONFIG.format(name=CONFIG_NAME)))
+            continue
+        findings += config['findings']
+        if failed(config['findings']):
+            continue
+        row.update(config=f'`{config["cmd"]}` ({config["label"]}, {config["source"]})',
+                   claims=_claims(spec, config) if bound else _waivers(config))
+        if bound and config['revert_check'] and not repo.code_dirty:
+            text, result = revert_check(spec, config, args.timeout)
+            spec.fresh['revert-check'] = _fresh(text)
+            findings += result
+        text, result, _ = run_pinned(spec, config, args.timeout)
+        findings += result
+        if not bound:
+            findings.append(('OK', f'no spec is bound to {branch or "this checkout"}: only the pinned suite was run'))
+            continue
+        spec.fresh['verify'] = _fresh(text)
+        if args.require != 'none' and STAGES.index(spec.stage) < STAGES.index(args.require):
+            findings.append(fail(f'{name}: the spec is at {spec.stage}; this check needs it at {args.require} '
+                                 '(finish the stages, commit the spec folder and push)'))
+        findings += _check(spec, CI_GATE[spec.stage]) if spec.stage in CI_GATE else []
+    findings = unique(findings)
+    summary = _ci_summary(head, branch, trusted, rows, findings)
+    target = args.summary or os.environ.get('GITHUB_STEP_SUMMARY')
+    if target:
+        try:
+            with open(target, 'a', encoding='utf-8') as handle:
+                handle.write('\n'.join(summary) + '\n')
+        except OSError:
+            pass
+    return finding_result(findings, {'base': trusted, 'branch': branch, 'head': head,
+                                     'specs': [row['name'] for row in rows], 'summary': summary})
+
+
+def _ci_summary(head, branch, trusted, rows, findings):
+    lines = [f'## Lifecycle gate: {"FAIL" if failed(findings) else "PASS"}', '',
+             f'Head `{head}` ({branch or "detached"}) against `{trusted}`. The suite and the revert check were run by '
+             'this job; nothing was taken from a ledger.', '']
+    for row in rows:
+        lines.append(f'- **{row["name"]}**, stage `{row["stage"]}`, verify command {row["config"] or "(none)"}')
+    claims = [(row['name'], claim) for row in rows for claim in row['claims']]
+    if claims:
+        lines += ['', '### Not checked by this job (read it)', ''] + [f'- {name}: {claim}' for name, claim in claims]
+    shown = [(level, message) for level, message in findings if level != 'OK']
+    if shown:
+        lines += ['', '### Findings', ''] + [f'- **{level}** {message.splitlines()[0]}' for level, message in shown]
+    return lines
+
+
 CONFIG_SKELETON = {'schema': SCHEMA, 'verify': {'cmd': '', 'junit': '', 'revert_check': True}}
 
 
@@ -2576,6 +2717,15 @@ def build_parser():
     verify.add_argument('--cmd', help='accepted only when it is the pinned command')
     verify.add_argument('--junit', help='accepted only when it is the pinned glob')
     verify.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT)
+    ci = add('ci', cmd_ci)
+    ci.add_argument('--base', help='the ref the config is read from and the head is compared with (default: '
+                                   'origin/$GITHUB_BASE_REF, origin/$BITBUCKET_PR_DESTINATION_BRANCH, else the default branch)')
+    ci.add_argument('--branch', help='the branch the specs are bound to (default: $GITHUB_HEAD_REF, $BITBUCKET_BRANCH, '
+                                     'else the checked-out branch)')
+    ci.add_argument('--require', choices=['reviewed', 'verified', 'none'], default='reviewed',
+                    help='the stage a bound spec must have reached (default: reviewed)')
+    ci.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT)
+    ci.add_argument('--summary', help='append a Markdown summary to this file (default: $GITHUB_STEP_SUMMARY)')
     config = add('config', cmd_config)
     config.add_argument('action', choices=['init', 'show'])
     config.add_argument('--cmd')

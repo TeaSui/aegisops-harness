@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "verify": {
+    "cmd": "python3 tests/junit_runner.py -s tests -o reports/junit.xml",
+    "junit": "reports/junit.xml"
+  }
+}

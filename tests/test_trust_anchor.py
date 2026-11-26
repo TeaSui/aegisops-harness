@@ -294,8 +294,8 @@ Verify: test
 '''
 
 
-class RevertCheckTest(ConfigCase):
-    """ETA-3: the suite goes red when the production change is taken out, or the tests prove nothing about it."""
+class RevertFixture(ConfigCase):
+    """A branch with production code and a real test runner pinned on main, revert check on."""
 
     def ready(self, test_text, cmd=UNITTEST, junit='none — plain unittest writes no JUnit', commit=True):
         self.config_on_main(cmd, junit, revert_check=True)
@@ -309,6 +309,21 @@ class RevertCheckTest(ConfigCase):
 
     def code_status(self):
         return self.git('status', '--porcelain', '--', 'src', 'tests', '.aidlc.json')
+
+    def building_with(self, requirements, covers):
+        self.config_on_main(JUNIT_RUN, 'ignored/*.xml', revert_check=True)
+        self.accepted_ready()
+        self.spec_file('requirements.md', requirements)
+        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
+        self.spec_file('plan.md', '- [ ] T1: Refund model\n  - covers: %s\n  - depends: none\n  - owner: main\n'
+                                  '  - files: src/refunds/model.py (new)\n' % covers)
+        self.assertEqual(self.cli('advance', 'refunds', 'planned')[0], 0)
+        self.git('checkout', '-q', '-b', 'feat/refunds')
+        self.assertEqual(self.cli('advance', 'refunds', 'building')[0], 0)
+
+
+class RevertCheckTest(RevertFixture):
+    """ETA-3: the suite goes red when the production change is taken out, or the tests prove nothing about it."""
 
     def test_eta_3_a_real_test_goes_red_without_the_change_and_the_tree_is_restored(self):
         self.ready(REAL_TEST)
@@ -382,17 +397,6 @@ class RevertCheckTest(ConfigCase):
         findings = aidlc.check(self.spec, 'verified')
         self.assertPasses(findings)
         self.assertTrue(any('no production source' in w for w in self.warns(findings)))
-
-    def building_with(self, requirements, covers):
-        self.config_on_main(JUNIT_RUN, 'ignored/*.xml', revert_check=True)
-        self.accepted_ready()
-        self.spec_file('requirements.md', requirements)
-        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
-        self.spec_file('plan.md', '- [ ] T1: Refund model\n  - covers: %s\n  - depends: none\n  - owner: main\n'
-                                  '  - files: src/refunds/model.py (new)\n' % covers)
-        self.assertEqual(self.cli('advance', 'refunds', 'planned')[0], 0)
-        self.git('checkout', '-q', '-b', 'feat/refunds')
-        self.assertEqual(self.cli('advance', 'refunds', 'building')[0], 0)
 
     def test_eta_3_stories_whose_tests_pass_without_the_change_are_listed(self):
         self.building_with(REQS_TWO_TESTED, 'RFD-1, RFD-2, RFD-3')
@@ -533,3 +537,152 @@ class CumulativeGateTest(ConfigCase):
         self.strict_ci()
         row = next(item for item in aidlc.status(self.repo, fast=True) if item['slug'] == 'refunds')
         self.assertFalse(any('no CI result' in blocker for blocker in row['blockers']), row['blockers'])
+
+
+class CiCommandTest(RevertFixture):
+    """ETA-4: `aidlc ci` recomputes the evidence on the head with the base's config. It never reads a verify or
+    revert line from the ledger and never writes to the spec folder."""
+
+    def reviewed(self, test_text=REAL_TEST, model=MODEL):
+        """A branch taken to `reviewed` the honest way, everything committed."""
+        self.ready(test_text)
+        self.assertEqual(self.cli('verify', 'refunds')[0], 0)
+        self.assertEqual(self.cli('advance', 'refunds', 'verified')[0], 0)
+        self.spec_file('review.md', REVIEW.format(fp='pending'))
+        self.assertEqual(self.cli('stamp', 'refunds', 'review')[0], 0)
+        code, out, err = self.cli('advance', 'refunds', 'reviewed')
+        self.assertEqual(code, 0, out + err)
+        self.commit('spec files')
+
+    def ci(self, *extra):
+        return self.cli('ci', '--base', 'main', '--branch', 'feat/refunds', *extra)
+
+    def snapshot(self):
+        files = {p.relative_to(self.repo).as_posix(): p.read_bytes() for p in sorted(self.spec.rglob('*')) if p.is_file()}
+        return files, self.git('status', '--porcelain')
+
+    def test_eta_4_an_honest_branch_passes_and_nothing_is_written(self):
+        self.reviewed()
+        before = self.snapshot()
+        code, out, err = self.ci()
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.snapshot(), before)
+        self.assertIn('gate reviewed passes', out)
+
+    def test_eta_4_proof_a_a_forged_green_ledger_over_red_tests_fails(self):
+        # Everything the local gates read says green; the suite is red. CI runs the suite.
+        self.reviewed()
+        self.write('src/refunds/model.py', 'def refund(amount):\n    return 0\n')
+        self.commit('break the refund')
+        current = aidlc.fingerprint(self.repo)
+        review = self.spec / 'review.md'
+        review.write_text(REVIEW.format(fp=current))
+        with open(self.spec / 'ledger.md', 'a') as ledger:
+            ledger.write('- 2026-11-26T00:00:00Z revert-check exit=1 fingerprint=%s base=abc files=1\n' % current)
+            ledger.write('- 2026-11-26T00:00:01Z verify exit=0 fingerprint=%s cmd=%s pinned=base\n'
+                         % (current, json.dumps(UNITTEST)))
+        self.commit('forged evidence')
+        self.assertPasses(aidlc.check(self.spec, 'reviewed'))        # the local gate is fooled ...
+        code, out, _ = self.ci()
+        self.assertEqual(code, 1, out)                                # ... CI is not
+        self.assertIn('the pinned command exited 1', out)
+
+    def test_eta_4_the_base_config_is_used_not_the_heads(self):
+        self.reviewed()
+        self.write('src/refunds/model.py', 'def refund(amount):\n    return 0\n')
+        self.pin('true')                                              # the head swaps the exam
+        self.commit('swap the test command and break the refund')
+        code, out, _ = self.ci()
+        self.assertEqual(code, 1, out)
+        self.assertIn('the pinned command exited 1', out)
+
+    def test_eta_4_the_review_must_be_stamped_on_this_code(self):
+        self.reviewed()
+        self.write('src/refunds/model.py', MODEL + '\n\ndef extra():\n    return 1\n')
+        self.commit('slipped in after the review')
+        code, out, _ = self.ci()
+        self.assertEqual(code, 1, out)
+        self.assertIn('code changed since the review was stamped', out)
+
+    def test_eta_4_a_vacuous_test_fails_ci_too(self):
+        self.ready(VACUOUS_TEST)
+        code, out, _ = self.ci('--require', 'none')
+        self.assertEqual(code, 1, out)
+        self.assertIn('still passes without the production change', out)
+
+    def test_eta_4_a_spec_below_the_required_stage_fails(self):
+        self.ready(REAL_TEST)                                         # stage: building, suite green
+        code, out, _ = self.ci()
+        self.assertEqual(code, 1, out)
+        self.assertIn('needs it at reviewed', out)
+        code, out, err = self.ci('--require', 'none')
+        self.assertEqual(code, 0, out + err)
+
+    def test_eta_4_the_base_must_be_a_commit_here(self):
+        self.reviewed()
+        code, out, err = self.cli('ci', '--base', 'origin/nope', '--branch', 'feat/refunds')
+        self.assertEqual(code, 2, out + err)
+        self.assertIn('fetch', err)
+
+    def test_eta_4_a_detached_checkout_works_with_the_branch_named(self):
+        self.reviewed()
+        self.git('checkout', '-q', '--detach')
+        code, out, err = self.ci()
+        self.assertEqual(code, 0, out + err)
+
+    def test_eta_4_a_branch_without_a_spec_still_runs_the_pinned_suite(self):
+        self.config_on_main(UNITTEST, 'none — plain unittest writes no JUnit', revert_check=True)
+        self.git('checkout', '-q', '-b', 'chore/tidy')
+        self.write('tests/test_app.py', EXISTING_TEST)
+        self.commit('a test')
+        code, out, err = self.cli('ci', '--base', 'main', '--branch', 'chore/tidy')
+        self.assertEqual(code, 0, out + err)
+        self.assertIn('no spec is bound to chore/tidy', out)
+        self.write('tests/test_app.py', EXISTING_TEST.replace('app.x, 1', 'app.x, 2'))
+        self.commit('a red test')
+        self.assertEqual(self.cli('ci', '--base', 'main', '--branch', 'chore/tidy')[0], 1)
+
+    def test_eta_4_no_config_anywhere_fails(self):
+        self.git('checkout', '-q', '-b', 'chore/tidy')
+        code, out, _ = self.cli('ci', '--base', 'main', '--branch', 'chore/tidy')
+        self.assertEqual(code, 1, out)
+        self.assertIn('.aidlc.json', out)
+
+    def test_eta_4_the_summary_lists_what_ci_cannot_check(self):
+        self.reviewed()
+        summary = self.base / 'summary.md'
+        self.assertEqual(self.ci('--summary', str(summary))[0], 0)
+        text = summary.read_text()
+        for needle in ('Lifecycle gate', 'PASS', 'feat/refunds', 'accepted_by: Tea (2026-11-19)', 'reviewers:',
+                       'CI is waived', 'reviewer returns are waived'):
+            self.assertIn(needle, text)
+
+    def test_eta_4_onboarding_is_said_out_loud(self):
+        self.building()                                               # main has no config
+        self.pin(UNITTEST, revert_check=True)
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', REAL_TEST)
+        self.commit('code and the first config')
+        summary = self.base / 'summary.md'
+        code, out, err = self.ci('--require', 'none', '--summary', str(summary))
+        self.assertEqual(code, 0, out + err)
+        self.assertIn('ONBOARDING', summary.read_text())
+
+
+class CiPackagingTest(Base):
+    def test_eta_4_the_action_runs_the_ci_command(self):
+        action = (ROOT / '.github' / 'actions' / 'aidlc-gate' / 'action.yml').read_text()
+        self.assertIn('using: composite', action)
+        self.assertIn('scripts/aidlc.py" ci', action)
+        self.assertIn('GITHUB_STEP_SUMMARY', action)
+
+    def test_eta_15_this_repository_runs_its_own_gate_on_pull_requests(self):
+        workflow = (ROOT / '.github' / 'workflows' / 'ci.yml').read_text()
+        self.assertIn('uses: ./.github/actions/aidlc-gate', workflow)
+        self.assertIn('fetch-depth: 0', workflow)
+        self.assertIn('github.event.pull_request.head.sha', workflow)
+        config = json.loads((ROOT / '.aidlc.json').read_text())
+        self.assertEqual(config['schema'], 1)
+        self.assertIn('junit_runner.py', config['verify']['cmd'])
+        self.assertNotIn('none', config['verify']['junit'])           # this repository does not waive its own rule
+        self.assertNotIn('ci', config)

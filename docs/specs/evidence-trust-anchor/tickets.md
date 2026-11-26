@@ -62,11 +62,11 @@ Test: python3 -m unittest tests.test_aidlc tests.test_trust_anchor
 ## T7: CI command and action
 Blocked by: T5, T6
 Covers: ETA-4, ETA-15
-Status: ready-for-agent
+Status: done
 What to build: one command recomputes the evidence on the head with the base config, ignores recorded verify lines, and is packaged as a composite action that this repository's own CI runs.
-- [ ] A forged green ledger over red tests fails the CI command
-- [ ] The CI command writes nothing to the spec folder
-- [ ] This repository's CI runs the command on pull requests
+- [x] A forged green ledger over red tests fails the CI command
+- [x] The CI command writes nothing to the spec folder
+- [x] This repository's CI runs the command on pull requests
 Test: python3 -m unittest tests.test_trust_anchor tests.test_evals
 
 ## T8: Approval bound to the spec text
