@@ -35,7 +35,7 @@ The trust anchor moves to where the session cannot write. An assessment reproduc
 - The transcript tags the evidence guard reads (as the question gate does) are not a documented Claude Code interface. When they are missing the guard refuses an approval, and a person approves from a terminal.
 
 ### Verified
-- 468 unit tests with node and gitleaks on the path (gitleaks 8.21.2 in CI, 8.30.1 on a developer machine; the secret-gate fixture token is high-entropy because 8.30 skips sequential ones), on Python 3.9 and 3.13 (CI runs 3.9 and 3.12); `check-setup` PASS; description lint PASS. Each proof of the assessment is a test that names its story (`ETA-n`); the forged-ledger repository of proof A passes the local gates and fails `aidlc ci`.
+- 467 unit tests with node and gitleaks on the path (gitleaks 8.21.2 in CI, 8.30.1 on a developer machine; the secret-gate fixture token is high-entropy because 8.30 skips sequential ones), on Python 3.9 and 3.13 (CI runs 3.9 and 3.12); `check-setup` PASS; description lint PASS. Each proof of the assessment is a test that names its story (`ETA-n`); the forged-ledger repository of proof A passes the local gates and fails `aidlc ci`.
 
 ## 5.0.0 — 2026-11-22
 
