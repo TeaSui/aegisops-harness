@@ -106,6 +106,25 @@ puts JSON.generate(errors)
     return ['YAML diagnostics failed: exit %d' % result.returncode] if result.returncode else json.loads(result.stdout)
 
 
+def version_drift(root, version):
+    """plugin.json holds the version. A copy in the README, or a changelog that leads with another release, is an
+    error: 5.0.0 shipped a README that still said 4.0.0."""
+    errors = []
+    try:
+        for found in re.findall(r'\*\*Version (\d+\.\d+\.\d+)\*\*', (root / 'README.md').read_text(errors='replace')):
+            if found != version:
+                errors.append('README.md names version %s; plugin.json says %s (drop the copy or fix it)' % (found, version))
+    except OSError:
+        pass
+    try:
+        lead = re.search(r'^## (\d+\.\d+\.\d+)\b', (root / 'CHANGELOG.md').read_text(errors='replace'), re.M)
+        if lead and lead.group(1) != version:
+            errors.append('CHANGELOG.md leads with %s; plugin.json says %s' % (lead.group(1), version))
+    except OSError:
+        pass
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent)
@@ -141,6 +160,7 @@ def main():
     for entry in manifests.get('marketplace.json', {}).get('plugins', []):
         if 'version' in entry and entry['version'] != plugin.get('version'):
             errors.append('marketplace.json version differs from plugin.json')
+    errors.extend(version_drift(root, str(plugin.get('version', ''))))
     try:
         hooks = json.loads((root / 'hooks/hooks.json').read_text())
         for command in re.findall(r'\$\{CLAUDE_PLUGIN_ROOT\}/([^"\s]+)', json.dumps(hooks)):

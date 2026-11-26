@@ -165,6 +165,11 @@ class SubagentRulesTest(HookCase):
         for agent in ('Explore', 'claude-code-guide', 'statusline-setup'):
             self.assertEqual(self.start(agent), '', agent)
 
+    def test_eta_14_note_opens_and_closes_with_the_same_tag(self):
+        # 5.0.0 shipped <AegisOps-Harness> ... </aegisops-harness>: a mechanical rename that no test read.
+        ctx = self.start('aegisops-harness:backend-engineer-subagent')
+        self.assertRegex(ctx, r'(?s)\A<([\w-]+)>\n.*\n</\1>\Z')
+
 class SessionSnapshotTest(HookCase):
     def start(self, env=None):
         env = self.env(env)
@@ -229,6 +234,49 @@ class SessionSnapshotTest(HookCase):
         self.start()
         self.assertFalse(old.exists())
         self.assertTrue(new.exists())
+
+    def hook_state_dirs(self):
+        """STATE_DIR of every hook module, read with HOME pointing at the scratch home."""
+        import importlib.util
+        from unittest import mock
+        found = {}
+        with mock.patch.dict(os.environ, {'HOME': str(self.home)}):
+            for path in sorted((ROOT / 'hooks').glob('*.py')):
+                spec = importlib.util.spec_from_file_location('state_probe_' + path.stem.replace('-', '_'), path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                if hasattr(module, 'STATE_DIR'):
+                    found[path.name] = pathlib.Path(module.STATE_DIR)
+        return found
+
+    def test_eta_14_every_hook_state_folder_is_pruned(self):
+        # 5.0.0 renamed the folder the autopilot writes but not the one the prune walks (case differs), so on a
+        # case-sensitive filesystem that state was never removed. Every hook that keeps per-session state is covered.
+        import time
+        folders = self.hook_state_dirs()
+        self.assertIn('autopilot.py', folders)
+        self.assertGreaterEqual(len(folders), 4, folders)
+        stale = time.time() - 40 * 86400
+        for folder in folders.values():
+            self.assertTrue(str(folder).startswith(str(self.home)), folder)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / 'old.json').write_text('{}')
+            (folder / 'new.json').write_text('{}')
+            os.utime(folder / 'old.json', (stale, stale))
+        self.start()
+        for name, folder in folders.items():
+            self.assertFalse((folder / 'old.json').exists(), name + ': old state not pruned in ' + str(folder))
+            self.assertTrue((folder / 'new.json').exists(), name)
+
+    def test_eta_14_snapshot_block_opens_and_closes_with_the_same_tag(self):
+        import re
+        spec = self.repo / 'docs' / 'specs' / 'refund'
+        spec.mkdir(parents=True)
+        (spec / 'README.md').write_text('---\nstatus: accepted\n---\n')
+        ctx = self.start()['hookSpecificOutput']['additionalContext']
+        block = re.search(r'(?s)<([\w-]+)>\nProject state at session start:.*?</([\w-]+)>', ctx)
+        self.assertIsNotNone(block, ctx[-400:])
+        self.assertEqual(block.group(1), block.group(2))
 
 if __name__ == '__main__':
     unittest.main()

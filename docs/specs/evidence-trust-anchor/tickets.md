@@ -3,11 +3,11 @@
 ## T1: Rename defects and version drift
 Blocked by: none
 Covers: ETA-14
-Status: ready-for-agent
+Status: done
 What to build: old gate state is pruned on a case-sensitive filesystem, the injected notes open and close with the same tag, and the structure check fails when the README or the changelog names another version than the manifest.
-- [ ] A 60-day-old autopilot state file is removed by the prune
-- [ ] The session and subagent notes use one tag name
-- [ ] The structure check fails on a README or changelog version that differs from the manifest
+- [x] A 60-day-old autopilot state file is removed by the prune
+- [x] The session and subagent notes use one tag name
+- [x] The structure check fails on a README or changelog version that differs from the manifest
 Test: python3 -m unittest tests.test_autopilot tests.test_check_setup
 
 ## T2: Evals fail closed

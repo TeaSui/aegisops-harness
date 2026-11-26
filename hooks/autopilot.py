@@ -24,6 +24,11 @@ PLUGIN_ROOT = HERE.parent
 STATE_DIR = pathlib.Path.home() / '.claude' / 'state' / 'aegisops-harness' / 'autopilot'
 NOTE_LIMIT = 1500
 MAX_STOP_REMINDERS = 3
+TAG = 'aegisops-harness'  # one name for the opening and the closing tag of every injected note
+
+
+def wrap(text):
+    return f'<{TAG}>\n{text}\n</{TAG}>'
 
 
 def _load_tdd():
@@ -195,7 +200,8 @@ NEXT_STEP = {
     'reviewed': command('ship'),
     'shipped': command('upgrade-service-docs') + ' after the merge',
 }
-STATE_ROOTS = ('tdd', 'contract-gate', 'AegisOps-Harness/autopilot')
+# Per-session state folders under ~/.claude/state/ spelled as the hooks' own STATE_DIR (a test compares the two).
+STATE_ROOTS = ('tdd', 'contract-gate', 'question-gate', 'aegisops-harness/autopilot')
 STATE_MAX_AGE_DAYS = 30
 
 
@@ -319,7 +325,7 @@ def main():
 
 
 def emit(event, note):
-    note = '<AegisOps-Harness>\n' + note[:NOTE_LIMIT - 60] + '\n</aegisops-harness>'
+    note = wrap(note[:NOTE_LIMIT - 60])
     print(json.dumps({'hookSpecificOutput': {'hookEventName': event, 'additionalContext': note}}, ensure_ascii=False))
 
 

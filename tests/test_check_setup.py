@@ -200,6 +200,18 @@ class PluginIntegrityTest(unittest.TestCase):
         new.write_text('---\nname: brand-new\ndescription: Use when testing.\n---\n# x\n')
         self.assertIn('skills in no phase', ' '.join(self.check()['errors']))
 
+    def test_eta_14_version_drift_fails(self):
+        # 5.0.0 shipped a README that said 4.0.0 while check-setup said PASS.
+        version = json.loads((self.root / '.claude-plugin' / 'plugin.json').read_text())['version']
+        readme = self.root / 'README.md'
+        readme.write_text(readme.read_text() + '\n**Version 0.0.1** of the plugin.\n')
+        self.assertIn('README.md names version 0.0.1; plugin.json says ' + version, ' '.join(self.check()['errors']))
+
+    def test_eta_14_changelog_must_lead_with_the_manifest_version(self):
+        changelog = self.root / 'CHANGELOG.md'
+        changelog.write_text(changelog.read_text().replace('\n## ', '\n## 0.0.1 — 2020-01-01\n\nOld.\n\n## ', 1))
+        self.assertIn('CHANGELOG.md leads with 0.0.1', ' '.join(self.check()['errors']))
+
     def test_hook_with_syntax_error_fails(self):
         (self.root / 'hooks' / 'broken.py').write_text('def oops(:\n')
         self.assertIn('hooks/broken.py', ' '.join(self.check()['errors']))

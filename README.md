@@ -2,7 +2,7 @@
 
 > The backend engineering lifecycle for Claude Code: **spec → plan → build → verify → review → ship**, started only by slash commands and held by gates.
 
-**Version 4.0.0** · [How it works (one page)](HOW-IT-WORKS.md) · [Changelog](CHANGELOG.md) · MIT
+[How it works (one page)](HOW-IT-WORKS.md) · [Changelog](CHANGELOG.md) (the version is in `.claude-plugin/plugin.json`) · MIT
 
 AegisOps-Harness does nothing until you run one of its commands. No keyword in a prompt starts a workflow and the model cannot load an AegisOps-Harness skill on its own (every skill has `disable-model-invocation: true`, and `check-setup.py` fails if one does not). Inside a command each stage is a fixed file, support skills are chosen from the repository's files, business questions go to Atlassian Rovo before a person, and every stage ends at an `aidlc` gate.
 
