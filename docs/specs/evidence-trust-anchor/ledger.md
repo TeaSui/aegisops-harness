@@ -17,3 +17,5 @@ Append-only, written by `aidlc` only.
 - 2026-11-26T08:58:53Z task-done T10 exit=0 fingerprint=cd7633c2a9442ad7ed0e22c807c87e451bf24f2b7b6bee45600ad231ca77491e cmd="python3 -m unittest tests.test_hook_commands tests.test_ship_gate"
 - 2026-11-26T09:09:46Z task-done T11 exit=0 fingerprint=a2f2761363f92d406fca79bef05fdc88a1c9ef61b0f92005caba5251c00e2898 cmd="python3 -m unittest discover -s tests"
 - 2026-11-26T09:11:06Z advance building→proposed back reason="6.0.0: an approval is an event the owner records (aidlc approve). The session that built this change cannot record it, and the accepted_by line it typed under 5.0.0 approves nothing"
+- 2026-11-26T10:58:12Z revert-check exit=1 fingerprint=2ffdef29887bb23536caf63da9c7de38d31644ef0b7218361d6ebee589f71d56 base=ccf82d035326 files=23 junit=173 passed, 266 failed
+- 2026-11-26T10:59:53Z verify exit=0 fingerprint=2ffdef29887bb23536caf63da9c7de38d31644ef0b7218361d6ebee589f71d56 cmd="python3 tests/junit_runner.py -s tests -o reports/junit.xml" pinned=onboarding junit=460 passed, 0 failed req-pass=ETA-1,ETA-10,ETA-11,ETA-12,ETA-13,ETA-14,ETA-15,ETA-2,ETA-3,ETA-4,ETA-5,ETA-6,ETA-7,ETA-8,ETA-9
