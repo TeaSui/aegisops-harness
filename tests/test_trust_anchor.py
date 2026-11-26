@@ -252,6 +252,14 @@ class DynamicTraceabilityTest(ConfigCase):
         self.assertEqual(self.cli('verify', 'refunds')[0], 0)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1 has no passing test in the JUnit results')
 
+    def test_eta_2_the_trace_table_agrees_with_the_gate_on_a_comment(self):
+        self.ready(junit(('refund works', 'pass')))
+        self.assertEqual(self.cli('verify', 'refunds')[0], 0)
+        code, out, err = self.cli('trace', 'refunds')
+        row = next(line for line in out.splitlines() if line.startswith('| RFD-1 '))
+        self.assertNotIn('| pass |', row + ' ', out + err)                 # the ID is in a comment: no test ran for it
+        self.assertIn('no passing test', row)
+
     def test_eta_2_a_passing_test_that_names_the_story_traces_it(self):
         self.ready(junit(('RFD-1 refunds a captured payment', 'pass')))
         self.assertEqual(self.cli('verify', 'refunds')[0], 0)

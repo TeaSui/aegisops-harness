@@ -102,7 +102,11 @@ def approve_refusal(arguments, transcript):
     slug = pathlib.PurePosixPath((target or '').rstrip('/')).name
     if '--delegated' in arguments:
         work = [args for name, args in commands if name in gate.COMMANDS]
-        if work and not gate.DELEGATED.search(work[-1]):
+        if not work:
+            return ('evidence-guard: `approve --delegated` records that the request handed the decisions over, and this '
+                    'session shows no work command to read that from (none typed, or the transcript cannot be read). '
+                    f'Present the spec and ask the user to type /aegisops-harness:approve {slug or "<slug>"}.')
+        if not gate.DELEGATED.search(work[-1]):
             return ('evidence-guard: `approve --delegated` records that the request handed the decisions over, and the '
                     'request that started this work did not hand the decisions over. Present the spec and ask the user '
                     f'to type /aegisops-harness:approve {slug or "<slug>"}.')

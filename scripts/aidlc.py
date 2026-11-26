@@ -2630,7 +2630,11 @@ def _result(req, tests, event, current):
         return 'not run'
     if not fp_matches(event['fingerprint'], current):
         return 'stale'
-    return 'fail' if event['exit'] != 0 or req['id'] in event['req_fail'] else 'pass'
+    if event['exit'] != 0 or req['id'] in event['req_fail']:
+        return 'fail'
+    if isinstance(event.get('junit'), dict) and req['id'] not in event['req_pass']:
+        return 'no passing test'  # the report is the evidence: an ID in a comment ran nothing
+    return 'pass'
 
 
 def trace_table(rows):

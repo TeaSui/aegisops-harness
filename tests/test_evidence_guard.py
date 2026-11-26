@@ -75,7 +75,11 @@ class ApprovalGuardTest(GuardCase):
         code, err = self.bash(AIDLC + ' approve refunds --delegated', plain)
         self.assertEqual(code, 2)
         self.assertIn('did not hand the decisions over', err)
-        self.assertEqual(self.bash(AIDLC + ' approve refunds --delegated')[0], 0)   # nothing to read: not blocked
+        code, err = self.bash(AIDLC + ' approve refunds --delegated')               # nothing to read: fail closed
+        self.assertEqual(code, 2)
+        self.assertIn('no work command', err)
+        typed_only = [command('approve', 'refunds')]                                # an approval is not a request
+        self.assertEqual(self.bash(AIDLC + ' approve refunds --delegated', typed_only)[0], 2)
 
     def test_other_aidlc_commands_and_other_tools_pass(self):
         entries = [command('aidlc', 'Add refunds.')]
