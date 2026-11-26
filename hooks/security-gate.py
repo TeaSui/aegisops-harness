@@ -2,8 +2,10 @@
 """PreToolUse gate for Bash: block git commit/push unless gitleaks reports no secrets.
 
 Fails closed: missing gitleaks, scanner errors, or unreadable hook input block the command.
-The git call is read from the command, not matched as text (hooks/invocations.py): `git -C dir commit`,
-`/usr/bin/git push`, `bash -c "git commit"` are scanned, in the folder the call runs in.
+The git call is read from the command (hooks/invocations.py): `git -C dir commit`, `/usr/bin/git push`,
+`bash -c "git commit"`, `if …; then git commit; fi` are scanned, in the folder the call runs in. What the parser does
+not know (`chronic git push`) falls to a text match on the unquoted command, which scans everything a commit or a
+push could take. Text that mentions a commit inside a string or a written file (`echo "run git commit"`) is no commit.
   commit   the staged content; with -a/--all or paths on the line, also tracked changes that were never staged.
   push     the commits the upstream does not have; on a branch without an upstream, the commits no remote has
            (`@{u}` does not exist there, and 5.0.0 reported that scanner error as a secret on every first push).
@@ -19,7 +21,7 @@ import subprocess
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-GIT_WRITE = re.compile(r'(^|[;&|\s])git\s+(commit|push)\b')  # the 5.0.0 text match, kept so that nothing it caught is lost
+GIT_COMMIT = re.compile(r'(^|[;&|\s])git\s+commit\b')  # the 5.0.0 text match: the floor under the parser
 GIT_PUSH = re.compile(r'(^|[;&|\s])git\s+push\b')
 BASE = ['gitleaks', 'git', '--redact', '--no-banner']
 SCAN_ERROR = re.compile(r'failed to scan|partial scan', re.I)
@@ -38,15 +40,21 @@ def invocations():
 
 
 def calls_in(command):
-    """[{sub, args, dir}] for the commits and pushes in a command; the text match is the floor."""
+    """[{sub, args, dir, worktree}] for the commits and pushes in a command. The parser reads them; a text match on
+    the unquoted command is the floor for each kind the parser did not find. The floor cannot read arguments, so its
+    commit scans staged and unstaged changes alike."""
     try:
         inv = invocations()
         found = [dict(call, worktree=call['sub'] == 'commit' and inv.commit_takes_worktree(call['args']))
                  for call in inv.git_calls(command) if call['sub'] in ('commit', 'push')]
-    except Exception:
-        found = []
-    if not found and GIT_WRITE.search(command):
-        found = [{'sub': 'push' if GIT_PUSH.search(command) else 'commit', 'args': [], 'dir': None, 'worktree': False}]
+        text = inv.unquoted(command)
+    except Exception:  # the parser itself failed: the whole text is the floor
+        found, text = [], command
+    seen = {call['sub'] for call in found}
+    if 'commit' not in seen and GIT_COMMIT.search(text):
+        found.append({'sub': 'commit', 'args': [], 'dir': None, 'worktree': True})
+    if 'push' not in seen and GIT_PUSH.search(text):
+        found.append({'sub': 'push', 'args': [], 'dir': None, 'worktree': False})
     return found
 
 

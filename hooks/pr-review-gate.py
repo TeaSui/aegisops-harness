@@ -81,7 +81,9 @@ MCP_CREATE = re.compile(r'mcp__.+__create_pull_request')
 
 
 def opens_pull_request(command):
-    """Read from the command; the 5.0.0 text match is the floor."""
+    """Read from the command; the 5.0.0 text match is the floor, on the unquoted text (a mention inside a string, a
+    commit message or a written file opens nothing)."""
+    text = command
     try:
         import importlib.util
         spec = importlib.util.spec_from_file_location('aegisops_harness_invocations',
@@ -90,9 +92,10 @@ def opens_pull_request(command):
         spec.loader.exec_module(module)
         if module.opens_pull_request(command):
             return True
-    except Exception:
+        text = module.unquoted(command)
+    except Exception:  # the parser itself failed: the whole text is the floor
         pass
-    return bool(PR_CREATE.search(command))
+    return bool(PR_CREATE.search(text))
 
 
 def main():

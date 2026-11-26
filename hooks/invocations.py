@@ -2,9 +2,14 @@
 """Shell-command reading shared by the gates: which git, gh, curl and pr.py invocations a Bash command holds.
 
 A gate that matches text misses `git -C . commit`, `/usr/bin/git push` and `bash -c "git commit"`, and fires on
-`echo "git commit"`. These helpers split a command the way a shell does (shlex, with operators and newlines as
-separators), look inside `bash -c '…'`, `eval`, `$(…)` and backticks, step over `env`, `sudo`, `command`, `xargs`
-and variable assignments, and skip git's global options to reach the subcommand.
+`echo "run git commit"`. These helpers split a command the way a shell does (shlex, with operators and newlines as
+separators), look inside `bash -c '…'`, `su -c`, `eval`, `$(…)`, backticks, `find -exec` and a here-document fed
+to a shell, step over reserved words (`if … then`, `for … do`, `{`, `!`), `env`, `sudo`, `command`, `xargs` and
+variable assignments, and skip git's global options to reach the subcommand. The text of a here-document that feeds
+anything else (`cat > notes.md <<EOF`) is text, not commands.
+
+`unquoted()` is the same command for a gate's text match, its floor for what the parser does not know (a wrapper
+such as `chronic git push`): quoted strings emptied, here-document text dropped.
 
 They cover the commands a session writes by default. An alias, a script, or another tool is not seen; that is what
 `aidlc ci` behind branch protection is for (references/aidlc.md, trust model). Not a hook: imported by the gates.
@@ -14,10 +19,15 @@ import re
 import shlex
 
 SHELLS = ('bash', 'sh', 'zsh', 'dash', 'ksh')
-WRAPPERS = {'command': 0, 'builtin': 0, 'exec': 0, 'nohup': 0, 'time': 0, 'env': 0, 'sudo': 0, 'nice': 0, 'xargs': 0,
-            'stdbuf': 0, 'timeout': 1}  # name -> positional arguments it takes before the command
-WRAPPER_VALUES = {'sudo': ('-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T'), 'nice': ('-n',), 'xargs': ('-I', '-n', '-P', '-d', '-L', '-s'),
-                  'env': ('-u', '-C', '-S'), 'timeout': ('-s', '-k'), 'stdbuf': ('-i', '-o', '-e')}
+RUNNERS = SHELLS + ('su', 'runuser')  # take a script after -c
+KEYWORDS = ('if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '}')  # a command can follow these
+FIND_EXEC = ('-exec', '-execdir', '-ok', '-okdir')
+WRAPPERS = {'command': 0, 'builtin': 0, 'exec': 0, 'nohup': 0, 'time': 0, 'env': 0, 'sudo': 0, 'doas': 0, 'nice': 0,
+            'xargs': 0, 'stdbuf': 0, 'setsid': 0, 'watch': 0, 'timeout': 1, 'flock': 1}  # name -> positionals before the command
+WRAPPER_VALUES = {'sudo': ('-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T'), 'doas': ('-u', '-C'), 'nice': ('-n',),
+                  'xargs': ('-I', '-n', '-P', '-d', '-L', '-s'), 'env': ('-u', '-C', '-S'), 'timeout': ('-s', '-k'),
+                  'stdbuf': ('-i', '-o', '-e'), 'watch': ('-n', '--interval'),
+                  'flock': ('-w', '--timeout', '-E', '--conflict-exit-code')}
 GIT_VALUES = ('-C', '-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env', '--attr-source')
 GH_API_VALUES = ('-X', '--method', '-f', '--raw-field', '-F', '--field', '-H', '--header', '--input', '-q', '--jq',
                  '-t', '--template', '--hostname', '-p', '--preview', '--cache')
@@ -31,11 +41,18 @@ BITBUCKET_PULLS = re.compile(r'api\.bitbucket\.org/\S*/pullrequests/?$')
 BITBUCKET_MERGE = re.compile(r'api\.bitbucket\.org/\S*/pullrequests/(\d+)/merge/?$')
 ASSIGNMENT = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
 OPERATOR = re.compile(r'^[;&|()<>\n]+$')
+QUOTED = re.compile(r'"(?:\\.|[^"\\])*"|\'[^\']*\'')
+COMMENT = re.compile(r'(?:^|(?<=\s))#')
+HEREDOC = re.compile(r'(?<!<)<<(?!<)-?\s*(?:\'([^\'\n]+)\'|"([^"\n]+)"|\\?([A-Za-z_][A-Za-z0-9_]*))')
+TO_SHELL = re.compile(r'\|\s*(?:sudo\s+)?(?:\S*/)?(?:%s)\b' % '|'.join(SHELLS))
 
 
 def tokens(command):
     """Shell words of a command; operators and newlines come back as their own tokens."""
-    lexer = shlex.shlex(command.replace('`', ' ; '), posix=True, punctuation_chars=';&|()<>\n')
+    text = _scan(command)
+    lexer = shlex.shlex((command if text is None else text).replace('`', ' ; '), posix=True,
+                        punctuation_chars=';&|()<>\n')
+    lexer.commenters = ''  # comments were taken out by _scan: shlex would cut `fix#123` at the `#`
     lexer.whitespace = ' \t\r'
     lexer.whitespace_split = True
     try:
@@ -44,28 +61,113 @@ def tokens(command):
         return re.sub(r'(&&|\|\||[;|\n()])', r' \1 ', command).split(' ') if command else []
 
 
+def _scan(text, empty=False):
+    """The text without its comments (a `#` that starts a word, outside quotes, up to the end of the line) and, with
+    `empty`, with the inside of quoted strings emptied. None when a quote is left open: the caller keeps the text."""
+    out, i, n, start = [], 0, len(text), True
+    while i < n:
+        char = text[i]
+        if char == '\\' and i + 1 < n:
+            out.append(text[i:i + 2])
+            i, start = i + 2, False
+        elif char in '"\'':
+            j = i + 1
+            while j < n and text[j] != char:
+                j += 2 if char == '"' and text[j] == '\\' else 1
+            if j >= n:
+                return None
+            out.append(char * 2 if empty else text[i:j + 1])
+            i, start = j + 1, False
+        elif char == '#' and start:
+            while i < n and text[i] != '\n':
+                i += 1
+        else:
+            out.append(char)
+            i, start = i + 1, char in ' \t\r\n;&|()<>'
+    return ''.join(out)
+
+
 def name_of(word):
     return pathlib.PurePosixPath(word.replace('\\', '/')).name
 
 
-def simple_commands(command, depth=0):
-    """Every simple command in `command` as a list of words, wrappers and assignments removed, nested shells opened."""
+def _segments(text):
+    """The words of each simple command in a text, as the shell would split it."""
     found, current = [], []
-    for word in tokens(command) + [';']:
+    for word in tokens(text) + [';']:
         if OPERATOR.match(word) or word == '$':
             if current:
-                found += _unwrap(current, depth)
+                found.append(current)
             current = []
         elif word != '':
             current.append(word)
     return found
 
 
-def _unwrap(words, depth):
+def _heredocs(command):
+    """(the command without the text of its here-documents, the documents a shell reads). A `<<WORD` with no
+    terminator line, inside a quoted string or behind a `#` is left alone: its lines stay commands."""
+    kept, scripts, lines, index = [], [], command.split('\n'), 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
+        kept.append(line)
+        quoted = [match.span() for match in QUOTED.finditer(line)]
+        outside = [m.start() for m in COMMENT.finditer(line) if not any(a < m.start() < b for a, b in quoted)]
+        comment = outside[0] if outside else len(line)
+        for match in HEREDOC.finditer(line):
+            if match.start() >= comment or any(a < match.start() < b for a, b in quoted):
+                continue
+            word = match.group(1) or match.group(2) or match.group(3)
+            end = next((i for i in range(index, len(lines)) if lines[i].strip() == word), None)
+            if end is None:
+                continue
+            if _feeds_shell(line[:match.start()], line[match.end():comment]):
+                scripts.append('\n'.join(lines[index:end]))
+            index = end + 1
+    return '\n'.join(kept), scripts
+
+
+def _feeds_shell(before, after):
+    """Whether the here-document opened on this line is read by a shell: `bash <<EOF`, `sudo sh -s <<EOF`,
+    `cat <<EOF | sh`."""
+    if TO_SHELL.search(after):
+        return True
+    words, _ = _strip((_segments(before) or [[]])[-1])
+    return any(name_of(word) in SHELLS for word in words)  # `bash`, `sudo sh -s`, `ssh host bash`
+
+
+def unquoted(command):
+    """The command as a text match may read it: quoted strings emptied and here-document text dropped (kept when the
+    document feeds a shell). A command name left in this text stands where a command can stand, or is an unquoted
+    mention. An unbalanced quote is left as it is: the text stays readable to the match."""
+    text, scripts = _heredocs(command)
+    scanned = _scan(text, empty=True)
+    return '\n'.join([text if scanned is None else scanned] + [unquoted(script) for script in scripts])
+
+
+def simple_commands(command, depth=0):
+    """Every simple command in `command` as a list of words, reserved words, wrappers and assignments removed, nested
+    shells opened."""
+    text, scripts = _heredocs(command)
+    found = []
+    for words in _segments(text):
+        found += _unwrap(words, depth)
+    if depth < 4:
+        for script in scripts:
+            found += simple_commands(script, depth + 1)
+    return found
+
+
+def _strip(words):
+    """(words, wrapped): the words without leading reserved words, assignments and wrapper commands."""
+    wrapped = False
     while words:
         head = name_of(words[0])
-        if ASSIGNMENT.match(words[0]):
+        if ASSIGNMENT.match(words[0]) or words[0] in KEYWORDS:
             words = words[1:]
+        elif words[0] == 'function':
+            words = words[2:]
         elif head in WRAPPERS:
             rest, positional = words[1:], WRAPPERS[head]
             while rest and (rest[0].startswith('-') or ASSIGNMENT.match(rest[0]) or positional):
@@ -75,18 +177,37 @@ def _unwrap(words, depth):
                     rest = rest[1:]
                 else:
                     rest, positional = rest[1:], positional - 1
-            words = rest
+            words, wrapped = rest, True
         else:
             break
+    return words, wrapped
+
+
+def _unwrap(words, depth):
+    """The simple command itself, and the commands it runs: a script after `-c`, `eval`, `find -exec`."""
+    words, wrapped = _strip(words)
     if not words:
         return []
+    if depth >= 4:
+        return [words]
     head = name_of(words[0])
-    if depth < 4 and head in SHELLS and '-c' in words[1:]:
-        script = words[words.index('-c') + 1:]
-        return simple_commands(script[0], depth + 1) if script else []
-    if depth < 4 and head == 'eval':
+    if wrapped and len(words) == 1 and re.search(r'\s', words[0]):  # watch "git push": the command is one word
+        return simple_commands(words[0], depth + 1)
+    if head == 'eval':
         return simple_commands(' '.join(words[1:]), depth + 1)
-    return [words]
+    found = [words]
+    if head == 'find':
+        for index, word in enumerate(words):
+            if word in FIND_EXEC and words[index + 1:]:
+                found += _unwrap(words[index + 1:], depth + 1)
+        return found
+    for index, word in enumerate(words):  # `flock lock sh -c "…"`, `su dev -c "…"`: the runner need not come first
+        flag = next((i for i in range(index + 1, len(words)) if re.fullmatch(r'-[A-Za-z]*c[A-Za-z]*', words[i])), None)
+        if name_of(word) in RUNNERS and flag is not None:  # -c, -lc, -ec: the script is the word after it
+            if flag + 1 < len(words):
+                found += simple_commands(words[flag + 1], depth + 1)
+            break
+    return found
 
 
 def git_calls(command):

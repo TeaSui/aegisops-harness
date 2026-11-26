@@ -145,27 +145,28 @@ MCP_MERGE = re.compile(r'mcp__.+__(merge_pull_request|enable_pr_auto_merge)')
 
 
 def merge_of(payload):
-    """(True, target) when this tool call merges a pull request: read from the command, with the 5.0.0 text match as
-    the floor, or from a GitHub MCP merge tool. target: PR number, URL or branch; None = the current branch; '$' =
-    cannot be known."""
+    """(True, target) when this tool call merges a pull request: read from the command, with the 5.0.0 text match on
+    the unquoted text as the floor (a mention inside a string or a written file merges nothing), or from a GitHub MCP
+    merge tool. target: PR number, URL or branch; None = the current branch; '$' = cannot be known."""
     tool, tool_input = str(payload.get('tool_name')), payload.get('tool_input') or {}
     if MCP_MERGE.fullmatch(tool):
         number = next((tool_input[key] for key in ('pullNumber', 'pull_number', 'number') if tool_input.get(key)), None)
         return True, '$' if number is None else str(number)
     if tool != 'Bash':
         return False, None
-    command = str(tool_input.get('command', ''))
+    text = str(tool_input.get('command', ''))
     try:
         spec = importlib.util.spec_from_file_location('aegisops_harness_invocations',
                                                       pathlib.Path(__file__).with_name('invocations.py'))
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        merging, target = module.merges_pull_request(command)
+        merging, target = module.merges_pull_request(text)
         if merging:
             return True, target
-    except Exception:
+        text = module.unquoted(text)
+    except Exception:  # the parser itself failed: the whole text is the floor
         pass
-    return (True, merge_target(command)) if MERGE.search(command) else (False, None)
+    return (True, merge_target(text)) if MERGE.search(text) else (False, None)
 
 
 def main():

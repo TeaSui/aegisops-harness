@@ -67,6 +67,17 @@ class ShipGateTest(unittest.TestCase):
         self.assertEqual(self.run_hook('gh api repos/o/r/pulls/42/merge').returncode, 0)       # a read: "is it merged?"
         self.assertEqual(self.run_hook('gh api -X PUT repos/o/r/pulls/7/merge').returncode, 0)  # a branch with no spec
 
+    def test_eta_8_a_mention_of_a_merge_is_not_a_merge(self):
+        self.spec('reviewed')
+        for command in ('echo "then gh pr merge --squash"', "grep -rn 'run gh pr merge' docs",
+                        'git commit -m "docs: gh pr merge waits for the shipped gate"',
+                        'cat > howto.md <<EOF\ngh pr merge 42 --squash\nEOF'):
+            self.assertEqual(self.run_hook(command).returncode, 0, command)
+        for command in ('if true; then gh pr merge 42 --squash; fi', 'chronic gh pr merge 42 --squash'):
+            result = self.run_hook(command)
+            self.assertEqual(result.returncode, 2, command)
+            self.assertIn('shipped', result.stderr)
+
     def test_eta_8_an_mcp_merge_is_gated(self):
         self.spec('reviewed')
         args = {'owner': 'o', 'repo': 'r', 'pullNumber': 42}

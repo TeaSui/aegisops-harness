@@ -53,6 +53,62 @@ class ParsingTest(unittest.TestCase):
             self.assertNotIn('push', [s for s in self.subs(command) if command != 'git stash push'], command)
         self.assertEqual(self.subs('git stash push'), ['stash'])
 
+    def test_eta_8_git_subcommand_is_found_inside_shell_control_flow(self):
+        for command in ('if npm test; then git commit -m x; fi', 'if true; then :; else git commit -m x; fi',
+                        'if false; then :; elif true; then git commit; fi',
+                        'for r in a b; do git -C "$r" commit -m x; done',
+                        'while read f; do git commit -m "$f"; done < list', 'until git commit -m x; do sleep 1; done',
+                        '{ git commit -m x; }', '! git commit -m x', 'function save { git commit -m x; }; save',
+                        'save() { git commit -m x; }; save', 'find . -name "*.txt" -exec git commit -m x {} \;',
+                        'find . -type d -execdir git commit -m x +', 'watch -n 5 git commit -m x',
+                        'su -c "cd repo && git commit -m x"', 'su dev -c "git commit"',
+                        'flock /tmp/lock sh -c "git commit -m x"', 'bash -c "if true; then git commit -m x; fi"',
+                        'bash <<EOF\ngit commit -m x\nEOF', "sh -s <<'EOF'\ncd a\ngit commit -m x\nEOF",
+                        'cat <<EOF | bash\ngit commit -m x\nEOF', 'sudo bash <<-EOF\n\tgit commit -m x\n\tEOF'):
+            self.assertEqual(self.subs(command)[-1:], ['commit'], command)
+        self.assertEqual(self.subs('while ! git push; do sleep 5; done'), ['push'])
+        for command in ('bash -lc "git commit -m x"', 'sh -ec "cd a && git commit"', 'zsh -ic "git commit"',
+                        'ssh build bash <<EOF\ngit commit -m x\nEOF'):  # a login shell; a shell that is not first
+            self.assertEqual(self.subs(command)[-1:], ['commit'], command)
+
+    def test_eta_8_a_comment_ends_at_the_line_and_only_starts_where_a_word_starts(self):
+        self.assertEqual(self.subs('echo hi # note\ngit commit -m x'), ['commit'])
+        self.assertEqual(self.subs('git commit -m fix#123 && git push'), ['commit', 'push'])
+        self.assertEqual(self.subs('echo $# ; git push'), ['push'])
+        self.assertEqual(self.subs('git commit -m "a # b" && git push'), ['commit', 'push'])
+        self.assertEqual(self.subs('npm test  # then git push'), [])
+        self.assertEqual(self.subs('# git commit -m x\ngit status'), ['status'])
+        self.assertEqual(self.subs("bash -c 'echo a # b\ngit push'"), ['push'])
+        self.assertEqual(self.subs('git commit -m sh -c "echo hi"')[:1], ['commit'])  # a message is not a shell
+
+    def test_eta_8_text_written_to_a_file_is_not_a_git_command(self):
+        for command in ('cat > notes.md <<EOF\nthen run:\ngit commit -m x\ngit push\nEOF',
+                        "cat <<'EOF' > howto.md\ngit push origin main\nEOF", 'tee -a log <<-EOF\n\tgit commit\n\tEOF',
+                        'python3 - <<PY\nprint("git commit")\nPY'):
+            self.assertEqual(self.subs(command), [], command)
+        self.assertEqual(self.subs('cat > f <<EOF\ngit push\nEOF\ngit commit -m x'), ['commit'])  # after the document
+
+    def test_eta_8_unquoted_text_is_what_a_text_match_may_read(self):
+        self.assertNotIn('git commit', inv.unquoted('echo "remember to git commit" && ls'))
+        self.assertNotIn('git push', inv.unquoted("grep -rn 'how to git push' docs"))
+        text = inv.unquoted('cat > f <<EOF\nrun git commit later\nEOF\nls -la')
+        self.assertNotIn('git commit', text)
+        self.assertIn('ls -la', text)
+        self.assertIn('git commit', inv.unquoted('chronic git commit -m "say git push"'))
+        self.assertNotIn('git push', inv.unquoted('chronic git commit -m "say git push"'))
+        self.assertIn('git commit', inv.unquoted('echo "unbalanced && git commit'))            # cannot tell: it stays
+        self.assertNotIn('git push', inv.unquoted('npm test  # then git push'))               # a comment runs nothing
+        self.assertIn('git push', inv.unquoted('git commit -m fix#123 && chronic git push'))  # `#` inside a word
+        self.assertIn('git commit', inv.unquoted('bash <<EOF\nchronic git commit -m x\nEOF'))  # fed to a shell: code
+
+    def test_eta_8_pull_requests_inside_control_flow_and_in_written_text(self):
+        for command in ('if true; then gh pr create --fill; fi', 'for b in a; do gh pr create --head "$b"; done',
+                        '{ gh pr create --fill; }', 'bash <<EOF\ngh pr create --fill\nEOF'):
+            self.assertTrue(inv.opens_pull_request(command), command)
+        self.assertFalse(inv.opens_pull_request('cat > howto.md <<EOF\ngh pr create --fill\nEOF'))
+        self.assertEqual(inv.merges_pull_request('if true; then gh pr merge 42 --squash; fi'), (True, '42'))
+        self.assertEqual(inv.merges_pull_request('cat > howto.md <<EOF\ngh pr merge 42\nEOF')[0], False)
+
     def test_eta_8_directory_of_a_git_call(self):
         (call,) = inv.git_calls('git -C services/pay -c a=b commit -am "x y"')
         self.assertEqual((call['sub'], call['dir'], call['args']), ('commit', 'services/pay', ['-am', 'x y']))
@@ -167,6 +223,38 @@ class SecurityGateTest(GateCase):
         self.assertIn('--staged', modes)
         self.assertIn('--log-opts', modes)
 
+    def test_eta_8_a_mention_in_quoted_text_or_in_a_written_file_is_not_scanned(self):
+        mentions = ('echo "remember to git commit and git push"', "grep -rn 'how to git push' docs",
+                    'gh pr view 7 --json body --jq ".body" | grep "run git push"', 'npm test  # then git push',
+                    'cat > notes.md <<EOF\nthen run git commit -m x\ngit push\nEOF')
+        for command in mentions:
+            result = self.bash('security-gate.py', command)
+            self.assertEqual(result.returncode, 0, command + result.stderr)
+        self.assertEqual(self.scans(), [])
+        (self.bin / 'gitleaks').unlink()  # no scanner installed: a mention is still not a commit
+        env = {'PATH': str(self.bin) + os.pathsep + '/usr/bin:/bin'}
+        for command in mentions:
+            self.assertEqual(self.bash('security-gate.py', command, env).returncode, 0, command)
+
+    def modes(self):
+        return [line.split('|', 1)[1] for line in self.scans()]
+
+    def assert_commit_and_push_scanned(self):
+        modes = self.modes()
+        self.assertTrue(any('--staged' in mode for mode in modes), modes)
+        self.assertTrue(any('--pre-commit' in mode and '--staged' not in mode for mode in modes), modes)
+        self.assertTrue(any('--log-opts' in mode for mode in modes), modes)
+
+    def test_eta_8_commit_and_push_inside_control_flow_are_both_scanned(self):
+        self.bash('security-gate.py', 'if true; then git commit -am x && git push; fi')
+        self.assert_commit_and_push_scanned()
+
+    def test_eta_8_the_text_floor_scans_a_commit_and_a_push_behind_an_unknown_wrapper(self):
+        # `chronic` is not a wrapper the parser knows. The unquoted text is the floor: it cannot read the arguments,
+        # so it scans everything a commit could take (staged or not) and what a push would publish.
+        self.bash('security-gate.py', 'chronic git commit -m x && chronic git push')
+        self.assert_commit_and_push_scanned()
+
     def test_first_push_of_a_branch_scans_what_no_remote_has(self):
         self.git('checkout', '-q', '-b', 'feat/new')
         self.bash('security-gate.py', 'git push -u origin feat/new')
@@ -235,6 +323,16 @@ class PullRequestGateTest(GateCase):
         self.assertEqual(self.bash('pr-review-gate.py', 'gh api repos/o/r/pulls').returncode, 0)  # a read
         self.record_review()
         self.assertEqual(self.bash('pr-review-gate.py', 'gh api repos/o/r/pulls -f title=t').returncode, 0)
+
+    def test_eta_8_a_mention_of_gh_pr_create_is_not_a_pull_request(self):
+        for command in ('echo "next: gh pr create --fill"', "grep -rn 'run gh pr create' docs",
+                        'git commit -m "docs: when to run gh pr create"',
+                        'cat > howto.md <<EOF\ngh pr create --fill\nEOF'):
+            self.assertEqual(self.bash('pr-review-gate.py', command).returncode, 0, command)
+        for command in ('if true; then gh pr create --fill; fi', 'chronic gh pr create --fill'):
+            result = self.bash('pr-review-gate.py', command)
+            self.assertEqual(result.returncode, 2, command)
+            self.assertIn('no pre-PR review recorded', result.stderr)
 
     def test_eta_8_an_mcp_pull_request_is_gated(self):
         tool, args = 'mcp__github__create_pull_request', {'owner': 'o', 'repo': 'r', 'head': 'feat/z', 'base': 'main',
