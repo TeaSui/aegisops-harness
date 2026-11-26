@@ -9,7 +9,7 @@ These suites measure whether a session picks the right skill, command and gate w
 | `descriptions/` | Lint of every `skills/*/SKILL.md` and `commands/*.md` description, plus a collision check between descriptions | Free, under 1 s | CI, every push and PR |
 | `headless/` `passive` | Real `claude -p` sessions: a natural prompt with no slash command must invoke no AegisOps-Harness skill, command or agent (no passive activation) | About $0.45 per case per run (18 cases) | Manual, weekly workflow |
 | `headless/` `tdd` | Real sessions on code-change and bug prompts: a failing test run before the first production edit, and a test run after the last edit | About $0.50 per case per run (4 cases) | Manual, weekly workflow |
-| `headless/` `lifecycle` | One real session asked for a trust-boundary feature end to end. Scores how far the AIDLC lifecycle got and whether its gates were passed through `aidlc advance` | Several dollars per run, up to 45 min | Manual |
+| `headless/` `lifecycle` | One real session asked for a feature end to end (6 cases: three refund variants, a brownfield fee, a storage migration, concurrent transfers). Passes only when the lifecycle got far enough **and the software works**: the test suite is green and the case's hidden outcome checks hold | Several dollars per run, up to 45 min | Manual |
 
 Costs are what Claude Code reported (`total_cost_usd`) with Claude Code 2.1.319 on its default model. They change with the model and the plugin.
 
@@ -42,7 +42,8 @@ These suites need the `claude` CLI and an `ANTHROPIC_API_KEY` or a logged-in CLI
 
 ```bash
 python3 evals/headless/run.py --suite passive --runs 1 --parallel 6
-python3 evals/headless/run.py --suite passive,tdd --runs 3 --compare        # exit 1 on a regression
+python3 evals/headless/run.py --suite passive,tdd --runs 3 --compare        # exit 1 on a regression, 3 on no signal
+python3 evals/headless/run.py --suite tdd,lifecycle --runs 3 --arm both     # plugin against plain Claude Code
 python3 evals/headless/run.py --suite tdd --cases T2-behavior,T4-red --runs 3
 python3 evals/headless/run.py --suite lifecycle --runs 1 --model sonnet
 python3 evals/headless/run.py --suite passive --rejudge evals/headless/results/<stamp>   # re-score, no model calls
@@ -59,6 +60,8 @@ Options:
 | `--extra-arg` | One extra CLI argument; repeat the option for more |
 | `--tolerance` | Allowed pass-rate drop for `--compare` (default 0.10) |
 | `--strict` | Turn off the noise guard described below |
+| `--arm` | `plugin` (default), `control` (the same cases with no plugin and no slash command, results under `<suite>@control`) or `both` |
+| `--min-judged` | Share of the planned runs that must be judged for a suite to count (default 0.8); see "No signal" |
 
 Output:
 
@@ -72,7 +75,9 @@ Each suite is a folder in `headless/suites/` with four files: `suite.json` (turn
 
 - **passive.** A `silent` case passes when the session called neither the `Skill` tool with an AegisOps-Harness skill nor the `Agent`/`Task` tool with an AegisOps-Harness agent. Allowed tools are read-only, with a turn limit of 8. A tool call is counted even when permissions deny it.
 - **tdd.** The judge orders the tool calls into test edits, production edits (`src/`, not test files, including shell writes), red test runs and green test runs. An edit that a gate blocked counts as nothing. A run passes when a red run comes before the first production edit and a test run comes after the last edit. `score` gives half a point for each of the two conditions.
-- **lifecycle.** The judge scores six artifacts in the fixture's spec folder, one point each, against `references/aidlc.md`:
+- **lifecycle.** A run passes when both hold: the six stage artifacts reach the case's `pass_score` (0.67), and the outcome is right. The outcome is `npm test` green plus every hidden check the case names (`hidden`: a script in the suite folder that gets the fixture repository and prints one JSON object of booleans; `hidden_checks`: the names it must report; a name it does not report is a failed check). Six complete documents over a refund that pays twice is a failed run. A PR opened and the threats named are reported, not required.
+
+  The judge scores six artifacts in the fixture's spec folder, one point each, against `references/aidlc.md`:
   1. spec: a README with `key:`, and `spec.md` (to-spec template, ≥1 numbered user story)
   2. no open guess: `spec-check.md` closed, or absent (optional for `spec.md`)
   3. `tickets.md` whose `## T<n>` tickets all have `Covers` and `Blocked by`
@@ -81,11 +86,23 @@ Each suite is a folder in `headless/suites/` with four files: `suite.json` (turn
   6. `ship.md` with `decision: GO`, a rollback section and a post-release verification section
   Legacy `requirements.md`/`plan.md` specs score on the pre-3.3.0 rules.
 
-  A run passes when its score reaches the case's `pass_score` (0.67). The judge also reports the stage from `python3 scripts/aidlc.py status --json --repo <fixture>`, the `advance` transitions in the ledger, and gate discipline, which is advances divided by the stages reached. When `scripts/aidlc.py` is missing or prints no JSON, the judge says so and scores from the files alone.
+  The judge also reports the stage from `python3 scripts/aidlc.py status --json --repo <fixture>`, the `advance` transitions in the ledger, and gate discipline, which is advances divided by the stages reached. When `scripts/aidlc.py` is missing or prints no JSON, the judge says so and scores from the files alone.
+
+  Cases L4 to L6 lay a code base from `headless/fixtures/shop/<name>/` over the shared fixture (`"fixture": "<name>"`): a ledger, wallet and statement that need a fee (brownfield), a float data file that moves to integer cents (migration), and read-check-write over an asynchronous store (concurrency). **Adding a case:** its hidden check must fail on the fixture as shipped, pass on a reference solution in `tests/eval_reference/<name>/`, and fail on the wrong solutions you expect (`tests/test_eval_cases.py`); a hidden check nobody has seen fail measures nothing.
+
+### Control arm
+
+`--arm control` runs the same cases with no plugin loaded and the slash command taken off the prompt; `--arm both` runs the two and adds a "Plugin against control" table: pass counts, the difference in percentage points and its 95% interval (Newcombe). The control arm of `lifecycle` has no spec folder, so both arms are compared on the outcome (does the software work). `passive` has no control arm. The refund cases cannot show what the lifecycle adds: in 3.2.0 the path without a spec already scored every outcome check at a sixth of the cost. Use the harder cases for that question.
+
+### No signal
+
+A session that never reached a model (no API key, not signed in, no network) reports no cost and no output tokens. It is excluded like a usage-limit cutoff, as `no model turn`: the passive judge would otherwise pass it, since a session that does nothing also invokes nothing. When fewer than `--min-judged` of a suite's planned runs were judged, the suite is `no-signal`: `--compare` and `--update-baseline` exit 3 and print `NO SIGNAL`, and the baseline is not touched.
 
 ### Baseline and regressions
 
-`headless/baseline.json` holds the last accepted score of each suite: passed/total, the cases, runs per case, model, Claude Code version and plugin version. It was seeded from the 2.9.0 measurements in `CHANGELOG.md`: tdd 12/12; passive now measures silence (4.0.0), so its old 16/18 is not comparable. Lifecycle has no baseline yet, so `--compare` reports `no-baseline` for it and does not fail.
+`headless/baseline.json` holds the last accepted score of each suite: passed/total, the cases, runs per case, model, Claude Code version and plugin version. A baseline measured on another minor version of the plugin describes that version: the report says so (`baseline measured on plugin X, this is Y`) and `check-setup.py` warns. A suite or case the baseline does not hold is `no-baseline` and does not fail.
+
+Read a score with its interval. 4/4 means "at least 51%" (Wilson 95% lower bound), 8/8 "at least 68%", 17/17 "at least 82%"; a claim of 90% needs 35 passes in a row. Size `--runs` for the claim you want to make.
 
 `--compare` marks a suite as a **regression** (exit 1) when both of these hold:
 
@@ -99,4 +116,4 @@ To accept new scores, run the full suite with at least as many runs as the basel
 ### CI
 
 - `.github/workflows/ci.yml` runs on every push and pull request, on Python 3.9 and 3.12. It runs the unit tests, `scripts/check-setup.py` and the description lint.
-- `.github/workflows/evals.yml` runs on manual dispatch (inputs: suites, runs, model) and every Monday. It needs the repository secret `ANTHROPIC_API_KEY`. It installs the Claude Code CLI and gitleaks (the security gate blocks commits without gitleaks), then runs the headless suites with `--compare`. It writes the report to the job summary and uploads `results.json`, `report.md` and each run's stream and verdict as artifacts.
+- `.github/workflows/evals.yml` runs on manual dispatch (inputs: suites, runs, model) and every Monday. It needs the repository secret `ANTHROPIC_API_KEY` and stops at its first step without it. It installs the Claude Code CLI and gitleaks (the security gate blocks commits without gitleaks), then runs the headless suites with `--compare`. It writes the report to the job summary and uploads `results.json`, `report.md` and each run's stream and verdict as artifacts.

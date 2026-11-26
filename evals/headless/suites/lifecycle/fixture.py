@@ -1,5 +1,7 @@
 """Lifecycle suite fixture: the shared Node shop plus wallet tests and a README, committed on `main`, with a local
-`origin` and a fake `gh` (fixtures/fake_gh.py) whose `pr checks` runs the tests, so the session can reach `shipped`."""
+`origin` and a fake `gh` (fixtures/fake_gh.py) whose `pr checks` runs the tests, so the session can reach `shipped`.
+A case with "fixture": "<name>" gets the code base in fixtures/shop/<name>/ laid over it (brownfield, migration,
+concurrency): real files, so they can be read, linted and run on their own."""
 import os
 import pathlib
 import subprocess
@@ -8,6 +10,7 @@ import sys
 import node_shop
 
 FAKE_GH = pathlib.Path(__file__).resolve().parents[2] / 'fixtures' / 'fake_gh.py'
+SHOP = pathlib.Path(__file__).resolve().parents[2] / 'fixtures' / 'shop'
 
 EXTRA = {
     'README.md': '# shop\n\nA small wallet and math library. Run the tests with `npm test`.\n',
@@ -24,8 +27,19 @@ EXTRA = {
 }
 
 
+def variant_files(name):
+    """{repo-relative path: text} of fixtures/shop/<name>/."""
+    root = SHOP / name
+    if not root.is_dir():
+        raise ValueError('unknown fixture %r (have: %s)' % (name, ', '.join(sorted(p.name for p in SHOP.iterdir()))))
+    return {path.relative_to(root).as_posix(): path.read_text() for path in sorted(root.rglob('*')) if path.is_file()}
+
+
 def build(repo, case):
-    result = node_shop.build(repo, case.get('setup', 'none'), EXTRA)
+    extra = dict(EXTRA)
+    if case.get('fixture'):
+        extra.update(variant_files(case['fixture']))
+    result = node_shop.build(repo, case.get('setup', 'none'), extra)
     run_dir = pathlib.Path(repo).parent
     origin = run_dir / 'origin.git'
     subprocess.run(['git', 'init', '-q', '--bare', '-b', 'main', str(origin)], check=True)

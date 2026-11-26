@@ -134,6 +134,40 @@ def wilson(passed, total, z=1.96):
     return max(0.0, centre - half), min(1.0, centre + half)
 
 
+def difference(a_passed, a_total, b_passed, b_total):
+    """(a - b, low, high): difference of two pass rates with Newcombe's hybrid score 95% interval (built from the
+    two Wilson intervals). (None, None, None) when either side has no run."""
+    if a_total <= 0 or b_total <= 0:
+        return None, None, None
+    a, b = a_passed / a_total, b_passed / b_total
+    (a_low, a_high), (b_low, b_high) = wilson(a_passed, a_total), wilson(b_passed, b_total)
+    diff = a - b
+    low = diff - math.sqrt((a - a_low) ** 2 + (b_high - b) ** 2)
+    high = diff + math.sqrt((a_high - a) ** 2 + (b - b_low) ** 2)
+    return diff, max(-1.0, low), min(1.0, high)
+
+
+CONTROL = '@control'  # results key of a suite's control arm: the same cases without the plugin
+
+
+def arms(summaries):
+    """{suite: plugin against control} for every suite that has both arms. Compared on the outcome (does the software
+    work) when both arms report it, since only the plugin arm has lifecycle documents to score; else on pass."""
+    table = {}
+    for name, plugin in summaries.items():
+        control = summaries.get(name + CONTROL)
+        if name.endswith(CONTROL) or control is None:
+            continue
+        on_outcome = bool(plugin.get('outcome_total') and control.get('outcome_total'))
+        keys = ('outcome_passed', 'outcome_total') if on_outcome else ('passed', 'total')
+        diff, low, high = difference(plugin[keys[0]], plugin[keys[1]], control[keys[0]], control[keys[1]])
+        table[name] = {'plugin': '%d/%d' % (plugin[keys[0]], plugin[keys[1]]),
+                       'control': '%d/%d' % (control[keys[0]], control[keys[1]]),
+                       'metric': 'outcome' if on_outcome else 'pass', 'difference': diff,
+                       'interval': None if diff is None else [round(low, 3), round(high, 3)]}
+    return table
+
+
 def summarize(runs):
     """Aggregate run records of one suite. `planned` counts every run, `total` only the judged ones."""
     planned = len(runs)
@@ -145,7 +179,9 @@ def summarize(runs):
     costs = [r.get('cost_usd') or 0.0 for r in runs]
     durations = [r.get('duration_ms') or 0 for r in runs]
     scores = [r.get('score') for r in runs if isinstance(r.get('score'), (int, float))]
+    outcomes = [r['outcome_pass'] for r in runs if isinstance(r.get('outcome_pass'), bool)]
     return {'passed': passed, 'total': total, 'rate': passed / total if total else 0.0,
+            'outcome_passed': sum(outcomes), 'outcome_total': len(outcomes),
             'wilson95': [round(low, 3), round(high, 3)],
             'mean_score': round(sum(scores) / len(scores), 3) if scores else None,
             'cost_usd': round(sum(costs), 4), 'mean_duration_s': round(sum(durations) / total / 1000, 1) if total else 0,
@@ -253,6 +289,16 @@ def markdown_report(results):
             verdict.get('baseline', '-'), verdict.get('status', 'not compared')
             + ('' if not verdict.get('notes') else ' (' + '; '.join(verdict['notes']) + ')'),
             summary['cost_usd'], summary['mean_duration_s'], summary.get('infra_errors', 0)))
+    if results.get('arms'):
+        lines += ['', '## Plugin against control (the same cases without the plugin)', '',
+                  '| Suite | Plugin | Control | Difference | 95% interval | Compared on |', '|---|---|---|---|---|---|']
+        for suite, row in results['arms'].items():
+            if row['difference'] is None:
+                lines.append('| %s | %s | %s | - | - | %s |' % (suite, row['plugin'], row['control'], row['metric']))
+                continue
+            lines.append('| %s | %s | %s | %+.0f pp | %+.0f to %+.0f pp | %s |' % (
+                suite, row['plugin'], row['control'], 100 * row['difference'], 100 * row['interval'][0],
+                100 * row['interval'][1], row['metric']))
     for suite, runs in results.get('runs', {}).items():
         lines += ['', '## %s' % suite, '', '| Case | Run | Outcome | Score | Cost (USD) | Duration | Detail |',
                   '|---|---|---|---|---|---|---|']

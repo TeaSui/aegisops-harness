@@ -389,7 +389,8 @@ class StreamAndJudgeTest(unittest.TestCase):
             self.assertEqual(verdict['artifacts'], {'spec': True, 'spec-check': True, 'plan': True, 'build': True,
                                                     'review': True, 'ship': False})
             self.assertAlmostEqual(verdict['score'], 5 / 6, places=3)
-            self.assertTrue(verdict['pass'])
+            self.assertFalse(verdict['pass'])  # five documents and no working code is not a pass (ETA-9)
+            self.assertFalse(verdict['outcome_pass'])
             self.assertIn('not found', verdict['aidlc_status_note'])
             self.assertEqual(verdict['stage'], 'reviewed')  # from README when aidlc is unavailable
             self.assertEqual(len(verdict['advances']), 4)
@@ -441,6 +442,61 @@ class StreamAndJudgeTest(unittest.TestCase):
             self.assertFalse(verdict['pass'])
             self.assertFalse(verdict['checks']['at_most_once'])
             self.assertFalse(verdict['checks']['pr_opened'])
+
+    GOOD_WALLET = textwrap.dedent('''
+        const balances = new Map(); const transfers = new Map(); let next = 1;
+        export function deposit(u, a) { balances.set(u, (balances.get(u) || 0) + a); }
+        export const balance = (u) => balances.get(u) || 0;
+        export function transfer(f, t, a) { deposit(f, -a); deposit(t, a); const id = next++;
+          transfers.set(id, { f, t, a, refunded: false }); return id; }
+        export function refund(id, amount) { const x = transfers.get(id);
+          if (!x || x.refunded) throw new Error('no'); const a = amount ?? x.a;
+          if (!(a > 0) || a > x.a) throw new Error('bad'); x.refunded = true; deposit(x.t, -a); deposit(x.f, a); }
+    ''')
+    SHIP = ('---\ndecision: GO\nversion: n/a — fixture\n---\n## Checks\n- CI: green\n## Rollback\nRevert the merge.\n'
+            '## Post-release verification\nRun the smoke test.\n')
+
+    def working_repo(self, root, wallet, test_script='node -e 0'):
+        repo = self.make_repo(root, dict(self.SPEC, **{'ship.md': self.SHIP}))
+        (repo / 'src').mkdir()
+        (repo / 'src' / 'wallet.js').write_text(wallet)
+        (repo / 'package.json').write_text(json.dumps({'type': 'module', 'scripts': {'test': test_script}}))
+        return repo
+
+    @unittest.skipUnless(shutil.which('node') and shutil.which('npm'), 'needs node and npm')
+    def test_eta_9_lifecycle_judge_needs_working_software(self):
+        # Proof C of the assessment: six complete documents over a refund that pays twice scored pass=True, 1.0.
+        with tempfile.TemporaryDirectory() as tmp:
+            broken = self.GOOD_WALLET.replace("if (!x || x.refunded)", "if (!x)")
+            repo = self.working_repo(pathlib.Path(tmp), broken)
+            verdict = lifecycle_judge.judge({'pass_score': 0.67}, harness.parse_stream([]), repo, pathlib.Path(tmp))
+            self.assertEqual(verdict['score'], 1.0)          # the paperwork is complete ...
+            self.assertFalse(verdict['outcome_pass'])        # ... the refund can be replayed ...
+            self.assertFalse(verdict['pass'])                # ... so the run fails
+            self.assertIn('at_most_once', verdict['summary'])
+
+    @unittest.skipUnless(shutil.which('node') and shutil.which('npm'), 'needs node and npm')
+    def test_eta_9_red_tests_fail_the_lifecycle_judge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.working_repo(pathlib.Path(tmp), self.GOOD_WALLET, test_script='node -e "process.exit(1)"')
+            verdict = lifecycle_judge.judge({'pass_score': 0.67}, harness.parse_stream([]), repo, pathlib.Path(tmp))
+            self.assertFalse(verdict['outcome']['checks']['tests'])
+            self.assertFalse(verdict['pass'])
+
+    @unittest.skipUnless(shutil.which('node') and shutil.which('npm'), 'needs node and npm')
+    def test_eta_9_documents_and_working_software_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.working_repo(pathlib.Path(tmp), self.GOOD_WALLET)
+            verdict = lifecycle_judge.judge({'pass_score': 0.67}, harness.parse_stream([]), repo, pathlib.Path(tmp))
+            self.assertTrue(verdict['outcome_pass'], verdict['summary'])
+            self.assertTrue(verdict['pass'], verdict['summary'])
+
+    def test_eta_9_a_missing_hidden_result_is_a_failed_check(self):
+        # A hidden script that crashes, or leaves a check out, must not read as "nothing failed".
+        checks = lifecycle_judge.required_checks({'hidden_checks': ['a', 'b']}, {'tests': True, 'a': True})
+        self.assertEqual(checks, {'tests': True, 'a': True, 'b': False})
+        self.assertEqual(lifecycle_judge.required_checks({}, {'tests': True}),
+                         {'tests': True, 'money_returned': False, 'at_most_once': False, 'never_more_than_sent': False})
 
     def test_lifecycle_judge_reads_aidlc_status(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -523,6 +579,85 @@ class HeadlessRunnerTest(unittest.TestCase):
             self.assertEqual(code, 0, printed)
             self.assertEqual(json.loads(baseline.read_text())['suites']['passive']['passed'], 2)
             self.assertEqual(json.loads(baseline.read_text())['suites']['passive']['total'], 4)
+
+
+CONTROL_CLAUDE = '''#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+prompt = args[args.index('-p') + 1]
+plugin = '--plugin-dir' in args
+assert plugin == prompt.startswith('/aegisops-harness:'), (plugin, prompt[:40])
+print(json.dumps({"type": "system", "subtype": "init", "claude_code_version": "0.0.0-fake", "model": "fake"}))
+steps = [("Write", {"file_path": "test/clamp.test.js"}, "File created", False),
+         ("Bash", {"command": "npm test"}, "not ok 1 - clamp\\n# fail 1", True),
+         ("Edit", {"file_path": "src/math.js"}, "updated", False),
+         ("Bash", {"command": "npm test"}, "# pass 3\\n# fail 0", False)]
+if not plugin:
+    steps = steps[2:]          # the control session edits production code first
+for n, (name, tool_input, result, is_error) in enumerate(steps):
+    print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": str(n), "name": name,
+                                                                   "input": tool_input}]}}))
+    print(json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": str(n),
+                                                              "content": result, "is_error": is_error}]}}))
+print(json.dumps({"type": "result", "subtype": "success", "total_cost_usd": 0.01, "duration_ms": 1500, "num_turns": 4}))
+'''
+
+
+class ControlArmTest(unittest.TestCase):
+    """ETA-11: the same cases without the plugin, so the report can show what the plugin adds."""
+
+    def run_arm(self, tmp, arm):
+        fake = tmp / 'claude'
+        fake.write_text(CONTROL_CLAUDE.replace('#!/usr/bin/env python3', '#!' + sys.executable))
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        code, printed = quiet(runner.main, ['--suite', 'tdd', '--cases', 'T1-feature,T2-behavior', '--runs', '1',
+                                            '--arm', arm, '--claude-bin', str(fake), '--out', str(tmp / 'out'),
+                                            '--baseline', str(tmp / 'none.json')])
+        return code, printed, json.loads((tmp / 'out' / 'results.json').read_text())
+
+    def test_eta_11_control_prompt_drops_the_command(self):
+        self.assertEqual(runner.control_prompt({'prompt': '/aegisops-harness:fix Add clamp() to src/math.js.'}),
+                         'Add clamp() to src/math.js.')
+        self.assertEqual(runner.control_prompt({'prompt': '/aegisops-harness:aidlc Build this spec.\n\n# Title'}),
+                         'Build this spec.\n\n# Title')
+        self.assertEqual(runner.control_prompt({'prompt': 'plain prompt'}), 'plain prompt')
+        self.assertEqual(runner.control_prompt({'prompt': '/aegisops-harness:fix x', 'control_prompt': 'y'}), 'y')
+
+    def test_eta_11_control_arm_runs_without_the_plugin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, printed, results = self.run_arm(pathlib.Path(tmp), 'control')
+            self.assertEqual(code, 0, printed)
+            self.assertEqual(list(results['suites']), ['tdd@control'])
+            self.assertEqual(results['suites']['tdd@control']['passed'], 0)  # code first: the TDD judge fails it
+            self.assertEqual(results['suites']['tdd@control']['total'], 2)
+
+    def test_eta_11_both_arms_are_reported_side_by_side(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, printed, results = self.run_arm(pathlib.Path(tmp), 'both')
+            self.assertEqual(code, 0, printed)
+            self.assertEqual(sorted(results['suites']), ['tdd', 'tdd@control'])
+            self.assertEqual(results['suites']['tdd']['passed'], 2)
+            arms = results['arms']['tdd']
+            self.assertEqual((arms['plugin'], arms['control']), ('2/2', '0/2'))
+            self.assertAlmostEqual(arms['difference'], 1.0)
+            report = (pathlib.Path(tmp) / 'out' / 'report.md').read_text()
+            self.assertIn('| tdd | 2/2 | 0/2 | +100 pp |', report)
+
+    def test_eta_11_passive_has_no_control_arm(self):
+        self.assertFalse(runner.load_suite('passive')['config'].get('control', True))
+        self.assertTrue(runner.load_suite('tdd')['config'].get('control', True))
+
+    def test_eta_11_difference_interval(self):
+        # Newcombe's hybrid score interval for two proportions; 8/8 against 4/8.
+        diff, low, high = harness.difference(8, 8, 4, 8)
+        self.assertAlmostEqual(diff, 0.5)
+        self.assertGreater(low, 0.0)
+        self.assertLess(high, 1.0)
+        diff, low, high = harness.difference(3, 8, 3, 8)
+        self.assertAlmostEqual(diff, 0.0)
+        self.assertLess(low, 0.0)
+        self.assertGreater(high, 0.0)
+        self.assertEqual(harness.difference(0, 0, 1, 1), (None, None, None))
 
 
 DEAD_CLAUDE = '''#!/usr/bin/env python3

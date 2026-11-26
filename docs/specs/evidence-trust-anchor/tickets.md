@@ -23,11 +23,11 @@ Test: python3 -m unittest tests.test_evals
 ## T3: Evals score the outcome
 Blocked by: T2
 Covers: ETA-9, ETA-11
-Status: ready-for-agent
+Status: done
 What to build: the lifecycle judge needs green tests and the hidden checks, the runner has a control arm without the plugin, and three harder cases ship with hidden checks proven on a reference solution.
-- [ ] The broken repository of proof A fails the lifecycle judge
-- [ ] The control arm runs without the plugin and is judged on outcome
-- [ ] Each new hidden check passes on its reference solution and fails on the fixture as shipped
+- [x] The broken repository of proof A fails the lifecycle judge
+- [x] The control arm runs without the plugin and is judged on outcome
+- [x] Each new hidden check passes on its reference solution and fails on the fixture as shipped
 Test: python3 -m unittest tests.test_evals tests.test_eval_cases
 
 ## T4: Pinned verify command and dynamic traceability
