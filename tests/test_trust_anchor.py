@@ -448,3 +448,88 @@ class RevertCheckTest(ConfigCase):
         with open(ledger, 'a') as handle:
             handle.write('- 2026-11-26T00:00:01Z revert-check exit=1 fingerprint=%s base=abc files=1\n' % ('0' * 64))
         self.assertFails(aidlc.check(self.spec, 'verified'), 'code changed since the revert check')
+
+
+class CumulativeGateTest(ConfigCase):
+    """ETA-5: a later gate re-checks the earlier ones, and `shipped` needs a result from CI, not a sentence."""
+
+    def test_eta_5_proof_b_four_text_files_do_not_reach_shipped(self):
+        # The assessment's proof B, with the forger already adapted to the pinned-command rule.
+        self.pin()
+        self.git('checkout', '-q', '-b', 'feat/x')
+        self.commit('ship it')
+        folder = self.repo / 'docs' / 'specs' / 'x'
+        current = aidlc.fingerprint(self.repo)
+        self.spec_file('README.md', '---\nstatus: reviewed\nkey: ZZ\nbranch: feat/x\n---\n# x\n', folder)
+        self.spec_file('ship.md', SHIP, folder)
+        self.spec_file('review.md', '---\nfingerprint: %s\n---\n' % current[:12], folder)
+        self.spec_file('ledger.md', '- 2026-11-26T00:00:00Z verify exit=0 fingerprint=%s cmd="true" pinned=onboarding\n'
+                       % current[:12], folder)
+        findings = aidlc.check(folder, 'shipped')
+        for needle in ('spec.md: missing', 'accepted_by', 'tickets.md', 'no "## Spec" section'):
+            self.assertFails(findings, needle)
+        code, out, _ = self.cli('check', 'x', '--to', 'shipped')
+        self.assertEqual(code, 1, out)
+
+    def test_eta_5_a_hand_set_stage_grants_nothing(self):
+        self.building()
+        self.pin()
+        self.commit('code')
+        readme = self.spec / 'README.md'
+        readme.write_text(readme.read_text().replace('status: building', 'status: reviewed'))
+        self.spec_file('review.md', REVIEW.format(fp=aidlc.fingerprint(self.repo)))
+        self.spec_file('ship.md', SHIP)
+        with open(self.spec / 'ledger.md', 'a') as ledger:
+            ledger.write('- 2026-11-26T00:00:00Z verify exit=0 fingerprint=%s cmd="true" pinned=onboarding\n'
+                         % aidlc.fingerprint(self.repo))
+        findings = aidlc.check(self.spec, 'shipped')
+        self.assertFails(findings, 'T1 is not done')
+        self.assertFails(findings, 'RFD-1 (Verify: test) is not referenced')
+        self.assertEqual(self.cli('advance', 'refunds', 'shipped')[0], 1)
+
+    def test_eta_5_planned_includes_accepted(self):
+        self.planned_ready()
+        self.assertPasses(aidlc.check(self.spec, 'planned'))
+        self.readme(status='accepted', accepted_by='')
+        self.assertFails(aidlc.check(self.spec, 'planned'), 'accepted_by')
+
+    def test_eta_5_reviewed_includes_verified(self):
+        self.reviewed_ready()
+        self.assertPasses(aidlc.check(self.spec, 'reviewed'))
+        plan = self.spec / 'plan.md'
+        plan.write_text(plan.read_text() + '- [ ] T3: slipped in after the verify\n  - covers: RFD-1\n'
+                        '  - depends: none\n  - owner: main\n  - files: src/late.py\n')
+        self.assertFails(aidlc.check(self.spec, 'reviewed'), 'T3 is not done')
+
+    def test_eta_5_shipped_includes_the_review(self):
+        self.shipped_ready()
+        self.assertPasses(aidlc.check(self.spec, 'shipped'))
+        review = self.spec / 'review.md'
+        review.write_text(review.read_text().replace('## QA', '- [ ] S9 (must): found after the stamp\n## QA'))
+        self.assertFails(aidlc.check(self.spec, 'shipped'), 'open finding S9')
+
+    def strict_ci(self):
+        self.shipped_ready()
+        self.pin(ci='required')
+        self.commit('CI is required')
+        self.assertEqual(self.verify(ci='required')[0], 0)
+        self.assertEqual(self.cli('stamp', 'refunds', 'review')[0], 0)
+
+    def test_eta_5_proof_a_a_typed_ci_green_is_not_a_ci_result(self):
+        self.strict_ci()                                              # ship.md says "CI: green"; no gh, no PR
+        self.assertFails(aidlc.check(self.spec, 'shipped'), 'no CI result')
+        self.fake_gh('build\tpass\t1m\thttps://ci/1\n')
+        self.assertPasses(aidlc.check(self.spec, 'shipped'))
+        self.fake_gh('build\tfail\t1m\thttps://ci/1\n')
+        self.assertFails(aidlc.check(self.spec, 'shipped'), 'CI is not green')
+
+    def test_eta_5_the_ci_waiver_is_a_visible_decision(self):
+        self.shipped_ready()                                          # the fixture config waives CI
+        findings = aidlc.check(self.spec, 'shipped')
+        self.assertPasses(findings)
+        self.assertTrue(any('CI is waived' in w and 'the fixture has no CI' in w for w in self.warns(findings)))
+
+    def test_eta_5_fast_status_does_not_call_missing_ci_a_blocker(self):
+        self.strict_ci()
+        row = next(item for item in aidlc.status(self.repo, fast=True) if item['slug'] == 'refunds')
+        self.assertFalse(any('no CI result' in blocker for blocker in row['blockers']), row['blockers'])

@@ -53,10 +53,10 @@ Test: python3 -m unittest tests.test_trust_anchor
 ## T6: Cumulative gates and real CI
 Blocked by: T4
 Covers: ETA-5
-Status: ready-for-agent
+Status: done
 What to build: later gates include the earlier ones and the shipped gate needs a CI result unless the config waives it.
-- [ ] The four-file forgery of proof B fails the shipped gate
-- [ ] A typed "CI: green" passes only with the CI waiver in the config
+- [x] The four-file forgery of proof B fails the shipped gate
+- [x] A typed "CI: green" passes only with the CI waiver in the config
 Test: python3 -m unittest tests.test_aidlc tests.test_trust_anchor
 
 ## T7: CI command and action

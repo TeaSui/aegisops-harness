@@ -140,6 +140,21 @@ def failed(findings):
     return any(level == 'FAIL' for level, _ in findings)
 
 
+def earlier(findings):
+    """The findings of an earlier gate as a later gate carries them: every gate re-checks the gates before it, so a
+    stage that was set by hand, or evidence that went stale, grants nothing. The earlier gate's OK line is dropped."""
+    return [finding for finding in findings if finding[0] != 'OK']
+
+
+def unique(findings):
+    seen, kept = set(), []
+    for finding in findings:
+        if finding not in seen:
+            seen.add(finding)
+            kept.append(finding)
+    return kept
+
+
 def today():
     return datetime.date.today().isoformat()
 
@@ -1398,13 +1413,13 @@ def _security(spec):
 
 
 def gate_planned(spec):
-    reqs, findings = spec.requirements
+    reqs = spec.requirements[0]
     tasks, problems = spec.tasks
-    findings = findings + problems
+    findings = earlier(gate_accepted(spec)) + problems
     if tasks is None:
-        return findings + (spec.missing(spec.plan_name) if not problems else [])
+        return unique(findings + (spec.missing(spec.plan_name) if not problems else []))
     ids = [r['id'] for r in reqs if r['verify'] != 'none'] if reqs is not None else None
-    return findings + plan_findings(tasks, ids, spec.label(spec.plan_name))
+    return unique(findings + plan_findings(tasks, ids, spec.label(spec.plan_name)))
 
 
 def gate_building(spec):
@@ -1420,7 +1435,7 @@ def gate_building(spec):
 
 
 def gate_verified(spec):
-    findings = [f for f in gate_planned(spec) if f[0] != 'OK']
+    findings = earlier(gate_planned(spec))
     tasks = spec.tasks[0] or []
     events, problems = spec.ledger
     findings += problems
@@ -1436,7 +1451,7 @@ def gate_verified(spec):
         if req['verify'] == 'test' and not spec.repo.tests_referencing(req['id']):
             findings.append(fail(f'{spec.label(spec.spec_name)}:{req["line"]}: {req["id"]} (Verify: test) is not '
                                  'referenced by any test file'))
-    return findings + _verify_findings(spec) + _revert_findings(spec)
+    return unique(findings + _verify_findings(spec) + _revert_findings(spec))
 
 
 def _open_criteria(spec, task):
@@ -1531,7 +1546,12 @@ def _junit_coverage(spec, event, where):
 def _evidence(spec, rev=None):
     """One evidence chain: the latest verify is green and current, the review stamp is that same code, and, with
     rev, the commit holds that code."""
-    findings = _verify_findings(spec)
+    return _verify_findings(spec) + _stamp_findings(spec, rev)
+
+
+def _stamp_findings(spec, rev=None):
+    """The review stamp is the verified code and, with rev, that commit holds it."""
+    findings = []
     event, review = spec.last('verify'), spec.review[0]
     verified = event['fingerprint'] if event else ''
     stamp = review['fingerprint'] if review else ''
@@ -1556,10 +1576,12 @@ def _clean_code(spec):
 
 
 def gate_reviewed(spec):
+    before = earlier(gate_verified(spec))
     review, findings = spec.review
     label = spec.label('review.md')
     if review is None:
-        return findings or spec.missing('review.md')
+        return unique(before + (findings or spec.missing('review.md')))
+    findings = before + findings
     qa = spec.meta.get('qa', '')
     waiver = NOT_APPLICABLE.match(qa)
     if waiver and not waiver.group(1).strip():
@@ -1571,7 +1593,7 @@ def gate_reviewed(spec):
     elif not fp_matches(review['fingerprint'], current):
         findings.append(fail(f'{label}: code changed since the review was stamped (fingerprint '
                              f'{short(review["fingerprint"])} ≠ current {short(current)}): review the change, re-stamp'))
-    return findings + _evidence(spec) + _clean_code(spec)
+    return unique(findings + _stamp_findings(spec) + _clean_code(spec))
 
 
 def _stage_at_least(spec, stage):
@@ -1582,18 +1604,13 @@ def _stage_at_least(spec, stage):
 
 
 def gate_shipped(spec):
-    findings = _stage_at_least(spec, 'reviewed')
+    findings = _stage_at_least(spec, 'reviewed') + earlier(gate_reviewed(spec))
     ship, problems = spec.ship
     findings += problems
     if ship is None:
-        return findings + (spec.missing('ship.md') if not problems else [])
+        return unique(findings + (spec.missing('ship.md') if not problems else []))
     label = spec.label('ship.md')
-    findings += ship_findings(ship, label) + _ci_findings(spec, ship, label) + _changelog(spec, ship, label)
-    review = spec.review[0]
-    if review is None or not fp_matches(review['fingerprint'], spec.repo.fingerprint):
-        findings.append(fail(f'code changed since the review (fingerprint {short(spec.repo.fingerprint)} ≠ '
-                             f'{spec.label("review.md")} {short(review and review["fingerprint"])})'))
-    return findings + _evidence(spec) + _clean_code(spec)
+    return unique(findings + ship_findings(ship, label) + _ci_findings(spec, ship, label) + _changelog(spec, ship, label))
 
 
 def gh_checks(root, branch):
@@ -1626,16 +1643,27 @@ def gh_checks(root, branch):
 
 
 def _ci_findings(spec, ship, label):
+    """CI is green according to the provider. A sentence in ship.md is taken at its word only when the repository
+    config waives CI, which is a person's decision on the default branch."""
+    if spec.repo.fast:
+        return [warn('CI not checked (fast status)')]
     branch = spec.meta.get('branch') or spec.repo.branch()
-    checks = None if spec.repo.fast else gh_checks(spec.repo.root, branch)
+    checks = gh_checks(spec.repo.root, branch)
     if checks is not None:
         bad = [f'{name} ({state})' for name, state in checks if state not in ('pass', 'skipping')]
         return [fail(f'CI is not green (pr.py checks {branch}): {", ".join(bad[:8])}')] if bad else []
+    config = spec.config or {}
+    if not config.get('ci_waiver'):
+        return [fail(f'no CI result for {branch}: `pr.py checks` returned nothing (gh missing or not signed in, no PR '
+                     f'yet, or no CI on this repository). The shipped gate needs a result from CI, not a line in '
+                     f'{label}; a repository without CI says so in {CONFIG_NAME}: "ci": "none — <reason>"')]
+    waived = warn(f'CI is waived in {config["label"]} ({config["ci_waiver"]}): the "CI:" line of {label} is taken at '
+                  'its word')
     if ship['ci'] is None:
-        return [fail(f'{label}: no "CI:" line in ## Checks (and no PR checks from gh or Bitbucket)')]
+        return [waived, fail(f'{label}: no "CI:" line in ## Checks')]
     if not says_green(ship['ci']):
-        return [fail(f'{label}:{ship["ci_line"]}: CI is not green: {ship["ci"]}')]
-    return []
+        return [waived, fail(f'{label}:{ship["ci_line"]}: CI is not green: {ship["ci"]}')]
+    return [waived]
 
 
 def _changelog(spec, ship, label):
