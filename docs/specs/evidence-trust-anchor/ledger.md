@@ -20,3 +20,6 @@ Append-only, written by `aidlc` only.
 - 2026-11-26T10:58:12Z revert-check exit=1 fingerprint=2ffdef29887bb23536caf63da9c7de38d31644ef0b7218361d6ebee589f71d56 base=ccf82d035326 files=23 junit=173 passed, 266 failed
 - 2026-11-26T10:59:53Z verify exit=0 fingerprint=2ffdef29887bb23536caf63da9c7de38d31644ef0b7218361d6ebee589f71d56 cmd="python3 tests/junit_runner.py -s tests -o reports/junit.xml" pinned=onboarding junit=460 passed, 0 failed req-pass=ETA-1,ETA-10,ETA-11,ETA-12,ETA-13,ETA-14,ETA-15,ETA-2,ETA-3,ETA-4,ETA-5,ETA-6,ETA-7,ETA-8,ETA-9
 - 2026-11-26T16:08:05Z approve spec=5a5a48cda6677496ed6e83b0ec23f37be7f4777625840328c8cc247e31f83553 by="Tea Nguyen" how=approved
+- 2026-11-26T16:09:23Z advance proposed→accepted
+- 2026-11-26T16:09:23Z advance accepted→planned
+- 2026-11-26T16:09:23Z advance planned→building
