@@ -16,3 +16,4 @@ Append-only, written by `aidlc` only.
 - 2026-11-26T08:51:11Z task-done T9 exit=0 fingerprint=490223993386d3a66afd1203936786e11c7f1975fb1415afd212441e8a5a5c50 cmd="python3 -m unittest tests.test_trust_anchor tests.test_evidence_guard tests.test_record_returns"
 - 2026-11-26T08:58:53Z task-done T10 exit=0 fingerprint=cd7633c2a9442ad7ed0e22c807c87e451bf24f2b7b6bee45600ad231ca77491e cmd="python3 -m unittest tests.test_hook_commands tests.test_ship_gate"
 - 2026-11-26T09:09:46Z task-done T11 exit=0 fingerprint=a2f2761363f92d406fca79bef05fdc88a1c9ef61b0f92005caba5251c00e2898 cmd="python3 -m unittest discover -s tests"
+- 2026-11-26T09:11:06Z advance building→proposed back reason="6.0.0: an approval is an event the owner records (aidlc approve). The session that built this change cannot record it, and the accepted_by line it typed under 5.0.0 approves nothing"
