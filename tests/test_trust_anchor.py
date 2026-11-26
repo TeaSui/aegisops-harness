@@ -743,6 +743,20 @@ class CiCommandTest(RevertFixture):
         self.assertEqual(code, 1, out)
         self.assertIn('still passes without the production change', out)
 
+    def test_eta_5_the_four_file_forgery_of_proof_b_fails_the_ci_command_too(self):
+        self.ready(REAL_TEST)
+        folder = self.repo / 'docs' / 'specs' / 'x'
+        folder.mkdir()
+        current = aidlc.fingerprint(self.repo)
+        (folder / 'README.md').write_text('---\nstatus: reviewed\nkey: ZZ\nbranch: feat/refunds\n---\n# x\n')
+        (folder / 'ship.md').write_text(SHIP)
+        (folder / 'review.md').write_text('---\nfingerprint: %s\n---\n' % current)
+        (folder / 'ledger.md').write_text('- 2026-11-26T00:00:00Z verify exit=0 fingerprint=%s cmd="%s"\n' % (current, UNITTEST))
+        self.commit('four typed files')
+        code, out, _ = self.ci('--require', 'none')
+        self.assertEqual(code, 1, out)
+        self.assertIn('docs/specs/x', out)
+
     def test_eta_4_no_merge_base_is_a_failure_in_ci_not_a_skip(self):
         # A shallow checkout cannot show what the branch changed; a job that cannot run the revert check
         # must not pass the tests it could not question.

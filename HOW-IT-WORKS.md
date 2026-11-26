@@ -119,6 +119,6 @@ Setup for the last row, once per repository: `aidlc config init` (pins the verif
 | Approval | a ledger event with the hash of spec.md, recorded when the user types `/aegisops-harness:approve`; an edit to the spec afterwards needs a new one. |
 | Ticket | one tracer-bullet vertical slice in tickets.md, with Blocked by, Covers and acceptance checkboxes. |
 | Seam | the public interface tests go through; the fewer the better, agreed in Testing Decisions. |
-| Gate | a hook or `aidlc` check that blocks the next step until its evidence exists; every gate re-checks the gates before it. |
+| Gate | a hook or `aidlc` check that blocks the next step until its evidence exists; every gate up to `shipped` re-checks the gates before it. |
 
 Exact rules: `rules/workflow-routing.md` (fix or aidlc, trust boundary, stack skills), `references/aidlc.md` (questions, lifecycle formats and gates), `skills/session-bootstrap/SKILL.md`.

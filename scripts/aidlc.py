@@ -8,14 +8,19 @@ CLI: python3 scripts/aidlc.py <command> [--json] [--repo DIR]   exit 0 pass, 1 g
                                            abandoned (--reason), superseded (README superseded_by:), partially-implemented
   next SPEC                                ready tasks in conflict-free parallel batches
   task-done SPEC T<n> [--cmd CMD]          run CMD (default: the task's `test:` field); on exit 0 tick it and log it
-  verify SPEC --cmd CMD [--junit GLOB]     run the tests; log exit code, code fingerprint and JUnit totals
+  verify SPEC                              run the command pinned in .aidlc.json (revert check first); log exit code,
+                                           code fingerprint and JUnit totals. --cmd/--junit only if equal to the pin
+  approve SPEC [--by NAME] [--delegated]   log the SHA-256 of spec.md as approved (a person's act; see hooks/evidence-guard.py)
+  attest SPEC --agent A --axis AXIS [--file F]  store a review done elsewhere in <spec>/returns/
+  config init|show                         write .aidlc.json (never overwrites) / show the config the gates use
+  ci [--base REF] [--branch B] [--require reviewed|verified|none]  recompute the evidence on the checked-out head
   ruling SPEC --decision T --why T --if-wrong T [--task T<n>]
   stamp SPEC review                        write the code fingerprint into review.md and log it
   trace SPEC [--write]                     requirement -> tasks -> tests -> result; --write fills README ## Traceability
   init SPEC --key KEY                      create the spec folder with skeletons
   lint FILE [--key KEY] [--no-security]    check a standalone spec.md (a drafted prompt) against the spec rules
 SPEC is a folder path (contains '/') or a slug found under any docs/specs/ folder (init: <repo>/docs/specs/<slug>).
---repo may be any folder of the repository (normalized to the git top level). task-done and verify accept
+--repo may be any folder of the repository (normalized to the git top level). task-done, verify and ci accept
 --timeout SECONDS (default 1800). JSON: `exit` is always the CLI exit code; `command_exit` is the run command's.
 Writers of tickets.md (or plan.md), README.md and ledger.md hold an exclusive flock on the spec folder (no-op without fcntl).
 
@@ -2528,13 +2533,13 @@ def _junit_results(pattern, started, spec, repo, folder=None):
     fresh = [p for p in paths if os.path.getmtime(p) >= started - 1]
     findings = [warn(f'ignored {len(paths) - len(fresh)} JUnit file(s) older than this run')] if len(fresh) < len(paths) else []
     if not fresh:
-        return None, findings + [fail(f'--junit {pattern} matches no report written by this run')], ' junit=missing'
+        return None, findings + [fail(f'verify.junit {pattern} matches no report written by this run')], ' junit=missing'
     junit, problems = parse_junit(fresh, [r['id'] for r in spec.requirements[0] or []], repo)
     findings += problems
     if junit['unreadable']:
         return junit, findings, ' junit=unreadable'
     if not junit['cases']:
-        return junit, findings + [fail(f'--junit {pattern}: the reports hold no test case')], ' junit=missing'
+        return junit, findings + [fail(f'verify.junit {pattern}: the reports hold no test case')], ' junit=missing'
     marker = f' junit={junit["passed"]} passed, {junit["failed"]} failed'
     marker += ''.join(f' {k.replace("_", "-")}={",".join(junit[k])}' for k in ('req_pass', 'req_fail') if junit[k])
     if junit['req_fail']:

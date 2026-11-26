@@ -6,7 +6,7 @@
 
 No workflow starts until you run one of its commands. No keyword in a prompt starts one and the model cannot load an AegisOps-Harness skill on its own (every skill has `disable-model-invocation: true`, and `check-setup.py` fails if one does not). Inside a command each stage is a fixed file, support skills are chosen from the repository's files, business questions go to Atlassian Rovo before a person, and every stage ends at an `aidlc` gate. The hook gates (secret scan, TDD reminder, PR and merge gates, evidence guard) are on in every session.
 
-**What enforces what.** Prompts advise. Hooks and local gates are a guard rail for the default path: they read files the session itself can write. Enforcement is `aidlc ci` as a required status check on a protected branch: it re-runs the pinned suite on the pull request head, proves the suite goes red without the change, and ignores what the ledger says. See [Enforce it in CI](#-enforce-it-in-ci).
+**What enforces what.** Prompts advise. Hooks and local gates are a guard rail for the default path: they read files the session itself can write. Enforcement is `aidlc ci` as a required status check on a protected branch: it re-runs the pinned suite on the pull request head, proves the suite goes red without the change, and ignores the ledger's verify and revert-check lines. See [Enforce it in CI](#-enforce-it-in-ci).
 
 ---
 
@@ -95,7 +95,7 @@ Once per repository, by a person:
    - uses: TeaSui/aegisops-harness/.github/actions/aidlc-gate@main
    ```
    Bitbucket Pipelines: `python3 <plugin>/scripts/aidlc.py ci` after fetching the destination branch.
-3. **Require it.** Branch protection: the gate job as a required status check, a required review, and CODEOWNERS on `.aidlc.json` and `docs/specs/`.
+3. **Require it.** Branch protection: the gate job as a required status check, a required review, and CODEOWNERS on `.aidlc.json`, `docs/specs/` and the scripts and workflow the gate runs. `aidlc ci` judges the specs bound to the branch; a change that unbinds a spec gets the suite only, so read the diff of `docs/specs/`.
 
 The job summary lists what it cannot check (who is said to have approved and reviewed, every waiver). Details and the limits of each layer: `references/aidlc.md` §4, §5 and "Trust model".
 

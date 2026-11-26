@@ -1,4 +1,5 @@
 ---
+schema: 1
 status: proposed
 key: ETA
 branch: claude/hopeful-cori-m3hhyn

@@ -167,7 +167,7 @@ class HiddenCheckTest(unittest.TestCase):
             self.assertEqual(text.count(old), 1, '%s: %r is not in the reference once' % (rel, old))
             (repo / rel).write_text(text.replace(old, new))
 
-    def test_fixture_is_green_and_fails_the_hidden_check_as_shipped(self):
+    def test_eta_11_fixture_is_green_and_fails_the_hidden_check_as_shipped(self):
         for case_id in HARDER:
             with self.subTest(case=case_id):
                 repo = self.build(case_id)
@@ -176,7 +176,7 @@ class HiddenCheckTest(unittest.TestCase):
                 checks, _ = self.hidden(repo, case_id)
                 self.assertIn(False, checks.values(), 'the unchanged fixture passes every hidden check')
 
-    def test_reference_solution_passes_every_hidden_check(self):
+    def test_eta_11_reference_solution_passes_every_hidden_check(self):
         for case_id, variant in HARDER.items():
             with self.subTest(case=case_id):
                 repo = self.build(case_id)
@@ -186,7 +186,7 @@ class HiddenCheckTest(unittest.TestCase):
                 checks, report = self.hidden(repo, case_id)
                 self.assertEqual([name for name, ok in checks.items() if not ok], [], report)
 
-    def test_plausible_wrong_solutions_fail_the_check_that_names_the_defect(self):
+    def test_eta_11_plausible_wrong_solutions_fail_the_check_that_names_the_defect(self):
         for case_id, variant in HARDER.items():
             for wrong in WRONG[variant]:
                 with self.subTest(case=case_id, defect=wrong[3]):
@@ -197,7 +197,7 @@ class HiddenCheckTest(unittest.TestCase):
                     shutil.rmtree(repo.parent)
 
     @unittest.skipUnless(shutil.which('npm'), 'needs npm')
-    def test_judge_scores_the_reference_as_working_and_the_fixture_as_not(self):
+    def test_eta_11_judge_scores_the_reference_as_working_and_the_fixture_as_not(self):
         harness = load(HEADLESS / 'harness.py', 'harness')
         sys.modules.setdefault('harness', harness)
         judge = load(SUITE / 'judge.py', 'eval_cases_lifecycle_judge')
