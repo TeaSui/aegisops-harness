@@ -28,3 +28,7 @@ Append-only, written by `aidlc` only.
 - 2026-11-26T16:45:49Z verify exit=0 fingerprint=14497fa306f9643eccb899efc9479f8ab19331f6ed639871eaa604a9339e3863 cmd="python3 tests/junit_runner.py -s tests -o reports/junit.xml" pinned=onboarding junit=466 passed, 0 failed req-pass=ETA-1,ETA-10,ETA-11,ETA-12,ETA-13,ETA-14,ETA-15,ETA-2,ETA-3,ETA-4,ETA-5,ETA-6,ETA-7,ETA-8,ETA-9
 - 2026-11-26T16:54:41Z revert-check exit=1 fingerprint=f232af799d5843a5c12f79087683459d578030f770e3b9372989bffcbb45e8ef base=ccf82d035326 files=23 junit=173 passed, 272 failed
 - 2026-11-26T16:57:40Z verify exit=0 fingerprint=f232af799d5843a5c12f79087683459d578030f770e3b9372989bffcbb45e8ef cmd="python3 tests/junit_runner.py -s tests -o reports/junit.xml" pinned=onboarding junit=467 passed, 0 failed req-pass=ETA-1,ETA-10,ETA-11,ETA-12,ETA-13,ETA-14,ETA-15,ETA-2,ETA-3,ETA-4,ETA-5,ETA-6,ETA-7,ETA-8,ETA-9
+- 2026-11-26T17:03:41Z revert-check exit=1 fingerprint=af0a3fb884038d8e4ee1c06c9d00dba10cdab0dedf24ae9ad88d645061d478cf base=ccf82d035326 files=23 junit=174 passed, 273 failed
+- 2026-11-26T17:06:38Z verify exit=0 fingerprint=af0a3fb884038d8e4ee1c06c9d00dba10cdab0dedf24ae9ad88d645061d478cf cmd="python3 tests/junit_runner.py -s tests -o reports/junit.xml" pinned=onboarding junit=469 passed, 0 failed req-pass=ETA-1,ETA-10,ETA-11,ETA-12,ETA-13,ETA-14,ETA-15,ETA-2,ETA-3,ETA-4,ETA-5,ETA-6,ETA-7,ETA-8,ETA-9
+- 2026-11-26T17:06:39Z stamp review fingerprint=af0a3fb884038d8e4ee1c06c9d00dba10cdab0dedf24ae9ad88d645061d478cf
+- 2026-11-26T17:07:26Z advance verified→reviewed
