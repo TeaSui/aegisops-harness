@@ -197,11 +197,19 @@ class Base(unittest.TestCase):
         return (self.spec / 'ledger.md').read_text()
 
     # stage builders ------------------------------------------------------------------------------------------
-    def accepted_ready(self, **meta):
+    def accepted_ready(self, approve=True, **meta):
+        """approve=False leaves the spec without an `approve` event (README still names somebody)."""
         self.readme(**meta)
         self.spec_file('requirements.md', REQS)
         self.spec_file('spec-check.md', SPEC_CHECK)
         self.spec_file('security.md', '# Security\nThreat model: refunds move money.\n')
+        if approve:
+            self.approve()
+
+    def approve(self, spec='refunds'):
+        """A person approved the spec text as it is now (and README accepted_by says who)."""
+        code, out, err = self.cli('approve', spec, '--by', 'Tea')
+        self.assertEqual(code, 0, out + err)
 
     def planned_ready(self):
         self.accepted_ready()
@@ -353,6 +361,7 @@ class AcceptedGateTest(Base):
     def test_story_headings_without_acceptance_are_not_requirements(self):
         self.accepted_ready()
         self.spec_file('requirements.md', REQS + '\n### BR-1: no refunds after 180 days\nPlain business rule.\n')
+        self.approve()
         self.assertPasses(aidlc.check(self.spec, 'accepted'))
 
     def test_verify_defaults_to_test_and_criteria_tolerate_blank_lines(self):
@@ -403,7 +412,7 @@ class AcceptedGateTest(Base):
 
     def test_accepted_by(self):
         for value in (None, '', '<name> (<date>)'):
-            self.accepted_ready(accepted_by=value)
+            self.accepted_ready(approve=False, accepted_by=value)
             self.assertFails(aidlc.check(self.spec, 'accepted'), 'accepted_by')
 
     def test_external_contract_must_pass_the_contract_gate(self):
@@ -1078,7 +1087,7 @@ class AdvanceTest(Base):
         self.assertEqual((events[-1]['kind'], events[-1]['from'], events[-1]['to']), ('advance', 'proposed', 'accepted'))
 
     def test_gate_failure_changes_nothing(self):
-        self.accepted_ready(accepted_by='')
+        self.accepted_ready(approve=False, accepted_by='')
         before = (self.spec / 'README.md').read_text()
         code, out, _ = self.cli('advance', 'refunds', 'accepted')
         self.assertEqual(code, 1)
@@ -1101,7 +1110,7 @@ class AdvanceTest(Base):
         self.assertTrue(events[-1]['back'])
         self.assertEqual(events[-1]['reason'], 'late finding: split T1')
         meta, _ = aidlc.parse_frontmatter((self.spec / 'README.md').read_text())
-        self.assertEqual(meta['accepted_by'], 'Tea (2026-11-19)')
+        self.assertRegex(meta['accepted_by'], r'^Tea \(')
 
     def test_back_to_proposed_clears_the_approval(self):
         self.planned_ready()
@@ -1221,9 +1230,11 @@ What to build: visible in the console within 1 minute.
 class SpecTemplateLifecycleTest(Base):
     """spec.md (the to-spec template) + tickets.md through every gate."""
 
-    def accepted_ready(self, **meta):
+    def accepted_ready(self, approve=True, **meta):
         self.readme(**meta)
         self.spec_file('spec.md', SPEC_MD)
+        if approve:
+            self.approve()
 
     def test_stories_are_requirements(self):
         stories, findings = aidlc.parse_spec(SPEC_MD, 'spec.md', 'RFD')
@@ -1363,8 +1374,7 @@ class InitTest(Base):
         self.assertEqual(self.cli('init', 'refunds', '--key', 'RFD')[0], 0)
         blocks = doc_blocks()
         self.spec_file('spec.md', blocks['spec.md'])
-        readme = self.spec / 'README.md'
-        readme.write_text(readme.read_text().replace('accepted_by:', 'accepted_by: Tea (2026-11-19)'))
+        self.approve()
         self.assertPasses(aidlc.check(self.spec, 'accepted'))
         self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
         self.spec_file('tickets.md', '# Tickets\n\n' + blocks['tickets.md'])

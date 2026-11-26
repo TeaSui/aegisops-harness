@@ -72,20 +72,20 @@ Test: python3 -m unittest tests.test_trust_anchor tests.test_evals
 ## T8: Approval bound to the spec text
 Blocked by: none
 Covers: ETA-6
-Status: ready-for-agent
+Status: done
 What to build: an approval event carries the hash of the spec, the accepted gate needs it to match, and the model is kept from recording a person's approval.
-- [ ] Editing the spec after approval fails the accepted gate
-- [ ] The guard refuses an approval the user did not type and lets a person's terminal through
+- [x] Editing the spec after approval fails the accepted gate
+- [x] The guard refuses an approval the user did not type and lets a person's terminal through
 Test: python3 -m unittest tests.test_trust_anchor tests.test_evidence_guard
 
 ## T9: Reviewer returns
 Blocked by: T6
 Covers: ETA-7
-Status: ready-for-agent
+Status: done
 What to build: review-stage returns are stored verbatim by a hook and the reviewed gate compares review.md with them.
-- [ ] A hand-typed review with no stored return fails the reviewed gate
-- [ ] A dropped or downgraded finding fails it
-- [ ] The guard refuses edits to the ledger and the stored returns
+- [x] A hand-typed review with no stored return fails the reviewed gate
+- [x] A dropped or downgraded finding fails it
+- [x] The guard refuses edits to the ledger and the stored returns
 Test: python3 -m unittest tests.test_trust_anchor tests.test_evidence_guard
 
 ## T10: Hooks parse commands and cover MCP

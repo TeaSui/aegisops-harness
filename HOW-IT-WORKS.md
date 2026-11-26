@@ -24,6 +24,7 @@ questions on the way: files → Atlassian Rovo → recorded assumption → (rare
 | New backend feature or behaviour change (a request or a pasted to-spec spec) | `/aegisops-harness:aidlc` | `spec` → `plan` → `build` → `verify` → `review` → `ship` |
 | Open decisions; interview me before the spec | `/aegisops-harness:grilling` | — |
 | Stage 1: spec.md, security, the one approval | `/aegisops-harness:spec` | `fintech-security` |
+| Approve a spec as it is written now (the one approval) | `/aegisops-harness:approve` | — |
 | Stage 2: tickets (vertical slices) | `/aegisops-harness:plan` | — |
 | Stage 3: build the tickets test-first | `/aegisops-harness:build` | `test-driven-development` → `systematic-debugging` |
 | Stage 4: full suite, trace, placeholders → verified | `/aegisops-harness:verify` | — |
@@ -75,6 +76,8 @@ questions on the way: files → Atlassian Rovo → recorded assumption → (rare
 | `hooks/tdd-gate.py` | Edit / Write | first production edit needs a failing test run first (asks once) |
 | `hooks/contract-gate.py` | Edit / Write / Bash | external API contract must pass check-contract.py (advisory) |
 | `hooks/question-gate.py` | AskUserQuestion | inside an AegisOps-Harness command: blocked when the input delegated every decision; otherwise the first question before any Rovo search is sent back |
+| `hooks/evidence-guard.py` | Edit / Write / Bash | the ledger and stored reviewer returns are written by `aidlc` only; `aidlc approve` needs the user's own /aegisops-harness:approve |
+| `hooks/record-returns.py` | a reviewer agent returns | in the review stage: stores the return verbatim in the spec folder, for the `reviewed` gate to compare review.md with |
 | `hooks/security-gate.py` | git commit / push | blocked while gitleaks finds a secret |
 | `hooks/pr-review-gate.py` | opening a PR | blocked until the pre-PR review is recorded for HEAD with 0 open findings |
 | `hooks/ship-gate.py` | merging a PR | blocked until the branch's spec passes the `shipped` gate |

@@ -21,6 +21,7 @@ COMMANDS = (
      ('spec', 'plan', 'build', 'verify', 'review', 'ship')),
     ('Open decisions; interview me before the spec', 'grilling', ()),
     ('Stage 1: spec.md, security, the one approval', 'spec', ('fintech-security',)),
+    ('Approve a spec as it is written now (the one approval)', 'approve', ()),
     ('Stage 2: tickets (vertical slices)', 'plan', ()),
     ('Stage 3: build the tickets test-first', 'build', ('test-driven-development', 'systematic-debugging')),
     ('Stage 4: full suite, trace, placeholders → verified', 'verify', ()),
@@ -65,6 +66,10 @@ GATES = (
     ('contract-gate.py', 'Edit / Write / Bash', 'external API contract must pass check-contract.py (advisory)'),
     ('question-gate.py', 'AskUserQuestion', 'inside an AegisOps-Harness command: blocked when the input delegated every '
      'decision; otherwise the first question before any Rovo search is sent back'),
+    ('evidence-guard.py', 'Edit / Write / Bash', 'the ledger and stored reviewer returns are written by `aidlc` only; '
+     '`aidlc approve` needs the user\'s own /aegisops-harness:approve'),
+    ('record-returns.py', 'a reviewer agent returns', 'in the review stage: stores the return verbatim in the spec '
+     'folder, for the `reviewed` gate to compare review.md with'),
     ('security-gate.py', 'git commit / push', 'blocked while gitleaks finds a secret'),
     ('pr-review-gate.py', 'opening a PR', 'blocked until the pre-PR review is recorded for HEAD with 0 open findings'),
     ('ship-gate.py', 'merging a PR', 'blocked until the branch\'s spec passes the `shipped` gate'),

@@ -117,6 +117,9 @@ TAIL_BYTES = 2048
 DEFAULT_TIMEOUT = 1800
 CONFIG_NAME = '.aidlc.json'  # the repository config: pins the verify command (parse_config)
 REVERT_MARKER = 'aidlc-revert-check.json'  # in the git dir while a revert check has production files rewritten
+RETURNS = 'returns'  # folder in a spec folder: what each review-stage reviewer returned, verbatim (record_return)
+RETURNED_FINDING = re.compile(r'^\s*[-*+]\s+(?:\[[ xX]\]\s+)?[*_`]*([SQ]\d+)\b[*_`]*\s*(?:\(([^)]*)\))?')
+VERDICT = re.compile(r'^\s*(?:[-*+]\s+)?[*_]*verdict[*_]*\s*:[*_]*\s*(.*)$', re.I)
 SCHEMA = 1  # of the repository config and the spec README; a file written for a newer schema is refused
 WAIVER = re.compile(r'^none\b' + DASH + r'(.*)$', re.I)
 NO_CONFIG = ('no pinned verify command: {name} is on neither the default branch nor this branch. The command that '
@@ -611,6 +614,12 @@ def _event(kind, rest):
             except (TypeError, ValueError):
                 return None, fail('revert-check needs exit=<code>')
         return event, None
+    if kind == 'approve':
+        data = _kv(rest)
+        event = {'spec': str(data.get('spec', '')), 'by': str(data.get('by', '')), 'how': str(data.get('how', ''))}
+        if not re.match(r'^[0-9a-f]{64}$', event['spec']) or event['how'] not in ('approved', 'delegated'):
+            return None, fail('approve needs spec=<sha256> by="<name>" how=approved|delegated')
+        return event, None
     if kind not in ('task-done', 'verify', 'stamp'):
         return {'text': rest}, warn(f'unknown ledger event {kind!r}')
     event = {}
@@ -668,6 +677,106 @@ def parse_review(text, label):
                     'severity': (match.group(2) or '').strip().lower() if match else '', 'text': box.group(3).strip(),
                     'line': i + 1})
     return review, problems
+
+
+def verdict_kind(text):
+    """NO-GO | CONDITIONAL GO | GO, or None when the text is none of them."""
+    for kind in ('NO-GO', 'CONDITIONAL GO', 'GO'):
+        if re.match(r'^' + re.escape(kind) + r'\b', (text or '').strip(), re.I):
+            return kind
+    return None
+
+
+def parse_return(text, label):
+    """(return, findings) for one stored reviewer return: frontmatter (agent, axis, fingerprint, sha256, recorded) and
+    the reviewer's words. `findings`: (ID, severity) of every S<n>/Q<n> line; `verdict`: the first Verdict: line."""
+    meta, start = parse_frontmatter(text)
+    body = '\n'.join(text.split('\n')[start:])
+    item = {'agent': (meta or {}).get('agent', ''), 'axis': (meta or {}).get('axis', ''),
+            'fingerprint': (meta or {}).get('fingerprint', ''), 'recorded': (meta or {}).get('recorded', ''),
+            'label': label, 'findings': [], 'verdict': None}
+    problems = []
+    if meta is None or item['axis'] not in ('spec', 'standards', 'both', 'qa'):
+        return item, [fail(f'{label}: not a stored reviewer return (frontmatter with agent, axis, sha256)')]
+    if hashlib.sha256(body.encode('utf-8')).hexdigest() != meta.get('sha256'):
+        problems.append(fail(f'{label}: was changed after it was recorded (the text no longer matches its sha256): '
+                             'a return is the reviewer\'s account, not the implementer\'s'))
+    for line in body.split('\n'):
+        found = RETURNED_FINDING.match(line)
+        if found:
+            item['findings'].append((found.group(1), (found.group(2) or '').strip().lower()))
+        verdict = VERDICT.match(line)
+        if verdict and item['verdict'] is None:
+            item['verdict'] = verdict.group(1).strip()
+    return item, problems
+
+
+def record_return(spec_dir, agent, axis, text):
+    """Store what a reviewer returned, verbatim, as its own file in <spec>/returns/. (path, True) when written,
+    (path, False) when the same text is already stored. Called by hooks/record-returns.py and `aidlc attest`."""
+    spec = Spec(spec_dir)
+    body = text.replace('\r\n', '\n').strip('\n') + '\n'
+    digest = hashlib.sha256(body.encode('utf-8')).hexdigest()
+    folder = spec.dir / RETURNS
+    with spec_lock(spec.dir):
+        folder.mkdir(exist_ok=True)
+        existing = sorted(folder.glob('*.md'))
+        for path in existing:
+            meta, _ = parse_frontmatter(path.read_text(encoding='utf-8', errors='replace'))
+            if meta and meta.get('sha256') == digest:
+                return path, False
+        now = datetime.datetime.now(datetime.timezone.utc)
+        name = '%s-%02d-%s-%s.md' % (now.strftime('%Y%m%dT%H%M%SZ'), len(existing) + 1,
+                                     re.sub(r'[^a-z0-9-]', '-', str(agent).split(':')[-1].lower()), axis)
+        header = (f'---\nagent: {agent}\naxis: {axis}\nfingerprint: {spec.repo.fingerprint}\nsha256: {digest}\n'
+                  f'recorded: {now.strftime("%Y-%m-%dT%H:%M:%SZ")}\n---\n')
+        write_atomic(folder / name, header + body)
+    return folder / name, True
+
+
+def returns_findings(spec, review, qa_waived):
+    """review.md rests on what the reviewers returned: both axes and QA covered, every returned finding present with
+    the severity it was given, the QA verdict the one QA gave last."""
+    config = spec.config or {}
+    if config.get('returns_waiver'):
+        return [warn(f'reviewer returns are waived in {config["label"]} ({config["returns_waiver"]}): review.md is the '
+                     'session\'s own account of the review')]
+    returns, findings = spec.returns
+    folder = spec.label(RETURNS)
+    if not returns:
+        return findings + [fail(
+            f'{folder}/: no reviewer return is stored, so review.md rests on nothing. Dispatch '
+            'aegisops-harness:code-reviewer (AXIS: spec and AXIS: standards) and aegisops-harness:qa-subagent in the '
+            'foreground: the plugin stores what each returns (a person can store one with `aidlc attest`). A '
+            f'repository that reviews another way says so in {CONFIG_NAME}: "review": {{"returns": "none — <reason>"}}')]
+    covered = set()
+    for item in returns:
+        covered |= {'spec', 'standards'} if item['axis'] == 'both' else {item['axis']}
+    findings += [fail(f'{folder}/: no stored return covers the {axis} axis') for axis in ('spec', 'standards')
+                 if axis not in covered]
+    if not qa_waived and 'qa' not in covered:
+        findings.append(fail(f'{folder}/: no stored return from the QA agent'))
+    mine = {item['id']: item for item in review['findings'] if item['id']}
+    for item in returns:
+        for finding, severity in item['findings']:
+            kept = mine.get(finding)
+            if kept is None:
+                findings.append(fail(f'{item["label"]}: {finding}{" (" + severity + ")" if severity else ""} was '
+                                     f'returned by {item["agent"]} and is not in review.md (a finding is closed with '
+                                     '"fixed:" or "cleared:", never left out)'))
+            elif severity and kept['severity'] and kept['severity'] != severity:
+                findings.append(fail(f'{spec.label("review.md")}:{kept["line"]}: {finding} is ({kept["severity"]}) here '
+                                     f'but was returned as ({severity}) by {item["agent"]}'))
+    given = next((item for item in reversed(returns) if item['axis'] == 'qa' and verdict_kind(item['verdict'])), None)
+    if given and not qa_waived and verdict_kind(review['qa']) != verdict_kind(given['verdict']):
+        findings.append(fail(f'{spec.label("review.md")}: the QA verdict here is {verdict_kind(review["qa"]) or "missing"}; '
+                             f'the latest QA return says {verdict_kind(given["verdict"])} ({given["label"]}). Only a '
+                             'new return from the QA agent changes it'))
+    if review['fingerprint'] and not any(fp_matches(review['fingerprint'], item['fingerprint']) or
+                                         fp_matches(item['fingerprint'], review['fingerprint']) for item in returns):
+        findings.append(warn(f'{spec.label("review.md")}: code changed after the last reviewer return: what was stamped '
+                             'is not exactly what a reviewer read (the fixes made after the re-review)'))
+    return findings
 
 
 def review_findings(review, label, qa_waived=False):
@@ -1326,6 +1435,17 @@ class Spec:
     def ship(self):
         return self._parse('ship.md', parse_ship)
 
+    @cached_property
+    def returns(self):
+        """(stored reviewer returns in the order they were recorded, findings)."""
+        items, findings = [], []
+        for path in sorted((self.dir / RETURNS).glob('*.md')) if (self.dir / RETURNS).is_dir() else []:
+            item, problems = self._parse(f'{RETURNS}/{path.name}', parse_return)
+            findings += problems
+            if item is not None:
+                items.append(item)
+        return items, findings
+
     @property
     def service(self):
         """The folder that holds this spec's `docs/specs/` (a service root in a monorepo, else the repository)."""
@@ -1392,11 +1512,41 @@ def gate_accepted(spec):
     return findings + _accepted_by(spec)
 
 
+def spec_digest(spec):
+    """SHA-256 of the text a person approves: spec.md (requirements.md for a legacy spec), line ends normalised."""
+    text, _ = read_text(spec.dir / spec.spec_name, spec.label(spec.spec_name))
+    return None if text is None else hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def approval(spec):
+    """The approval in force: the latest `approve` event that no later move back to `proposed` has voided."""
+    found = None
+    for event in spec.ledger[0]:
+        if event['kind'] == 'approve':
+            found = event
+        elif event['kind'] == 'advance' and event.get('back') and event.get('to') == 'proposed':
+            found = None
+    return found
+
+
 def _accepted_by(spec):
+    """Somebody approved this spec text. `accepted_by:` names them; the `approve` event carries the hash of what
+    they approved, so an edit after the approval (a story added during the build) needs a new one."""
+    findings = []
     accepted_by = spec.meta.get('accepted_by', '')
     if not accepted_by or re.search(r'<[^>]*>', accepted_by):
-        return [fail(f'{spec.label("README.md")}: accepted_by: is not set (record who approved the spec, and when)')]
-    return []
+        findings.append(fail(f'{spec.label("README.md")}: accepted_by: is not set (aidlc approve records who approved '
+                             'the spec, and when)'))
+    event, digest = approval(spec), spec_digest(spec)
+    if event is None:
+        findings.append(fail(f'{spec.label("ledger.md")}: no approval of this spec is recorded: a person approves it '
+                             f'(/aegisops-harness:approve {spec.slug}, or `aidlc approve {spec.slug}` from their own '
+                             'terminal); `aidlc approve --delegated` when the request handed the decisions over'))
+    elif digest is not None and event['spec'] != digest:
+        findings.append(fail(f'{spec.label(spec.spec_name)} changed after it was approved (approved {short(event["spec"])}'
+                             f', now {short(digest)}): what is built must be what was approved, so it needs a new '
+                             'approval'))
+    return findings
 
 
 def _security(spec):
@@ -1594,6 +1744,7 @@ def gate_reviewed(spec):
     if waiver and not waiver.group(1).strip():
         findings.append(fail(f'{spec.label("README.md")}: qa: not-applicable needs "— <reason>"'))
     findings += review_findings(review, label, qa_waived=bool(waiver))
+    findings += returns_findings(spec, review, qa_waived=bool(waiver))
     current = spec.repo.fingerprint
     if not review['fingerprint']:
         findings.append(fail(f'{label}: no fingerprint: (run aidlc stamp SPEC review)'))
@@ -2300,6 +2451,47 @@ def cmd_ruling(args):
     return 0, {'spec': spec.repo.rel(spec.dir), 'ledger': event}, [f'OK {event}']
 
 
+def cmd_approve(args):
+    """Record that a person approved this spec text (or that the request delegated the decision)."""
+    spec = spec_arg(args)
+    digest = spec_digest(spec)
+    if digest is None:
+        raise UsageError(f'{spec.label(spec.spec_name)} does not exist: nothing to approve')
+    by = args.by
+    if not by:
+        user = spec.repo.git('config', 'user.name')
+        by = user.stdout.strip() if user is not None and user.returncode == 0 else ''
+    by = ' '.join(str(by or '').split())
+    if not by:
+        raise UsageError('pass --by "<name>" (git user.name is not set)')
+    how = 'delegated' if args.delegated else 'approved'
+    stamp = f'{by} (delegated in request)' if args.delegated else f'{by} ({today()})'
+    with spec_lock(spec.dir):
+        set_frontmatter(spec.dir / 'README.md', {'accepted_by': stamp})
+        event = append_ledger(spec, f'approve spec={digest} by={quoted(by)} how={how}')
+    return 0, {'spec': spec.repo.rel(spec.dir), 'approved': digest, 'by': by, 'how': how, 'ledger': event}, [
+        f'OK {event}', f'accepted_by: {stamp}. The approval is of {spec.spec_name} as it is now ({short(digest)}): '
+                       'an edit needs a new approval.']
+
+
+def cmd_attest(args):
+    """Store what a reviewer returned (a file, or standard input). The plugin's hook does this when a reviewer agent
+    returns; a person uses it for a review that happened elsewhere."""
+    spec = spec_arg(args)
+    if args.file:
+        text, error = read_text(args.file, str(args.file))
+        if text is None:
+            raise UsageError(error or f'{args.file}: not readable')
+    else:
+        text = sys.stdin.read()
+    if not text.strip():
+        raise UsageError('nothing to store: the return is empty')
+    path, written = record_return(spec.dir, args.agent, args.axis, text)
+    rel = spec.repo.rel(path)
+    return 0, {'spec': spec.repo.rel(spec.dir), 'path': rel, 'written': written}, [
+        f'OK stored {rel}' if written else f'OK already stored as {rel}']
+
+
 def cmd_stamp(args):
     spec = spec_arg(args)
     review = spec.dir / 'review.md'
@@ -2737,6 +2929,13 @@ def build_parser():
         ruling.add_argument(name, required=True)
     ruling.add_argument('--task')
     add('stamp', cmd_stamp, 'spec').add_argument('what', choices=['review'])
+    attest = add('attest', cmd_attest, 'spec')
+    attest.add_argument('--agent', required=True, help='who returned it, e.g. aegisops-harness:code-reviewer')
+    attest.add_argument('--axis', required=True, choices=['spec', 'standards', 'both', 'qa'])
+    attest.add_argument('--file', help='the return as a file (default: standard input)')
+    approve = add('approve', cmd_approve, 'spec')
+    approve.add_argument('--by', help='the approver (default: git user.name)')
+    approve.add_argument('--delegated', action='store_true', help='the request handed the decisions over: nobody read the spec')
     add('trace', cmd_trace, 'spec').add_argument('--write', action='store_true')
     add('init', cmd_init, 'spec').add_argument('--key', required=True)
     lint = add('lint', cmd_lint, 'file')

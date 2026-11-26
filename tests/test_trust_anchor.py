@@ -5,6 +5,7 @@ Proof B: four text files and the 12 hex characters the gate printed passed the m
 Each test names the story it proves (ETA-n). Same isolation as test_aidlc.py: scratch HOME, no global git config, no gh.
 Run: python3 -m unittest tests.test_trust_anchor -v
 """
+import hashlib
 import json
 import os
 import pathlib
@@ -312,8 +313,9 @@ class RevertFixture(ConfigCase):
 
     def building_with(self, requirements, covers):
         self.config_on_main(JUNIT_RUN, 'ignored/*.xml', revert_check=True)
-        self.accepted_ready()
+        self.accepted_ready(approve=False)
         self.spec_file('requirements.md', requirements)
+        self.approve()
         self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
         self.spec_file('plan.md', '- [ ] T1: Refund model\n  - covers: %s\n  - depends: none\n  - owner: main\n'
                                   '  - files: src/refunds/model.py (new)\n' % covers)
@@ -653,7 +655,7 @@ class CiCommandTest(RevertFixture):
         summary = self.base / 'summary.md'
         self.assertEqual(self.ci('--summary', str(summary))[0], 0)
         text = summary.read_text()
-        for needle in ('Lifecycle gate', 'PASS', 'feat/refunds', 'accepted_by: Tea (2026-11-19)', 'reviewers:',
+        for needle in ('Lifecycle gate', 'PASS', 'feat/refunds', 'accepted_by: Tea (', 'reviewers:',
                        'CI is waived', 'reviewer returns are waived'):
             self.assertIn(needle, text)
 
@@ -686,3 +688,188 @@ class CiPackagingTest(Base):
         self.assertIn('junit_runner.py', config['verify']['cmd'])
         self.assertNotIn('none', config['verify']['junit'])           # this repository does not waive its own rule
         self.assertNotIn('ci', config)
+
+
+class ApprovalTest(Base):
+    """ETA-6: the approval is of this spec text. A name typed into the README approves nothing, and an edit after the
+    approval needs a new one."""
+
+    def approve(self, *extra):
+        return self.cli('approve', 'refunds', '--by', 'Tea', *extra)
+
+    def test_eta_6_a_typed_name_is_not_an_approval(self):
+        self.accepted_ready(approve=False)                            # README says accepted_by: Tea (2026-11-19)
+        code, out, _ = self.cli('advance', 'refunds', 'accepted')
+        self.assertEqual(code, 1, out)
+        self.assertIn('no approval of this spec is recorded', out)
+
+    def test_eta_6_approve_records_the_spec_hash_and_the_approver(self):
+        self.accepted_ready(approve=False, accepted_by='')
+        code, out, err = self.approve()
+        self.assertEqual(code, 0, out + err)
+        digest = hashlib.sha256((self.spec / 'requirements.md').read_bytes()).hexdigest()
+        self.assertIn('approve spec=%s by="Tea" how=approved' % digest, self.ledger())
+        meta, _ = aidlc.parse_frontmatter((self.spec / 'README.md').read_text())
+        self.assertRegex(meta['accepted_by'], r'^Tea \(\d{4}-\d\d-\d\d\)$')
+        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
+
+    def test_eta_6_an_edit_after_the_approval_needs_a_new_one(self):
+        self.planned_ready()                                          # approved and accepted
+        self.assertPasses(aidlc.check(self.spec, 'planned'))
+        spec = self.spec / 'requirements.md'
+        spec.write_text(spec.read_text().replace('p95 visibility delay <= 60 s.', 'p95 visibility delay <= 600 s.'))
+        for gate in ('accepted', 'planned'):                          # the later gate sees it too
+            self.assertFails(aidlc.check(self.spec, gate), 'changed after it was approved')
+        self.assertEqual(self.approve()[0], 0)
+        self.assertPasses(aidlc.check(self.spec, 'planned'))
+
+    def test_eta_6_line_endings_are_not_an_edit(self):
+        self.planned_ready()
+        spec = self.spec / 'requirements.md'
+        spec.write_bytes(spec.read_bytes().replace(b'\n', b'\r\n'))
+        self.assertPasses(aidlc.check(self.spec, 'accepted'))
+
+    def test_eta_6_a_delegated_approval_says_that_nobody_read_the_spec(self):
+        self.accepted_ready(approve=False, accepted_by='')
+        self.assertEqual(self.approve('--delegated')[0], 0)
+        self.assertIn('how=delegated', self.ledger())
+        meta, _ = aidlc.parse_frontmatter((self.spec / 'README.md').read_text())
+        self.assertEqual(meta['accepted_by'], 'Tea (delegated in request)')
+        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
+
+    def test_eta_6_moving_back_to_proposed_voids_the_approval(self):
+        self.planned_ready()
+        self.assertEqual(self.cli('advance', 'refunds', 'proposed', '--back', '--reason', 'scope changed')[0], 0)
+        self.assertFails(aidlc.check(self.spec, 'accepted'), 'no approval of this spec is recorded')
+        self.assertEqual(self.approve()[0], 0)
+        self.assertPasses(aidlc.check(self.spec, 'accepted'))
+
+    def test_eta_6_there_must_be_a_spec_to_approve(self):
+        self.readme()
+        code, _, err = self.approve()
+        self.assertEqual(code, 2)
+        self.assertIn('nothing to approve', err)
+
+
+SPEC_RETURN = '''### Findings
+- [ ] S1 (must): RFD-1 — over-capture is not rejected at src/refunds/model.py:3 (confidence: high)
+### Assessment
+Axis spec; Status: BLOCKED.
+'''
+STANDARDS_RETURN = '''### Findings
+- [ ] Q1 (nit): rename amt at src/refunds/model.py:1 (confidence: low)
+### Assessment
+Axis standards; Status: DONE.
+'''
+QA_RETURN = 'Verdict: GO\n\ntests 12 passed, 0 failed\n'
+
+
+class ReturnsTest(Base):
+    """ETA-7: review.md rests on what the reviewers returned. A finding is closed, never dropped or downgraded."""
+
+    def ready(self):
+        """A spec at `verified` in a repository that requires stored reviewer returns."""
+        self.building()
+        self.write('src/refunds/model.py', 'def refund(amount):\n    return amount\n')
+        self.write('tests/test_refunds.py', '# RFD-1: refund a captured payment\n')
+        self.write('load/refund-visibility.js', 'export default function () {}\n')
+        self.pin(review={'returns': 'required'})
+        self.commit('code')
+        for task in ('T1', 'T2'):
+            self.assertEqual(self.cli('task-done', 'refunds', task, '--cmd', 'true')[0], 0)
+        self.assertEqual(self.cli('verify', 'refunds')[0], 0)
+        self.assertEqual(self.cli('advance', 'refunds', 'verified')[0], 0)
+
+    def attest(self, agent, axis, text):
+        source = self.base / 'return.txt'
+        source.write_text(text)
+        code, out, err = self.cli('attest', 'refunds', '--agent', 'aegisops-harness:' + agent, '--axis', axis,
+                                  '--file', source)
+        self.assertEqual(code, 0, out + err)
+
+    def all_returns(self):
+        self.attest('code-reviewer', 'spec', SPEC_RETURN)
+        self.attest('code-reviewer', 'standards', STANDARDS_RETURN)
+        self.attest('qa-subagent', 'qa', QA_RETURN)
+
+    def review(self, text=None):
+        self.spec_file('review.md', text or REVIEW.format(fp='pending'))
+        self.assertEqual(self.cli('stamp', 'refunds', 'review')[0], 0)
+        return aidlc.check(self.spec, 'reviewed')
+
+    def test_eta_7_proof_a_a_typed_review_with_no_return_behind_it_fails(self):
+        self.ready()
+        self.assertFails(self.review(), 'no reviewer return is stored')
+
+    def test_eta_7_review_md_that_carries_every_returned_finding_passes(self):
+        self.ready()
+        self.all_returns()
+        self.assertPasses(self.review())
+        stored = sorted(p.name for p in (self.spec / 'returns').iterdir())
+        self.assertEqual(len(stored), 3)
+        self.assertTrue(stored[0].endswith('-code-reviewer-spec.md'), stored)
+        meta, _ = aidlc.parse_frontmatter((self.spec / 'returns' / stored[0]).read_text())
+        self.assertEqual((meta['agent'], meta['axis'], meta['fingerprint']),
+                         ('aegisops-harness:code-reviewer', 'spec', aidlc.fingerprint(self.repo)))
+
+    def test_eta_7_a_dropped_finding_fails(self):
+        self.ready()
+        self.all_returns()
+        without_q1 = REVIEW.format(fp='pending').replace('- [x] Q1 (nit): rename amt — cleared: matches the PSP field name\n',
+                                                         'No findings.\n')
+        self.assertFails(self.review(without_q1), 'Q1 (nit) was returned by aegisops-harness:code-reviewer and is not in')
+
+    def test_eta_7_a_downgraded_finding_fails(self):
+        self.ready()
+        self.all_returns()
+        self.assertFails(self.review(REVIEW.format(fp='pending').replace('S1 (must)', 'S1 (nit)')),
+                         'S1 is (nit) here but was returned as (must)')
+
+    def test_eta_7_the_qa_verdict_is_the_one_qa_gave(self):
+        self.ready()
+        self.attest('code-reviewer', 'both', SPEC_RETURN + STANDARDS_RETURN)
+        self.attest('qa-subagent', 'qa', 'Verdict: NO-GO — refunds are not idempotent\n')
+        self.assertFails(self.review(), 'the latest QA return says NO-GO')       # review.md says GO
+        self.attest('qa-subagent', 'qa', 'Verdict: GO\n\nre-run after the fix\n')
+        self.assertPasses(aidlc.check(self.spec, 'reviewed'))
+
+    def test_eta_7_both_axes_and_qa_must_be_covered(self):
+        self.ready()
+        self.attest('code-reviewer', 'spec', SPEC_RETURN)
+        findings = self.review()
+        self.assertFails(findings, 'no stored return covers the standards axis')
+        self.assertFails(findings, 'no stored return from the QA agent')
+        self.readme(status='verified', branch='feat/refunds', qa='not-applicable — library, nothing to run')
+        self.approve()
+        self.attest('code-reviewer', 'standards', STANDARDS_RETURN)
+        self.assertPasses(aidlc.check(self.spec, 'reviewed'))
+
+    def test_eta_7_an_edited_return_is_detected(self):
+        self.ready()
+        self.all_returns()
+        stored = sorted((self.spec / 'returns').iterdir())[0]
+        stored.write_text(stored.read_text().replace('S1 (must)', 'S1 (nit)'))
+        self.assertFails(self.review(REVIEW.format(fp='pending').replace('S1 (must)', 'S1 (nit)')),
+                         'was changed after it was recorded')
+
+    def test_eta_7_the_same_return_is_stored_once(self):
+        self.ready()
+        self.attest('code-reviewer', 'spec', SPEC_RETURN)
+        self.attest('code-reviewer', 'spec', SPEC_RETURN)
+        self.assertEqual(len(list((self.spec / 'returns').iterdir())), 1)
+
+    def test_eta_7_code_changed_after_the_last_return_is_a_warning(self):
+        self.ready()
+        self.all_returns()
+        self.write('src/refunds/model.py', 'def refund(amount):\n    return int(amount)\n')
+        self.commit('a fix after the review')
+        self.assertEqual(self.cli('verify', 'refunds')[0], 0)
+        findings = self.review()
+        self.assertPasses(findings)
+        self.assertTrue(any('code changed after the last reviewer return' in m for level, m in findings if level == 'WARN'))
+
+    def test_eta_7_the_waiver_is_a_visible_decision(self):
+        self.reviewed_ready()                                         # the fixture config waives reviewer returns
+        findings = aidlc.check(self.spec, 'reviewed')
+        self.assertPasses(findings)
+        self.assertTrue(any('reviewer returns are waived' in m for level, m in findings if level == 'WARN'))

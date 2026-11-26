@@ -12,3 +12,5 @@ Append-only, written by `aidlc` only.
 - 2026-11-26T08:29:57Z task-done T5 exit=0 fingerprint=552139a255422f946f060fa9abf2c843fe1d8d866fc4c3692546f6ae1b9e9271 cmd="python3 -m unittest tests.test_trust_anchor"
 - 2026-11-26T08:33:51Z task-done T6 exit=0 fingerprint=8e049fa2ba0ee8dda3d1f5ed6d172d2512e9ca484fe9de09b7e6239e050eb6b4 cmd="python3 -m unittest tests.test_aidlc tests.test_trust_anchor"
 - 2026-11-26T08:39:55Z task-done T7 exit=0 fingerprint=ac7309ff302c31fb8ddf89ed2a436a69dad5e73a0d37cd02dafba18b72c925a7 cmd="python3 -m unittest tests.test_trust_anchor tests.test_evals"
+- 2026-11-26T08:50:45Z task-done T8 exit=0 fingerprint=490223993386d3a66afd1203936786e11c7f1975fb1415afd212441e8a5a5c50 cmd="python3 -m unittest tests.test_trust_anchor tests.test_evidence_guard"
+- 2026-11-26T08:51:11Z task-done T9 exit=0 fingerprint=490223993386d3a66afd1203936786e11c7f1975fb1415afd212441e8a5a5c50 cmd="python3 -m unittest tests.test_trust_anchor tests.test_evidence_guard tests.test_record_returns"
