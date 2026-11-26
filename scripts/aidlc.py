@@ -2035,6 +2035,9 @@ def run_command(cmd, cwd, timeout):
         except subprocess.TimeoutExpired:
             timed_out, code = True, 124
             _kill_tree(proc)
+        except BaseException:  # Ctrl-C, SIGTERM: do not leave the suite running behind us
+            _kill_tree(proc)
+            raise
         size = out.seek(0, 2)
         out.seek(max(0, size - TAIL_BYTES))
         tail = out.read().decode('utf-8', 'replace')
@@ -2274,19 +2277,46 @@ def production_changes(repo, base):
     return [(status[:1], path) for status, path in zip(listing[0::2], listing[1::2]) if _tdd.is_prod_code(path)]
 
 
+class RevertRefused(Exception):
+    """The revert check would touch work it cannot get back; nothing was changed."""
+
+
+def _unsafe(repo, changes):
+    """Why the revert check must not rewrite these files, or None: uncommitted work in them (the code fingerprint
+    leaves out docs/ and names such as license_*.py, so `code_dirty` cannot see it), or a symbolic link."""
+    paths = [path for _, path in changes]
+    result = repo.git('status', '--porcelain', '--untracked-files=all', '--', *paths)
+    if result is None or result.returncode != 0:
+        return 'git status failed, so it is not known that these files are clean'
+    dirty = [line[3:] for line in result.stdout.splitlines()]
+    if dirty:
+        return (f'uncommitted changes in {", ".join(dirty[:5])}: the revert check rewrites {"them" if len(dirty) > 1 else "it"}; '
+                'commit or stash them first')
+    for path in paths:
+        probe = repo.root / path
+        while probe != repo.root and probe != probe.parent:
+            if probe.is_symlink():
+                return f'{path} is, or sits behind, a symbolic link: the revert check does not write through links'
+            probe = probe.parent
+    return None
+
+
 def _put_back(repo, changes):
-    """Give the files a revert check rewrote the content HEAD holds."""
+    """Give the files a revert check rewrote the content HEAD holds. False when git could not restore them."""
     inside = [(status, path) for status, path in changes
               if repo.root in (repo.root / path).resolve().parents]  # never follow a path out of the repository
     at_head = [path for status, path in inside if status != 'D']
+    restored = True
     if at_head:
-        repo.git('checkout', 'HEAD', '--', *at_head)
+        result = repo.git('checkout', 'HEAD', '--', *at_head)
+        restored = result is not None and result.returncode == 0
     for status, path in inside:
         if status == 'D':
             try:
                 (repo.root / path).unlink()
             except OSError:
                 pass
+    return restored
 
 
 def heal_revert(root):
@@ -2297,10 +2327,23 @@ def heal_revert(root):
     if marker is None or not marker.is_file():
         return None
     try:
-        changes = [(str(status), str(path)) for status, path in json.loads(marker.read_text())['changes']]
-    except (OSError, ValueError, TypeError, KeyError):
-        changes = []
-    _put_back(repo, changes)
+        data = json.loads(marker.read_text())
+        changes = [(str(status), str(path)) for status, path in data['changes']]
+        head = data.get('head')
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        changes, head = [], None
+    now = repo.git('rev-parse', 'HEAD')
+    now = now.stdout.strip() if now is not None and now.returncode == 0 else None
+    if head and now != head:  # the work was moved on since: HEAD is no longer what the check was restoring to
+        try:
+            marker.unlink()
+        except OSError:
+            pass
+        return ('aidlc: an interrupted revert check was found, but HEAD is not the commit it ran on: the files were '
+                'not touched. Run `git status` and compare src with the branch before trusting the tree')
+    if not _put_back(repo, changes):
+        return ('aidlc: an interrupted revert check left production files at their base version and they could not be '
+                'restored from HEAD (the marker is kept): run `git status`, then `git checkout HEAD -- <file>`')
     try:
         marker.unlink()
     except OSError:
@@ -2330,11 +2373,27 @@ def revert_check(spec, config, timeout):
     changes = production_changes(repo, base)
     if not changes:
         return skipped(f'no production source changed since {trusted}')
+    problem = _unsafe(repo, changes)
+    if problem:
+        raise RevertRefused(problem)
     folder = _git_dir(repo)
     marker = folder / REVERT_MARKER if folder else None
+    head = repo.git('rev-parse', 'HEAD')
+    head = head.stdout.strip() if head is not None and head.returncode == 0 else None
     if marker is not None:
-        marker.write_text(json.dumps({'changes': changes}))
-    started, junit = time.time(), None
+        marker.write_text(json.dumps({'head': head, 'changes': changes}))
+    started, junit, restored = time.time(), None, True
+    previous = {}
+
+    def terminate(signum, frame):
+        raise SystemExit(128 + signum)  # the `finally` below puts the tree back
+
+    try:
+        for name in ('SIGTERM', 'SIGHUP'):
+            if hasattr(signal, name):
+                previous[getattr(signal, name)] = signal.signal(getattr(signal, name), terminate)
+    except ValueError:  # not the main thread: no handler, the next command heals
+        previous = {}
     try:
         for status, path in changes:
             target = repo.root / path
@@ -2353,12 +2412,14 @@ def revert_check(spec, config, timeout):
         if config['junit']:
             junit, _, _ = _junit_results(config['junit'], started, spec, repo, config['dir'])
     finally:
-        _put_back(repo, changes)
-        if marker is not None:
+        restored = _put_back(repo, changes)
+        if marker is not None and restored:
             try:
                 marker.unlink()
             except OSError:
                 pass
+        for number, handler in previous.items():
+            signal.signal(number, handler)
     usable = isinstance(junit, dict) and not junit.get('unreadable') and junit.get('cases')
     tested = _tested(spec)
     still = sorted(set(junit['req_pass']) & set(tested)) if usable else []
@@ -2368,8 +2429,9 @@ def revert_check(spec, config, timeout):
     if still:
         event += f' still-green={",".join(still)}'
     findings = []
-    if Repo(repo.root).fingerprint != current:
-        findings.append(fail('the revert check could not restore the tree: run `git status` and `git checkout HEAD -- .`'))
+    if not restored or Repo(repo.root).fingerprint != current:
+        findings.append(fail('the revert check could not restore the tree: run `git status`, then restore the '
+                             'production files with `git checkout HEAD -- <file>` (the next aidlc command also tries)'))
     level, message = _revert_verdict(code, junit if usable else None, still, tested)
     findings.append((level, f'revert check ({len(changes)} production file(s) put back to {trusted}): {message}'))
     if level != 'FAIL' and still:
@@ -2410,7 +2472,10 @@ def cmd_verify(args):
             return finding_result(notes + [fail(
                 'commit the code first: the revert check puts production files back to their base version and '
                 'restores them from HEAD, so nothing uncommitted may be in its way')], blank)
-        event, findings = revert_check(spec, config, args.timeout)
+        try:
+            event, findings = revert_check(spec, config, args.timeout)
+        except RevertRefused as refused:
+            return finding_result(notes + [fail(str(refused))], blank)
         with spec_lock(spec.dir):
             append_ledger(spec, event)
         notes += findings
@@ -2683,7 +2748,11 @@ def cmd_ci(args):
         row.update(config=f'`{config["cmd"]}` ({config["label"]}, {config["source"]})',
                    claims=_claims(spec, config) if bound else _waivers(config))
         if bound and config['revert_check'] and not repo.code_dirty:
-            text, result = revert_check(spec, config, args.timeout)
+            try:
+                text, result = revert_check(spec, config, args.timeout)
+            except RevertRefused as refused:
+                findings.append(fail(str(refused)))
+                continue
             spec.fresh['revert-check'] = _fresh(text)
             findings += result
         text, result, _ = run_pinned(spec, config, args.timeout)

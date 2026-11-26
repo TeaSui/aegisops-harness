@@ -11,6 +11,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from test_aidlc import Base, aidlc, REVIEW, SHIP  # noqa: E402  (Base carries no test of its own)
@@ -237,10 +238,6 @@ class DynamicTraceabilityTest(ConfigCase):
         self.assertTrue(any('the runner cannot write JUnit' in w for w in self.warns(findings)), findings)
 
 
-if __name__ == '__main__':
-    import unittest
-    unittest.main()
-
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 QUIET = 'PYTHONDONTWRITEBYTECODE=1 '
@@ -439,6 +436,82 @@ class RevertCheckTest(RevertFixture):
         self.assertIn('restored', err)
         self.assertEqual((self.repo / 'src' / 'refunds' / 'model.py').read_text(), MODEL)
         self.assertFalse((git_dir / 'aidlc-revert-check.json').exists())
+
+    def test_eta_3_uncommitted_work_in_a_file_the_check_rewrites_is_refused_not_lost(self):
+        # The code fingerprint leaves out names like license_*.py and docs/: `code_dirty` cannot see an edit there.
+        self.write('src/license_check.py', 'rules = 1\n')
+        self.config_on_main(UNITTEST, 'none — plain unittest writes no JUnit', revert_check=True)
+        self.building()
+        self.write('src/license_check.py', 'rules = 2\n')
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', REAL_TEST)
+        self.commit('code')
+        self.write('src/license_check.py', 'rules = 3  # unsaved work\n')
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 1, out + err)
+        self.assertIn('uncommitted', out)
+        self.assertIn('src/license_check.py', out)
+        self.assertEqual((self.repo / 'src' / 'license_check.py').read_text(), 'rules = 3  # unsaved work\n')
+        self.assertNotIn('revert-check', self.ledger())
+        self.assertFalse((pathlib.Path(self.git('rev-parse', '--absolute-git-dir')) / 'aidlc-revert-check.json').exists())
+
+    def test_eta_3_a_file_the_branch_made_a_symlink_is_never_written_through(self):
+        self.write('src/link.py', 'v = 1\n')
+        self.write('data/keep.txt', 'keep\n')
+        self.config_on_main(UNITTEST, 'none — plain unittest writes no JUnit', revert_check=True)
+        self.building()
+        (self.repo / 'src' / 'link.py').unlink()
+        os.symlink('../data/keep.txt', self.repo / 'src' / 'link.py')
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', REAL_TEST)
+        self.commit('code')
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 1, out + err)
+        self.assertIn('symbolic link', out)
+        self.assertEqual((self.repo / 'data' / 'keep.txt').read_text(), 'keep\n')
+        self.assertEqual(self.git('status', '--porcelain', '--', 'data', 'src'), '')
+
+    def test_eta_3_a_killed_check_is_healed_only_for_the_commit_it_ran_on(self):
+        self.ready(REAL_TEST)
+        git_dir = pathlib.Path(self.git('rev-parse', '--absolute-git-dir'))
+        model = self.repo / 'src' / 'refunds' / 'model.py'
+        marker = git_dir / 'aidlc-revert-check.json'
+        model.write_text('# edited after the interruption, on another commit\n')
+        marker.write_text(json.dumps({'head': '0' * 40, 'changes': [['M', 'src/refunds/model.py']]}))
+        code, out, err = self.cli('status')
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(model.read_text(), '# edited after the interruption, on another commit\n')
+        self.assertIn('not touched', err)
+        self.assertFalse(marker.exists())
+        model.write_text('# base version left by a killed run\n')
+        marker.write_text(json.dumps({'head': self.git('rev-parse', 'HEAD'), 'changes': [['M', 'src/refunds/model.py']]}))
+        self.assertIn('restored', self.cli('status')[2])
+        self.assertEqual(model.read_text(), MODEL)
+
+    def test_eta_3_a_terminated_check_puts_the_tree_back_and_stops_the_suite(self):
+        import signal
+        import time
+        slow = ('sh -c \'while [ ! -f "$PWD/go.flag" ]; do sleep 0.1; done; sleep 30\'')
+        self.config_on_main(slow, 'none — slow fixture writes no JUnit', revert_check=True)
+        self.building()
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', REAL_TEST)
+        self.commit('code')
+        script = str(pathlib.Path(aidlc.__file__).resolve())
+        env = dict(os.environ)
+        proc = subprocess.Popen([sys.executable, script, 'verify', 'refunds', '--repo', str(self.repo)],
+                                cwd=self.repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        model = self.repo / 'src' / 'refunds' / 'model.py'
+        for _ in range(100):  # the revert check removes the added file while the suite waits
+            if not model.exists():
+                break
+            time.sleep(0.1)
+        self.assertFalse(model.exists(), 'the revert check never started')
+        proc.send_signal(signal.SIGTERM)
+        proc.communicate(timeout=60)
+        self.assertEqual(model.read_text(), MODEL)
+        self.assertEqual(self.git('status', '--porcelain', '--', 'src', 'tests'), '')
+        self.assertFalse((pathlib.Path(self.git('rev-parse', '--absolute-git-dir')) / 'aidlc-revert-check.json').exists())
 
     def test_eta_3_the_gate_needs_a_revert_check_of_this_code(self):
         self.ready(REAL_TEST)
@@ -914,3 +987,7 @@ class SchemaTest(Base):
         self.assertEqual([m for level, m in findings if level == 'FAIL'], [])
         self.assertTrue(config['cmd'])
         self.assertTrue(config['junit'])
+
+
+if __name__ == '__main__':
+    unittest.main()
