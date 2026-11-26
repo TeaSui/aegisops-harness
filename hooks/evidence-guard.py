@@ -112,6 +112,32 @@ def typed_commands(transcript, gate):
     return found
 
 
+def model_runs(transcript, slug):
+    """How many times the model has already run `aidlc approve <slug>` in this session (a call that is in the
+    transcript was allowed, so it used up one typed command)."""
+    count = 0
+    try:
+        lines = pathlib.Path(transcript).read_text(errors='replace').splitlines()
+    except (OSError, TypeError, ValueError):
+        return count
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        blocks = (entry.get('message') or {}).get('content') if isinstance(entry, dict) else None
+        if entry.get('type') != 'assistant' or not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'Bash':
+                for sub, rest in aidlc_calls(str((block.get('input') or {}).get('command', ''))):
+                    target = positional(rest)
+                    if sub == 'approve' and '--delegated' not in rest and \
+                            pathlib.PurePosixPath((target or '').rstrip('/')).name == slug:
+                        count += 1
+    return count
+
+
 def approve_refusal(arguments, transcript):
     """Why this `aidlc approve` may not run in the session, or None when it may."""
     gate = load('question_gate', 'question-gate.py')
@@ -131,7 +157,12 @@ def approve_refusal(arguments, transcript):
         return None
     latest = commands[-1] if commands else None
     if latest and latest[0] == 'approve' and slug and slug in re.split(r'[\s/]+', latest[1].strip()):
-        return None
+        typed = sum(1 for name, args in commands if name == 'approve' and slug in re.split(r'[\s/]+', args.strip()))
+        if model_runs(transcript or '', slug) < typed:
+            return None
+        return (f'evidence-guard: the approval of {slug} that the user typed has been used (one run per typed command). '
+                'The spec may have changed since: show it again and ask the user to type '
+                f'/aegisops-harness:approve {slug}.')
     return ('evidence-guard: an approval is the user\'s act, and it is of the spec text as it is now. Present the spec, '
             f'then ask the user to type /aegisops-harness:approve {slug or "<slug>"} (that command, typed by them, lets '
             'this through; they can also run `aidlc approve` in their own terminal). If the request delegated every '

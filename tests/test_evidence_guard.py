@@ -71,6 +71,21 @@ class ApprovalGuardTest(GuardCase):
         later = entries + [command('build', 'refunds')]
         self.assertEqual(self.bash(AIDLC + ' approve refunds', later)[0], 2)        # an old approval is not a new one
 
+    def test_eta_6_one_typed_approval_authorises_one_run(self):
+        # The spec may be edited after the first run; the second approval is of text the person has not seen.
+        typed = command('approve', 'refunds')
+        ran = {'type': 'assistant', 'message': {'role': 'assistant', 'content': [
+            {'type': 'tool_use', 'name': 'Bash', 'input': {'command': AIDLC + ' approve refunds'}}]}}
+        self.assertEqual(self.bash(AIDLC + ' approve refunds', [typed])[0], 0)
+        code, err = self.bash(AIDLC + ' approve refunds', [typed, ran])
+        self.assertEqual(code, 2)
+        self.assertIn('one run', err)
+        again = [typed, ran, {'type': 'user', 'message': {'role': 'user', 'content': 'thanks'}}, command('approve', 'refunds')]
+        self.assertEqual(self.bash(AIDLC + ' approve refunds', again)[0], 0)        # a second typed command: one more run
+        other = {'type': 'assistant', 'message': {'role': 'assistant', 'content': [
+            {'type': 'tool_use', 'name': 'Bash', 'input': {'command': AIDLC + ' approve payouts'}}]}}
+        self.assertEqual(self.bash(AIDLC + ' approve refunds', [typed, other])[0], 0)  # another spec's run does not count
+
     def test_eta_6_a_transcript_that_cannot_be_read_does_not_authorise(self):
         code, err = self.bash(AIDLC + ' approve refunds')
         self.assertEqual(code, 2)
