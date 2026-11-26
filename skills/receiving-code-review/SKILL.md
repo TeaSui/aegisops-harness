@@ -30,7 +30,7 @@ Format: `${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §2 `review.md`. Close each 
 - `cleared:` the evidence it does not apply (search result, design section, test) or the user's decision: `cleared: accepted by <name> — <reason>`.
 - A finding from a PR comment, QA or the user during this stage goes under its axis with the next free ID and is closed the same way.
 
-Then, because code changed: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full suite>"`, the one diff-only re-review (a single reviewer, both axes), close what it adds, then:
+Then, because code changed: commit, `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f>`, the one diff-only re-review (a single reviewer, both axes), close what it adds, then:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" stamp <f> review

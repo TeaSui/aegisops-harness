@@ -22,7 +22,9 @@ Only when `pr create` itself fails (push refused, `pr auth` exit 1, API error) s
 
 ## 2. CI
 
-`pr checks <pr> --watch` (exit 0 green, 1 failed, 8 still pending at the timeout, 2 no checks reported). Exit 2, or no credentials to read CI: record what the user or the CI system shows as the `CI:` line, and say where it came from. Red is NO-GO unless unrelated and flaky: rerun once and note the rerun in `## Checks`.
+`pr checks <pr> --watch` (exit 0 green, 1 failed, 8 still pending at the timeout, 2 no checks reported). When the repository runs the lifecycle gate (`aidlc ci`), it is one of these checks: it re-runs what `aidlc verify` ran and must be green like the rest. Red is NO-GO unless unrelated and flaky: rerun once and note the rerun in `## Checks`.
+
+Exit 2, or no credentials to read CI: the `shipped` gate needs the provider's result and does not take a typed line. Stop as BLOCKED with the PR open, say what is missing (`gh auth login`, Bitbucket credentials, or no CI on the repository) and leave the merge to a person. Only a repository whose `.aidlc.json` on the default branch waives CI (`"ci": "none — <reason>"`) ships on the `CI:` line; never add that waiver yourself.
 
 ## 3. Version and changelog
 

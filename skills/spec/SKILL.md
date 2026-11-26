@@ -27,6 +27,10 @@ External contract change (HTTP/RPC API, event, shared schema; tighter validation
 Only for a spec you wrote that was not grilled with the user: dispatch one fresh `general-purpose` agent with `${CLAUDE_PLUGIN_ROOT}/skills/spec/checker-prompt.md` (absolute spec folder, first guess number 1). It appends guesses to `spec-check.md`. Close each in spec.md: `— resolved: <where>` (Rovo first for business answers) or `— accepted risk: <why>`. No second run.
 
 ## 6. One approval
-Present once: summary, stories, decisions incl. security, seams, contract result, assumptions and sources. Skip asking when the input delegated it or the pasted spec says `Status: ready-for-agent`; record `accepted_by: <name> (<date>)`, `<name> (delegated in request)` or `<name> (handed over ready-for-agent)`. Then `aidlc advance <feature> accepted`; fix what the gate lists and rerun (not a new approval unless the fix changes what was approved). Approval never authorizes destructive actions, external publishing or bypassing native controls.
+Present once: summary, stories, decisions incl. security, seams, contract result, assumptions and sources. The approval is of `spec.md` as it is written now (`aidlc approve` logs its hash and writes `accepted_by`):
+- **Input that delegated it, or a pasted spec marked `Status: ready-for-agent`:** `aidlc approve <feature> --delegated`. It records that nobody read the spec; say so first in the final report.
+- **Otherwise:** ask the user to type `/aegisops-harness:approve <feature>` and stop. An "ok" in the conversation is not an approval, and you cannot record a person's approval yourself: `hooks/evidence-guard.py` refuses it.
+
+Then `aidlc advance <feature> accepted`; fix what the gate lists and rerun. A fix that changes `spec.md` needs a new approval, and so does any later edit: a decision taken during the build is an `aidlc ruling`, never a change to the spec. Approval never authorizes destructive actions, external publishing or bypassing native controls.
 
 Next: `/aegisops-harness:plan` (inside `/aegisops-harness:aidlc`: continue).

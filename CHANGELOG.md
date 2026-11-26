@@ -1,5 +1,41 @@
 # Changelog
 
+## 6.0.0 — 2026-11-26
+
+The trust anchor moves to where the session cannot write. An assessment reproduced fourteen ways past the gates: every gate up to `shipped` passed on red tests (`aidlc verify --cmd true`, a story ID in a comment, a typed review), four text files passed the merge gate, an equivalent command or a GitHub MCP tool skipped each hook, the lifecycle eval gave that broken repository pass=True, and the eval job was green on sessions that never reached a model. Spec: `docs/specs/evidence-trust-anchor/`, built through the plugin's own lifecycle.
+
+### Breaking
+- **A repository needs `.aidlc.json`** (`aidlc config init --cmd "<full suite>" --junit "<report glob>"`). `aidlc verify` runs that command and no other; `--cmd` with another command is a usage error. The gates read the file from the default branch (`origin/<default>`, else the local branch), so a branch that edits or deletes it still runs the default branch's command. A file that exists only on the branch is onboarding: it is used, and every gate says so.
+- **JUnit is the traceability proof.** With a JUnit glob, a run without a readable report fails the gate, and each `Verify: test` story needs a test case that ran and passed with its ID in the name. The text search stays only behind `"junit": "none — <reason>"`, with a warning.
+- **Gates are cumulative.** `planned` includes `accepted`, `verified` includes `planned`, `reviewed` includes `verified`, `shipped` includes `reviewed`. A stage set by hand grants nothing.
+- **`shipped` needs a result from CI.** When the provider reports no check, the gate fails; the `CI:` line of ship.md counts only when the config waives CI (`"ci": "none — <reason>"`).
+- **An approval is an event.** `aidlc approve <spec>` logs the SHA-256 of spec.md; the accepted gate, and every later one, needs it to match, so an edit after the approval needs a new one. A name typed into `accepted_by` approves nothing. Specs in flight: run `aidlc approve` once.
+- **`reviewed` needs the reviewers' returns** unless the config waives them (`"review": {"returns": "none — <reason>"}`).
+
+### Added
+- **Revert check.** Before the green run, `aidlc verify` puts the production source changed since the merge base back to its base version and runs the pinned command, which must fail (a timeout does not count). With JUnit, at least one story of the spec must have a test that stopped passing; stories whose tests still pass are listed. The tree is restored from HEAD, and a marker lets the next command finish the restore after a killed run.
+- **`aidlc ci`**: reads the config from the base ref, runs the revert check and the pinned suite on the checked-out head, and evaluates every spec bound to the branch with that result. It reads no `verify` or `revert-check` line from a ledger and writes nothing to a spec folder. `--require reviewed` (default) fails a spec that is not there yet. The summary lists what it cannot check: who is said to have approved and reviewed, every waiver, and ONBOARDING. Packaged as `.github/actions/aidlc-gate`.
+- **Reviewer returns.** `hooks/record-returns.py` stores what the review-stage code reviewer and QA agent return, verbatim, in `<spec>/returns/` with the agent, axis, code fingerprint and the hash of the text. The reviewed gate needs both axes and QA covered, every returned finding in review.md with the severity it was given, and the QA verdict of the latest QA return. `aidlc attest` stores a review done elsewhere.
+- **`/aegisops-harness:approve <slug>`**, the command a person types to approve a spec as written.
+- **Evidence guard** (`hooks/evidence-guard.py`): the model cannot run `aidlc approve` unless the user's latest command is `/aegisops-harness:approve` for that spec (`--delegated`: unless the request did not delegate), cannot run `aidlc attest`, and cannot edit a spec's `ledger.md` or `returns/`.
+- **The hooks read the command** (`hooks/invocations.py`): `git -C dir commit`, `/usr/bin/git push`, `bash -c "git commit"`, `gh api …/pulls`, `gh api -X PUT …/pulls/N/merge` and curl to either provider are gated like their canonical forms, and `hooks.json` routes the GitHub MCP `create_pull_request`, `merge_pull_request` and `enable_pr_auto_merge` tools to the PR and merge gates.
+- **`schema: 1`** in the spec README and the config; a newer schema is refused. The formats and ledger events are frozen at schema 1 (`references/aidlc.md` "Compatibility").
+- **Evals.** The lifecycle judge passes a run only when the test suite is green and every hidden check holds. `--arm control|both` runs the same cases without the plugin and reports the difference with its interval. Three cases with hidden checks proven on reference solutions: a fee across an existing ledger, wallet and statement; a storage migration from float units to cents; concurrent transfers over an asynchronous store.
+- **`references/aidlc.md` "Trust model"**: prompts advise, hooks and local gates guard the default path, `aidlc ci` behind branch protection enforces. The README says how to switch that on.
+
+### Fixed
+- **First push of a new branch was blocked.** The secret gate scanned `@{u}..HEAD`; a branch without an upstream made gitleaks exit 1, and the gate reported "found a potential secret" for a clean branch. It scans the commits no remote has, and reports a scanner error as a scanner error. `git commit -a` now also scans tracked changes that were never staged, and `commit && push` scans both. Checked against gitleaks 8.21.2.
+- **A merge whose PR number could not be resolved was let through** (no gh, as in a cloud session): it is judged by the checked-out branch.
+- **Eval job green without signal.** A session that reached no model (no cost, no output tokens) is excluded as infrastructure; a suite with too few judged runs is `no-signal` and `--compare` exits 3; the baseline is never overwritten by such a run; `evals.yml` stops without the API key secret. The report and `check-setup` flag a baseline measured on another plugin version.
+- **Rename defects of 5.0.0:** autopilot state was never pruned on a case-sensitive filesystem, question-gate state never at all; injected notes opened with `<AegisOps-Harness>` and closed with `</aegisops-harness>`; the README said 4.0.0. `check-setup` fails on a README or changelog version that differs from the manifest.
+
+### Not measured
+- The paid suites were not re-run: `evals/headless/baseline.json` still holds the 4.0.0 scores, and `L3` and the three new cases have none. Until they are, the numbers describe 4.0.0.
+- The transcript tags the evidence guard reads (as the question gate does) are not a documented Claude Code interface. When they are missing the guard refuses an approval, and a person approves from a terminal.
+
+### Verified
+- 434 unit tests with node and gitleaks on the path, on Python 3.9 and 3.13; `check-setup` PASS; description lint PASS. Each proof of the assessment is a test that names its story (`ETA-n`); the forged-ledger repository of proof A passes the local gates and fails `aidlc ci`.
+
 ## 5.0.0 — 2026-11-22
 
 Renamed from `tea-sdlc` to `AegisOps-Harness`. This is a breaking change: commands, the marketplace and the environment variables change name.

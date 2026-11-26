@@ -873,3 +873,44 @@ class ReturnsTest(Base):
         findings = aidlc.check(self.spec, 'reviewed')
         self.assertPasses(findings)
         self.assertTrue(any('reviewer returns are waived' in m for level, m in findings if level == 'WARN'))
+
+
+class SchemaTest(Base):
+    """ETA-13: the formats carry a version, a newer one is refused, and the rule is written down."""
+
+    def test_eta_13_init_writes_the_schema_version(self):
+        self.assertEqual(self.cli('init', 'payouts', '--key', 'PAY')[0], 0)
+        meta, _ = aidlc.parse_frontmatter((self.repo / 'docs' / 'specs' / 'payouts' / 'README.md').read_text())
+        self.assertEqual(meta['schema'], str(aidlc.SCHEMA))
+
+    def test_eta_13_a_spec_written_for_a_newer_schema_is_refused(self):
+        self.accepted_ready(schema=aidlc.SCHEMA + 1)
+        findings = aidlc.check(self.spec, 'accepted')
+        self.assertFails(findings, 'schema %d is newer than this plugin reads (%d)' % (aidlc.SCHEMA + 1, aidlc.SCHEMA))
+        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 1)
+        row = next(item for item in aidlc.status(self.repo) if item['slug'] == 'refunds')
+        self.assertTrue(any('newer than this plugin' in blocker for blocker in row['blockers']))
+
+    def test_eta_13_a_spec_without_the_field_is_read_as_schema_1(self):
+        self.accepted_ready()                                         # what every 5.x spec looks like
+        self.assertPasses(aidlc.check(self.spec, 'accepted'))
+        self.accepted_ready(schema=aidlc.SCHEMA)
+        self.assertPasses(aidlc.check(self.spec, 'accepted'))
+
+    def test_eta_13_a_schema_that_is_not_a_number_is_a_finding(self):
+        self.accepted_ready(schema='one')
+        self.assertFails(aidlc.check(self.spec, 'accepted'), "schema: 'one' is not a version number")
+
+    def test_eta_13_the_reference_states_the_trust_model_and_the_compatibility_rule(self):
+        text = (ROOT / 'references' / 'aidlc.md').read_text()
+        for needle in ('## Trust model', '## Compatibility', 'schema: 1', 'aidlc ci', 'branch protection',
+                       'guard rail'):
+            self.assertIn(needle, text)
+
+    def test_eta_13_the_config_example_in_the_reference_is_a_valid_config(self):
+        text = (ROOT / 'references' / 'aidlc.md').read_text()
+        block = text.split('### `.aidlc.json`', 1)[1].split('```json', 1)[1].split('```', 1)[0]
+        config, findings = aidlc.parse_config(block, '.aidlc.json')
+        self.assertEqual([m for level, m in findings if level == 'FAIL'], [])
+        self.assertTrue(config['cmd'])
+        self.assertTrue(config['junit'])

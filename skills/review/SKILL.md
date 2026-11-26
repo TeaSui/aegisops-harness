@@ -38,13 +38,13 @@ b. **One message, parallel, each axis exactly once:**
 | `aegisops-harness:code-reviewer`, `AXIS: standards` | `spec.md` `### Security`, project `REVIEW.md` and conventions, `GLOSSARY.md`, the scope |
 | `aegisops-harness:qa-subagent` | `spec.md` Testing Decisions, `tickets.md`, `aidlc trace <f>`, the scope, the running target / base URL when a service is up (authorizes live API checks); its verdict fills `## QA` |
 
-Both reviewers get the template `${CLAUDE_PLUGIN_ROOT}/skills/review/code-reviewer.md`; they run on `sonnet` (effort medium; high for a large or trust-boundary diff).
+Dispatch them in the foreground: when each returns, the plugin stores its return in the spec folder's `returns/` (`hooks/record-returns.py`), and the `reviewed` gate compares `review.md` with those files. You cannot write or edit them. Both reviewers get the template `${CLAUDE_PLUGIN_ROOT}/skills/review/code-reviewer.md`; they run on `sonnet` (effort medium; high for a large or trust-boundary diff).
 
-c. **Write `review.md`:** frontmatter `reviewers: spec=<agent> standards=<agent>`, `## Spec` and `## Standards` holding each reviewer's lines exactly as returned, `## QA` with the verdict. Never merge across axes, change a severity, reorder or drop a finding; disagreement is a `cleared:` with evidence. An axis with no findings keeps its heading.
+c. **Write `review.md`:** frontmatter `reviewers: spec=<agent> standards=<agent>`, `## Spec` and `## Standards` holding each reviewer's lines exactly as returned, `## QA` with the verdict. Never merge across axes, change a severity, reorder or drop a finding (the gate fails on a returned finding that is missing or whose severity changed); disagreement is a `cleared:` with evidence. An axis with no findings keeps its heading.
 
 d. **Close every finding** (`/aegisops-harness:receiving-code-review`): `— fixed: <where>` or `— cleared: <evidence>`. Fix QA blockers in the same round.
 
-e. **Re-verify, then at most one re-review:** `aidlc verify <f> --cmd "<full suite>"` (the code changed). Then ONE diff-only re-review of the fixes by a single `aegisops-harness:code-reviewer` with `AXIS: both`, given the open findings and the fix diff, `FIRST_ID` = the next free number of each prefix. Close what it adds the same way. No second full round, no further loop. Skip it when nothing changed code.
+e. **Re-verify, then at most one re-review:** commit the fixes, `aidlc verify <f>` (the code changed). A QA `NO-GO` is lifted only by QA: re-dispatch `aegisops-harness:qa-subagent` on the fix. Then ONE diff-only re-review of the fixes by a single `aegisops-harness:code-reviewer` with `AXIS: both`, given the open findings and the fix diff, `FIRST_ID` = the next free number of each prefix. Close what it adds the same way. No second full round, no further loop. Skip it when nothing changed code.
 
 f. **Stamp and advance:**
 

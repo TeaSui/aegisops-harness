@@ -32,6 +32,15 @@ requires contextual review; it is not an automatic failure.
   tool permission flags. See the [official CLI reference](https://code.claude.com/docs/en/cli-reference).
 - `--output-format text` for clean pipe-friendly output
 
+## aidlc.py
+
+The lifecycle engine: stages, gates and evidence. Commands, formats and the repository config (`.aidlc.json`) are in `references/aidlc.md` §3 to §5; the trust model is at the end of that file. Two commands are meant for people and CI rather than for a session:
+
+```bash
+python3 scripts/aidlc.py config init --cmd "npm run test:ci" --junit "reports/*.xml"   # pin the verify command
+python3 scripts/aidlc.py ci --base origin/main                                         # what the required check runs
+```
+
 ## check-setup.py
 
 Structural checks for the plugin itself: manifests and version, agent/skill/command frontmatter (model, effort, YAML), every bundled path reference, no `~/.claude/` paths to bundled files, and the SessionStart hook output contract. Run before every release:

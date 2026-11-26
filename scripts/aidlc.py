@@ -1363,10 +1363,18 @@ class Spec:
         meta, _ = parse_frontmatter(text)
         if meta is None:
             return {}, text, [fail(f'{label}:1: no frontmatter (--- block with status:, key:, …)')]
+        findings = []
         status = meta.get('status') or 'proposed'
         if status not in STAGES + SIDE:
-            return meta, text, [fail(f'{label}: status: {status} is not an AIDLC stage')]
-        return meta, text, []
+            findings.append(fail(f'{label}: status: {status} is not an AIDLC stage'))
+        schema = meta.get('schema')
+        if schema not in (None, ''):  # absent: schema 1, what every spec before the field looked like
+            if not str(schema).isdigit() or int(schema) < 1:
+                findings.append(fail(f'{label}: schema: {schema!r} is not a version number'))
+            elif int(schema) > SCHEMA:
+                findings.append(fail(f'{label}: schema {schema} is newer than this plugin reads ({SCHEMA}): update the '
+                                     'plugin before working on this spec'))
+        return meta, text, findings
 
     @property
     def meta(self):
@@ -2785,6 +2793,7 @@ def _write_section(path, title, body):
 
 
 README_SKELETON = """---
+schema: {schema}
 status: proposed
 key: {key}
 branch:
@@ -2850,7 +2859,7 @@ def cmd_init(args):
         if Spec(other, repo).meta.get('key') == args.key:
             raise UsageError(f'key {args.key} is already used by {repo.rel(other)}')
     target.mkdir(parents=True, exist_ok=True)
-    values = {'key': args.key, 'slug': target.name, 'today': today()}
+    values = {'key': args.key, 'slug': target.name, 'today': today(), 'schema': SCHEMA}
     written = []
     for name, skeleton in (('README.md', README_SKELETON), ('spec.md', SPEC_SKELETON),
                            ('tickets.md', TICKETS_SKELETON), ('ledger.md', LEDGER_SKELETON)):

@@ -303,15 +303,18 @@ class DocContractTest(Base):
     def test_ledger_example(self):
         events, findings = aidlc.parse_ledger(doc_blocks()['ledger.md'], 'ledger.md')
         self.assertEqual(findings, [])
-        self.assertEqual([e['kind'] for e in events], ['advance', 'task-done', 'ruling', 'verify', 'stamp'])
-        self.assertEqual((events[0]['from'], events[0]['to']), ('accepted', 'planned'))
-        self.assertEqual((events[1]['task'], events[1]['exit']), ('T1', 0))
-        self.assertEqual(events[2]['task'], 'T2')
-        self.assertIn('double refunds', events[2]['if_wrong'])
-        self.assertEqual(events[3]['junit'], {'passed': 42, 'failed': 0})
-        self.assertEqual(events[3]['cmd'], 'npm test')
-        self.assertEqual(events[4]['fingerprint'], '8a01c6e95f3b')
-        self.assertEqual(events[1]['fingerprint'], '3f9c0b7d21e4')
+        self.assertEqual([e['kind'] for e in events],
+                         ['approve', 'advance', 'task-done', 'ruling', 'revert-check', 'verify', 'stamp'])
+        approve, advance, done, ruling, revert, verify, stamp = events
+        self.assertEqual((approve['by'], approve['how'], len(approve['spec'])), ('Tea', 'approved', 64))
+        self.assertEqual((advance['from'], advance['to']), ('accepted', 'planned'))
+        self.assertEqual((done['task'], done['exit'], done['fingerprint']), ('T1', 0, '3f9c0b7d21e4'))
+        self.assertEqual(ruling['task'], 'T2')
+        self.assertIn('double refunds', ruling['if_wrong'])
+        self.assertEqual((revert['exit'], revert['files'], revert['skipped']), (1, '3', False))
+        self.assertEqual(verify['junit'], {'passed': 42, 'failed': 0})
+        self.assertEqual((verify['cmd'], verify['pinned'], verify['req_pass']), ('npm run test:ci', 'base', ['RFD-1']))
+        self.assertEqual(stamp['fingerprint'], '8a01c6e95f3b')
 
     def test_review_example(self):
         review, findings = aidlc.parse_review(doc_blocks()['review.md'], 'review.md')

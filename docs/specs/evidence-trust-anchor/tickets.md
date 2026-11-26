@@ -100,8 +100,8 @@ Test: python3 -m unittest tests.test_hook_commands tests.test_ship_gate
 ## T11: Schema version, trust model and release
 Blocked by: T7, T8, T9, T10
 Covers: ETA-13
-Status: ready-for-agent
+Status: done
 What to build: spec README and config carry the schema version, a newer schema is refused, and the docs state the three layers and the compatibility rule.
-- [ ] A spec with a newer schema fails its gate with a clear message
-- [ ] The lifecycle reference states the trust model and the compatibility rule
+- [x] A spec with a newer schema fails its gate with a clear message
+- [x] The lifecycle reference states the trust model and the compatibility rule
 Test: python3 -m unittest discover -s tests
