@@ -5,7 +5,7 @@ key: ETA
 branch: claude/hopeful-cori-m3hhyn
 security: required
 contract: none
-accepted_by:
+accepted_by: Tea Nguyen (2026-11-26)
 updated: 2026-11-26
 ---
 # evidence-trust-anchor
