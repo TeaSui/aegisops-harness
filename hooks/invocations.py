@@ -184,6 +184,17 @@ def _strip(words):
 
 
 def _unwrap(words, depth):
+    """The simple command itself, the commands it runs (see `_run`) and the ones in a quoted `$(…)` it holds."""
+    found = _run(words, depth)
+    if depth < 4:
+        for word in words:
+            inner = re.search(r'\$\((.*)\)', word, re.S) if '$(' in word else None
+            if inner:
+                found += simple_commands(inner.group(1), depth + 1)
+    return found
+
+
+def _run(words, depth):
     """The simple command itself, and the commands it runs: a script after `-c`, `eval`, `find -exec`."""
     words, wrapped = _strip(words)
     if not words:
@@ -340,5 +351,7 @@ def merges_pull_request(command):
     '$' when a variable or a GraphQL call hides which one. (False, None) when it merges nothing."""
     for kind, target in _pulls(command):
         if kind == 'merge':
+            if target is None and re.search(r'\bmerge\b[^;&|\n]*[$`]', command):
+                target = '$'  # `gh pr merge $(…)`: the substitution was split off as a command of its own
             return True, target
     return False, None

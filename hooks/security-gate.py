@@ -105,7 +105,7 @@ def main():
         cwd = folder_of(call, payload.get('cwd') or None)
         for args in scans_for(call, cwd):
             try:
-                result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=180)
+                result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=60)
             except (OSError, subprocess.TimeoutExpired) as error:
                 deny(f'security-gate: gitleaks could not complete ({type(error).__name__}); blocking.')
             if result.returncode == 0:

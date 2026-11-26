@@ -81,6 +81,16 @@ class ParsingTest(unittest.TestCase):
         self.assertEqual(self.subs("bash -c 'echo a # b\ngit push'"), ['push'])
         self.assertEqual(self.subs('git commit -m sh -c "echo hi"')[:1], ['commit'])  # a message is not a shell
 
+    def test_eta_8_a_call_inside_a_quoted_substitution_is_seen(self):
+        for command in ('out="$(git push 2>&1)"', 'x=$(git commit -m y)', 'echo "done: $(git -C sub commit -m z)"',
+                        "msg='$(echo hi)' && result=\"$(git push)\""):
+            self.assertTrue(set(self.subs(command)) & {'commit', 'push'}, command)
+
+    def test_eta_8_a_merge_named_by_a_substitution_cannot_be_known(self):
+        for command in ('gh pr merge $(gh pr list --json number -q ".[0].number") --squash',
+                        'gh pr merge `gh pr list -q .[0].number`', 'gh pr merge --squash $PR'):
+            self.assertEqual(inv.merges_pull_request(command), (True, '$'), command)
+
     def test_eta_8_text_written_to_a_file_is_not_a_git_command(self):
         for command in ('cat > notes.md <<EOF\nthen run:\ngit commit -m x\ngit push\nEOF',
                         "cat <<'EOF' > howto.md\ngit push origin main\nEOF", 'tee -a log <<-EOF\n\tgit commit\n\tEOF',
