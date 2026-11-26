@@ -23,3 +23,4 @@ Append-only, written by `aidlc` only.
 - 2026-11-26T16:09:23Z advance proposed→accepted
 - 2026-11-26T16:09:23Z advance accepted→planned
 - 2026-11-26T16:09:23Z advance planned→building
+- 2026-11-26T16:09:28Z advance building→verified

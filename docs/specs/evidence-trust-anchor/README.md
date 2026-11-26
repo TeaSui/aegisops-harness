@@ -1,6 +1,6 @@
 ---
 schema: 1
-status: building
+status: verified
 key: ETA
 branch: claude/hopeful-cori-m3hhyn
 security: required
