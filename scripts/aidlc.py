@@ -707,7 +707,7 @@ def parse_return(text, label):
             item['findings'].append((found.group(1), (found.group(2) or '').strip().lower()))
         verdict = VERDICT.match(line)
         if verdict and item['verdict'] is None:
-            item['verdict'] = verdict.group(1).strip()
+            item['verdict'] = re.sub(r'\*\*|__|`', '', verdict.group(1)).strip()  # emphasis is not part of the verdict
     return item, problems
 
 
@@ -764,14 +764,23 @@ def returns_findings(spec, review, qa_waived):
                 findings.append(fail(f'{item["label"]}: {finding}{" (" + severity + ")" if severity else ""} was '
                                      f'returned by {item["agent"]} and is not in review.md (a finding is closed with '
                                      '"fixed:" or "cleared:", never left out)'))
-            elif severity and kept['severity'] and kept['severity'] != severity:
+            elif severity and not kept['severity']:
+                findings.append(fail(f'{spec.label("review.md")}:{kept["line"]}: {finding} has no severity here but was '
+                                     f'returned as ({severity}) by {item["agent"]}: a finding is closed with its severity'))
+            elif severity and kept['severity'] != severity:
                 findings.append(fail(f'{spec.label("review.md")}:{kept["line"]}: {finding} is ({kept["severity"]}) here '
                                      f'but was returned as ({severity}) by {item["agent"]}'))
-    given = next((item for item in reversed(returns) if item['axis'] == 'qa' and verdict_kind(item['verdict'])), None)
-    if given and not qa_waived and verdict_kind(review['qa']) != verdict_kind(given['verdict']):
-        findings.append(fail(f'{spec.label("review.md")}: the QA verdict here is {verdict_kind(review["qa"]) or "missing"}; '
-                             f'the latest QA return says {verdict_kind(given["verdict"])} ({given["label"]}). Only a '
-                             'new return from the QA agent changes it'))
+    latest = next((item for item in reversed(returns) if item['axis'] == 'qa'), None)
+    if latest and not qa_waived:
+        kind = verdict_kind(latest['verdict'])
+        if not kind:
+            findings.append(fail(f'{folder}/: the latest QA return has no verdict the gate can read ({latest["label"]}): '
+                                 'a line "Verdict: GO", "Verdict: CONDITIONAL GO — <conditions>" or "Verdict: NO-GO — '
+                                 '<reason>" (ask the QA agent again; an unreadable verdict is not a pass)'))
+        elif verdict_kind(review['qa']) != kind:
+            findings.append(fail(f'{spec.label("review.md")}: the QA verdict here is {verdict_kind(review["qa"]) or "missing"}; '
+                                 f'the latest QA return says {kind} ({latest["label"]}). Only a new return from the QA '
+                                 'agent changes it'))
     if review['fingerprint'] and not any(fp_matches(review['fingerprint'], item['fingerprint']) or
                                          fp_matches(item['fingerprint'], review['fingerprint']) for item in returns):
         findings.append(warn(f'{spec.label("review.md")}: code changed after the last reviewer return: what was stamped '

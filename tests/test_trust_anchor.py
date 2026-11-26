@@ -950,6 +950,23 @@ class ReturnsTest(Base):
         self.attest('qa-subagent', 'qa', 'Verdict: GO\n\nre-run after the fix\n')
         self.assertPasses(aidlc.check(self.spec, 'reviewed'))
 
+    def test_eta_7_a_severity_left_off_a_returned_finding_fails(self):
+        self.ready()
+        self.all_returns()
+        self.assertFails(self.review(REVIEW.format(fp='pending').replace('S1 (must)', 'S1')),
+                         'S1 has no severity here but was returned as (must)')
+
+    def test_eta_7_a_qa_verdict_the_gate_cannot_read_fails_instead_of_passing(self):
+        self.ready()
+        self.attest('code-reviewer', 'both', SPEC_RETURN + STANDARDS_RETURN)
+        self.attest('qa-subagent', 'qa', 'Verdict: GO\n')
+        self.assertPasses(self.review())
+        for text in ('QA summary\n\nthe suite is red\n', '## Verdict\n\nNO-GO — refunds are not idempotent\n'):
+            self.attest('qa-subagent', 'qa', text)
+            self.assertFails(aidlc.check(self.spec, 'reviewed'), 'the latest QA return has no verdict')
+        self.attest('qa-subagent', 'qa', 'Verdict: **NO-GO** — refunds are not idempotent\n')  # emphasis is stripped
+        self.assertFails(aidlc.check(self.spec, 'reviewed'), 'the latest QA return says NO-GO')
+
     def test_eta_7_both_axes_and_qa_must_be_covered(self):
         self.ready()
         self.attest('code-reviewer', 'spec', SPEC_RETURN)
