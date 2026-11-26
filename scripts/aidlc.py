@@ -116,6 +116,7 @@ GH_STATES = ('pass', 'fail', 'pending', 'skipping', 'cancel')
 TAIL_BYTES = 2048
 DEFAULT_TIMEOUT = 1800
 CONFIG_NAME = '.aidlc.json'  # the repository config: pins the verify command (parse_config)
+REVERT_MARKER = 'aidlc-revert-check.json'  # in the git dir while a revert check has production files rewritten
 SCHEMA = 1  # of the repository config and the spec README; a file written for a newer schema is refused
 WAIVER = re.compile(r'^none\b' + DASH + r'(.*)$', re.I)
 NO_CONFIG = ('no pinned verify command: {name} is on neither the default branch nor this branch. The command that '
@@ -579,9 +580,24 @@ def _event(kind, rest):
         data = _kv(match.group(3))
         return {'from': match.group(1), 'to': match.group(2), 'back': bool(re.match(r'back\b', match.group(3))),
                 'reason': data.get('reason')}, None
+    head = rest.split(None, 1)
+    if kind == 'revert-check':
+        skipped = bool(head) and head[0] == 'skipped'
+        data = _kv((head[1] if len(head) > 1 else '') if skipped else rest)
+        event = {'skipped': skipped, 'reason': data.get('reason'), 'base': data.get('base', ''),
+                 'files': data.get('files'), 'junit': data.get('junit'),
+                 'still_green': [x for x in str(data.get('still_green', '')).split(',') if x],
+                 'fingerprint': str(data.get('fingerprint', '')).rstrip('…')}
+        if not re.match(r'^[0-9a-f]+$', event['fingerprint']):
+            return None, fail('revert-check needs fingerprint=<hex>')
+        if not skipped:
+            try:
+                event['exit'] = int(data.get('exit'))
+            except (TypeError, ValueError):
+                return None, fail('revert-check needs exit=<code>')
+        return event, None
     if kind not in ('task-done', 'verify', 'stamp'):
         return {'text': rest}, warn(f'unknown ledger event {kind!r}')
-    head = rest.split(None, 1)
     event = {}
     if kind == 'task-done':
         if not head or not TASK_ID.match(head[0]):
@@ -1420,7 +1436,7 @@ def gate_verified(spec):
         if req['verify'] == 'test' and not spec.repo.tests_referencing(req['id']):
             findings.append(fail(f'{spec.label(spec.spec_name)}:{req["line"]}: {req["id"]} (Verify: test) is not '
                                  'referenced by any test file'))
-    return findings + _verify_findings(spec)
+    return findings + _verify_findings(spec) + _revert_findings(spec)
 
 
 def _open_criteria(spec, task):
@@ -1459,6 +1475,43 @@ def _verify_findings(spec):
     elif event['req_fail']:
         findings.append(fail(f'{where}: requirement tests failed: {", ".join(event["req_fail"])}'))
     return findings + _junit_coverage(spec, event, where)
+
+
+def _tested(spec):
+    return [r['id'] for r in spec.requirements[0] or [] if r['verify'] == 'test']
+
+
+def _revert_verdict(code, junit, still_green, tested):
+    """(level, message) of a revert-check run: the suite must fail without the production change, and with JUnit at
+    least one story of this spec must have a test that stopped passing."""
+    if code == 124:
+        return fail('the revert check timed out: a suite that does not finish proves nothing')
+    if code == 0:
+        return fail('the suite still passes without the production change: no test depends on it')
+    if isinstance(junit, dict) and tested and set(tested) <= set(still_green):
+        return fail(f'every story test of this spec still passes without the production change '
+                    f'({", ".join(still_green)}): the suite went red for another reason')
+    return 'OK', f'the suite goes red without the production change (exit {code})'
+
+
+def _revert_findings(spec):
+    """The latest revert check is for the current code and went red (or was skipped with a reason)."""
+    config = spec.config
+    if not config or failed(config['findings']) or not config.get('revert_check'):
+        return []
+    event = spec.last('revert-check')
+    if event is None:
+        return [fail(f'{spec.label("ledger.md")}: no revert check (aidlc verify runs it before the green run)')]
+    where = f'{spec.label("ledger.md")}:{event["line"]}'
+    if not fp_matches(event['fingerprint'], spec.repo.fingerprint):
+        return [fail(f'{where}: code changed since the revert check: run aidlc verify again')]
+    if event['skipped']:
+        return [warn(f'{where}: revert check skipped: {event["reason"]}')]
+    level, message = _revert_verdict(event['exit'], event['junit'], event['still_green'], _tested(spec))
+    if level == 'FAIL':
+        return [fail(f'{where}: {message}')]
+    return [warn(f'{where}: {", ".join(event["still_green"])}: the tests that name these stories pass without the '
+                 'production change (existing behaviour, or tests that prove nothing)')] if event['still_green'] else []
 
 
 def _junit_coverage(spec, event, where):
@@ -2013,6 +2066,124 @@ def run_pinned(spec, config, timeout):
                              'output_tail': tail, 'ledger': event}
 
 
+def _git_dir(repo):
+    result = repo.git('rev-parse', '--absolute-git-dir') if repo.is_git else None
+    if result is None or result.returncode != 0 or not result.stdout.strip():
+        return None
+    return pathlib.Path(result.stdout.strip())
+
+
+def production_changes(repo, base):
+    """[(status, path)] of the production source that differs between commit `base` and HEAD: A added, M modified,
+    D deleted (a rename is a D and an A). Production source is code that is not a test (the TDD gate's rule)."""
+    listing = repo._z('diff', '--name-status', '--no-renames', '-z', base, 'HEAD') or []
+    return [(status[:1], path) for status, path in zip(listing[0::2], listing[1::2]) if _tdd.is_prod_code(path)]
+
+
+def _put_back(repo, changes):
+    """Give the files a revert check rewrote the content HEAD holds."""
+    inside = [(status, path) for status, path in changes
+              if repo.root in (repo.root / path).resolve().parents]  # never follow a path out of the repository
+    at_head = [path for status, path in inside if status != 'D']
+    if at_head:
+        repo.git('checkout', 'HEAD', '--', *at_head)
+    for status, path in inside:
+        if status == 'D':
+            try:
+                (repo.root / path).unlink()
+            except OSError:
+                pass
+
+
+def heal_revert(root):
+    """Finish the restore of a revert check that was killed mid-run; a note for the user, or None."""
+    repo = Repo(root)
+    folder = _git_dir(repo)
+    marker = folder / REVERT_MARKER if folder else None
+    if marker is None or not marker.is_file():
+        return None
+    try:
+        changes = [(str(status), str(path)) for status, path in json.loads(marker.read_text())['changes']]
+    except (OSError, ValueError, TypeError, KeyError):
+        changes = []
+    _put_back(repo, changes)
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+    return (f'aidlc: an interrupted revert check had left {len(changes)} production file(s) at their base version; '
+            'restored from HEAD')
+
+
+def revert_check(spec, config, timeout):
+    """Does any test depend on the production change? Put the production source of this branch back to the merge base
+    with the trusted ref, run the pinned command (it must fail), restore HEAD. (ledger text of the event, findings);
+    nothing is written to the ledger. The caller made sure the code is committed, so HEAD is the way back."""
+    repo = Repo(spec.repo.root, base=spec.repo.base)
+    current = repo.fingerprint
+
+    def skipped(reason):
+        return (f'revert-check skipped fingerprint={current} reason={quoted(reason)}',
+                [warn(f'revert check skipped: {reason}')])
+
+    trusted = repo.trusted_ref
+    if not trusted:
+        return skipped('no default branch to compare this branch with')
+    merge = repo.git('merge-base', 'HEAD', trusted)
+    base = merge.stdout.strip() if merge is not None and merge.returncode == 0 else ''
+    if not base:
+        return skipped(f'no merge base with {trusted} (a shallow clone? fetch the history)')
+    changes = production_changes(repo, base)
+    if not changes:
+        return skipped(f'no production source changed since {trusted}')
+    folder = _git_dir(repo)
+    marker = folder / REVERT_MARKER if folder else None
+    if marker is not None:
+        marker.write_text(json.dumps({'changes': changes}))
+    started, junit = time.time(), None
+    try:
+        for status, path in changes:
+            target = repo.root / path
+            if status == 'A':
+                try:
+                    target.unlink()
+                except OSError:
+                    pass
+                continue
+            data = repo.show(base, path)
+            if data is None:
+                raise OSError(f'cannot read {path} at {base[:12]}')
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        code, _ = run_command(config['cmd'], config['dir'], timeout)
+        if config['junit']:
+            junit, _, _ = _junit_results(config['junit'], started, spec, repo, config['dir'])
+    finally:
+        _put_back(repo, changes)
+        if marker is not None:
+            try:
+                marker.unlink()
+            except OSError:
+                pass
+    usable = isinstance(junit, dict) and not junit.get('unreadable') and junit.get('cases')
+    tested = _tested(spec)
+    still = sorted(set(junit['req_pass']) & set(tested)) if usable else []
+    event = f'revert-check exit={code} fingerprint={current} base={base[:12]} files={len(changes)}'
+    if usable:
+        event += f' junit={junit["passed"]} passed, {junit["failed"]} failed'
+    if still:
+        event += f' still-green={",".join(still)}'
+    findings = []
+    if Repo(repo.root).fingerprint != current:
+        findings.append(fail('the revert check could not restore the tree: run `git status` and `git checkout HEAD -- .`'))
+    level, message = _revert_verdict(code, junit if usable else None, still, tested)
+    findings.append((level, f'revert check ({len(changes)} production file(s) put back to {trusted}): {message}'))
+    if level != 'FAIL' and still:
+        findings.append(warn(f'{", ".join(still)}: the tests that name these stories pass without the production change '
+                             '(existing behaviour, or tests that prove nothing)'))
+    return event, findings
+
+
 def pinned_config(spec, args):
     """The usable config of a spec, or raise UsageError; (None, result) when the config itself has failures."""
     config = spec.config
@@ -2038,11 +2209,23 @@ def cmd_verify(args):
     config, refused = pinned_config(spec, args)
     if refused:
         return refused
+    notes = [f for f in config['findings'] if f[0] == 'WARN']
+    if config['revert_check']:  # red first, so that reports and build output end on the run of the real code
+        blank = {'spec': spec.repo.rel(spec.dir), 'command_exit': None}
+        if spec.repo.code_dirty:
+            return finding_result(notes + [fail(
+                'commit the code first: the revert check puts production files back to their base version and '
+                'restores them from HEAD, so nothing uncommitted may be in its way')], blank)
+        event, findings = revert_check(spec, config, args.timeout)
+        with spec_lock(spec.dir):
+            append_ledger(spec, event)
+        notes += findings
+        if failed(findings):
+            return finding_result(notes, dict(blank, ledger=event))
     event, findings, payload = run_pinned(spec, config, args.timeout)
     with spec_lock(spec.dir):
         append_ledger(spec, event)
-    findings = [f for f in config['findings'] if f[0] == 'WARN'] + findings
-    return finding_result(findings + [('OK', f'verify logged: exit={payload["command_exit"]}')], payload)
+    return finding_result(notes + findings + [('OK', f'verify logged: exit={payload["command_exit"]}')], payload)
 
 
 def _junit_results(pattern, started, spec, repo, folder=None):
@@ -2395,6 +2578,12 @@ def main(argv=None):
         args = build_parser().parse_args(argv)
     except SystemExit as exit_:  # argparse already printed the usage error (or --help)
         return exit_.code if isinstance(exit_.code, int) else 2
+    try:  # a revert check that was killed left production files at their base version: put them back first
+        note = heal_revert(repo_root(pathlib.Path(getattr(args, 'repo', None) or pathlib.Path.cwd())))
+        if note:
+            print(note, file=sys.stderr)
+    except Exception:
+        pass
     try:
         code, payload, lines = args.func(args)
     except UsageError as err:

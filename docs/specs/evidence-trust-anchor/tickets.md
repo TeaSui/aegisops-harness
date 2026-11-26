@@ -43,11 +43,11 @@ Test: python3 -m unittest tests.test_aidlc tests.test_trust_anchor
 ## T5: Revert check
 Blocked by: T4
 Covers: ETA-3
-Status: ready-for-agent
+Status: done
 What to build: verify proves the suite goes red without the production change and leaves the tree as it found it.
-- [ ] A vacuous test fails the revert check
-- [ ] A real test passes it and the tree is restored
-- [ ] A change with no production source skips it with a reason
+- [x] A vacuous test fails the revert check
+- [x] A real test passes it and the tree is restored
+- [x] A change with no production source skips it with a reason
 Test: python3 -m unittest tests.test_trust_anchor
 
 ## T6: Cumulative gates and real CI

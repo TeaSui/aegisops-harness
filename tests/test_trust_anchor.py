@@ -239,3 +239,212 @@ class DynamicTraceabilityTest(ConfigCase):
 if __name__ == '__main__':
     import unittest
     unittest.main()
+
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+QUIET = 'PYTHONDONTWRITEBYTECODE=1 '
+UNITTEST = QUIET + sys.executable + ' -m unittest discover -s tests -q'
+JUNIT_RUN = QUIET + '%s %s -s tests -o ignored/junit.xml' % (sys.executable, ROOT / 'tests' / 'junit_runner.py')
+MODEL = 'def refund(amount):\n    return amount\n'
+REAL_TEST = '''import sys
+import unittest
+
+sys.path.insert(0, 'src')
+from refunds.model import refund  # noqa: E402
+
+
+class RefundTest(unittest.TestCase):
+    def test_rfd_1_refund_returns_the_amount(self):
+        self.assertEqual(refund(5), 5)
+'''
+VACUOUS_TEST = '''import unittest
+
+
+class RefundTest(unittest.TestCase):
+    def test_rfd_1_refund_returns_the_amount(self):
+        self.assertTrue(True)  # carries the story ID, exercises nothing
+'''
+EXISTING_TEST = '''import sys
+import unittest
+
+sys.path.insert(0, 'src')
+import app  # noqa: E402
+
+
+class ExistingTest(unittest.TestCase):
+    def test_rfd_3_existing_value_is_kept(self):
+        self.assertEqual(app.x, 1)
+'''
+REQS_TWO_TESTED = '''# Requirements
+
+### RFD-1: Refund a captured payment
+Acceptance:
+- A full refund returns the amount.
+Verify: test
+
+### RFD-2: Refunds are visible to support staff
+Acceptance:
+- p95 visibility delay <= 60 s.
+Verify: check — k6 run load/refund-visibility.js
+
+### RFD-3: Existing settings keep their value
+Acceptance:
+- The existing value is unchanged.
+Verify: test
+'''
+
+
+class RevertCheckTest(ConfigCase):
+    """ETA-3: the suite goes red when the production change is taken out, or the tests prove nothing about it."""
+
+    def ready(self, test_text, cmd=UNITTEST, junit='none — plain unittest writes no JUnit', commit=True):
+        self.config_on_main(cmd, junit, revert_check=True)
+        self.building()
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', test_text)
+        if commit:
+            self.commit('code')
+        for task in ('T1', 'T2'):
+            self.assertEqual(self.cli('task-done', 'refunds', task, '--cmd', 'true')[0], 0)
+
+    def code_status(self):
+        return self.git('status', '--porcelain', '--', 'src', 'tests', '.aidlc.json')
+
+    def test_eta_3_a_real_test_goes_red_without_the_change_and_the_tree_is_restored(self):
+        self.ready(REAL_TEST)
+        before = aidlc.fingerprint(self.repo)
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 0, out + err)
+        check = self.last('revert-check')
+        self.assertFalse(check['skipped'])
+        self.assertNotEqual(check['exit'], 0)
+        self.assertEqual(check['files'], '1')
+        kinds = [line.split()[2] for line in self.ledger().splitlines() if line.startswith('- ')]
+        self.assertEqual(kinds[-2:], ['revert-check', 'verify'])   # red first: the tree ends on the real code's run
+        self.assertEqual((self.repo / 'src' / 'refunds' / 'model.py').read_text(), MODEL)
+        self.assertEqual(self.code_status(), '')
+        self.assertEqual(aidlc.fingerprint(self.repo), before)
+        self.assertFalse((pathlib.Path(self.git('rev-parse', '--absolute-git-dir')) / 'aidlc-revert-check.json').exists())
+        self.assertPasses(aidlc.check(self.spec, 'verified'))
+
+    def test_eta_3_a_vacuous_test_fails_the_revert_check(self):
+        # Proof A again: a test that names the story and exercises nothing is green with or without the change.
+        self.ready(VACUOUS_TEST)
+        code, out, _ = self.cli('verify', 'refunds')
+        self.assertEqual(code, 1, out)
+        self.assertIn('still passes without the production change', out)
+        self.assertEqual(self.last('revert-check')['exit'], 0)
+        self.assertNotIn(' verify ', self.ledger())                 # no green run is recorded on top of it
+        self.assertEqual(self.code_status(), '')
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'without the production change')
+
+    def test_eta_3_modified_deleted_and_added_files_are_put_back_as_they_were(self):
+        self.write('src/legacy.py', 'old = True\n')
+        self.config_on_main(UNITTEST, 'none — plain unittest writes no JUnit', revert_check=True)
+        self.building()
+        self.write('src/app.py', 'x = 2\n')                          # modified
+        (self.repo / 'src' / 'legacy.py').unlink()                   # deleted
+        self.write('src/refunds/model.py', MODEL)                    # added
+        self.write('tests/test_refunds.py', REAL_TEST + '\n\nclass AppTest(unittest.TestCase):\n'
+                   '    def test_app_value(self):\n        import app\n        self.assertEqual(app.x, 2)\n')
+        self.commit('code')
+        for task in ('T1', 'T2'):
+            self.cli('task-done', 'refunds', task, '--cmd', 'true')
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.last('revert-check')['files'], '3')
+        self.assertEqual((self.repo / 'src' / 'app.py').read_text(), 'x = 2\n')
+        self.assertFalse((self.repo / 'src' / 'legacy.py').exists())
+        self.assertEqual((self.repo / 'src' / 'refunds' / 'model.py').read_text(), MODEL)
+        self.assertEqual(self.code_status(), '')
+
+    def test_eta_3_uncommitted_code_is_refused_before_anything_runs(self):
+        self.ready(REAL_TEST, commit=False)
+        code, out, _ = self.cli('verify', 'refunds')
+        self.assertEqual(code, 1, out)
+        self.assertIn('commit', out)
+        self.assertNotIn('revert-check', self.ledger())
+        self.assertNotIn(' verify ', self.ledger())
+        self.assertEqual((self.repo / 'src' / 'refunds' / 'model.py').read_text(), MODEL)
+
+    def test_eta_3_a_change_without_production_source_is_skipped_with_its_reason(self):
+        self.config_on_main(UNITTEST, 'none — plain unittest writes no JUnit', revert_check=True)
+        self.building()
+        self.write('tests/test_refunds.py', EXISTING_TEST.replace('rfd_3', 'rfd_1'))
+        self.commit('a test for existing behaviour')
+        for task in ('T1', 'T2'):
+            self.cli('task-done', 'refunds', task, '--cmd', 'true')
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 0, out + err)
+        check = self.last('revert-check')
+        self.assertTrue(check['skipped'])
+        self.assertIn('no production source', check['reason'])
+        findings = aidlc.check(self.spec, 'verified')
+        self.assertPasses(findings)
+        self.assertTrue(any('no production source' in w for w in self.warns(findings)))
+
+    def building_with(self, requirements, covers):
+        self.config_on_main(JUNIT_RUN, 'ignored/*.xml', revert_check=True)
+        self.accepted_ready()
+        self.spec_file('requirements.md', requirements)
+        self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
+        self.spec_file('plan.md', '- [ ] T1: Refund model\n  - covers: %s\n  - depends: none\n  - owner: main\n'
+                                  '  - files: src/refunds/model.py (new)\n' % covers)
+        self.assertEqual(self.cli('advance', 'refunds', 'planned')[0], 0)
+        self.git('checkout', '-q', '-b', 'feat/refunds')
+        self.assertEqual(self.cli('advance', 'refunds', 'building')[0], 0)
+
+    def test_eta_3_stories_whose_tests_pass_without_the_change_are_listed(self):
+        self.building_with(REQS_TWO_TESTED, 'RFD-1, RFD-2, RFD-3')
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', REAL_TEST)
+        self.write('tests/test_existing.py', EXISTING_TEST)
+        self.commit('code')
+        self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.last('revert-check')['still_green'], ['RFD-3'])
+        self.assertEqual(self.last('verify')['req_pass'], ['RFD-1', 'RFD-3'])
+        findings = aidlc.check(self.spec, 'verified')
+        self.assertPasses(findings)
+        self.assertTrue(any('RFD-3' in w and 'without the production change' in w for w in self.warns(findings)))
+
+    def test_eta_3_a_red_suite_does_not_count_when_no_story_test_depends_on_the_change(self):
+        # The suite goes red for another reason (an unrelated test needs the reverted file); the story's own test
+        # is vacuous. With JUnit the check is per story, so this does not pass.
+        self.building_with(REQS_TWO_TESTED.split('### RFD-3')[0], 'RFD-1, RFD-2')
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', VACUOUS_TEST)
+        self.write('tests/test_other.py', REAL_TEST.replace('test_rfd_1_refund_returns_the_amount', 'test_unrelated'))
+        self.commit('code')
+        self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
+        code, out, _ = self.cli('verify', 'refunds')
+        self.assertEqual(code, 1, out)
+        self.assertIn('every story test of this spec still passes', out)
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'every story test of this spec still passes')
+
+    def test_eta_3_an_interrupted_check_is_healed_by_the_next_command(self):
+        self.ready(REAL_TEST)
+        git_dir = pathlib.Path(self.git('rev-parse', '--absolute-git-dir'))
+        (self.repo / 'src' / 'refunds' / 'model.py').unlink()        # as a killed revert check leaves the tree
+        (git_dir / 'aidlc-revert-check.json').write_text(json.dumps({'changes': [['A', 'src/refunds/model.py']]}))
+        code, out, err = self.cli('status')
+        self.assertEqual(code, 0, out + err)
+        self.assertIn('restored', err)
+        self.assertEqual((self.repo / 'src' / 'refunds' / 'model.py').read_text(), MODEL)
+        self.assertFalse((git_dir / 'aidlc-revert-check.json').exists())
+
+    def test_eta_3_the_gate_needs_a_revert_check_of_this_code(self):
+        self.ready(REAL_TEST)
+        self.assertEqual(self.cli('verify', 'refunds')[0], 0)
+        ledger = self.spec / 'ledger.md'
+        kept = [line for line in ledger.read_text().splitlines() if 'revert-check' not in line]
+        ledger.write_text('\n'.join(kept) + '\n')
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'no revert check')
+        with open(ledger, 'a') as handle:
+            handle.write('- 2026-11-26T00:00:00Z revert-check exit=124 fingerprint=%s base=abc files=1\n'
+                         % aidlc.fingerprint(self.repo))
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'timed out')
+        with open(ledger, 'a') as handle:
+            handle.write('- 2026-11-26T00:00:01Z revert-check exit=1 fingerprint=%s base=abc files=1\n' % ('0' * 64))
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'code changed since the revert check')
