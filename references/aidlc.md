@@ -252,10 +252,25 @@ GitHub (make the job a required status check; check out the head with history, a
   with:
     ref: ${{ github.event.pull_request.head.sha }}
     fetch-depth: 0
-- uses: TeaSui/aegisops-harness/.github/actions/aidlc-gate@main
+- uses: TeaSui/aegisops-harness/.github/actions/aidlc-gate@<tag-or-sha>  # not @main: the gate is the trust anchor
 ```
 
-Bitbucket Pipelines: `git fetch origin "$BITBUCKET_PR_DESTINATION_BRANCH"`, clone this plugin, then `python3 <plugin>/scripts/aidlc.py ci`.
+Bitbucket Pipelines (pin the plugin to a tag or commit; fetch the destination branch with its history, because a pipeline clone is shallow and single-branch):
+
+```yaml
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: lifecycle gate
+          script:
+            - git fetch --unshallow origin || true
+            - git fetch origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - git clone --depth 1 --branch <tag> https://bitbucket.org/<you>/aegisops-harness.git /tmp/aegisops-harness
+            - python3 /tmp/aegisops-harness/scripts/aidlc.py ci
+```
+
+Use a tag or a commit SHA in `uses:` and in the clone, not `@main`: the gate is the trust anchor, so its version is a decision a person makes. Add `persist-credentials: false` to the checkout step, since the pull request's own suite runs in that job.
 
 ## Trust model
 
@@ -264,6 +279,15 @@ Three layers; only the last one is enforcement.
 1. **Prompts** (skills, rules, agents) advise.
 2. **Hooks and local gates** are a guard rail for the default path: they catch the session that forgets or takes the short way, with the commands it writes by default. They read files that same session can write (ledger, review.md, the transcript), so a session that sets out to forge them can. Do not present them to an auditor as a control.
 3. **`aidlc ci` as a required status check on a protected branch**, with a required review by a person (CODEOWNERS on `.aidlc.json`, `docs/specs/`, the scripts and workflow the pinned command and the gate job run), enforces: the session cannot write CI's result, the base branch's config, or another person's approval. Switching branch protection on is the repository owner's act.
+
+Limits of the hooks and local gates that this release knows and does not close (each is why layer 3 exists):
+- A command read from shell text is read for the forms a session writes by default. A pipe into a shell (`echo "git push" | sh`), a here-string, a line continuation inside a word, an alias or a script are not seen.
+- GitHub MCP tools that write file content (`push_files`, `create_or_update_file`) are not routed to the secret scan; only creating and merging a pull request is gated. CI and the repository's own secret scanning are the backstop.
+- The revert check proves the suite goes red without the change. With JUnit it also needs a story test that stopped passing; without a usable report a red exit is all it can see, so a test that only imports a new module goes red when that file is removed. Keep JUnit on.
+- A change made after the last reviewer return is a warning in the gate, not a failure: the reviewer read an earlier commit. The CI summary lists it for the person who approves.
+- The axis a stored return covers comes from the dispatch prompt; a return is the reviewer's text, but who it was asked to review is the session's word.
+- Another `aidlc` command run while a revert check is in progress finishes that run's restore early; run one verify at a time per checkout.
+- This repository's own gate job runs the plugin from the pull request head, because the plugin is developed here. Protect `scripts/`, `hooks/` and `.github/` with CODEOWNERS or run the gate from the base ref.
 
 What stays a claim even then, and is printed in the CI summary for the reviewer: who approved the spec (`accepted_by`), who reviewed (`reviewers:`), every waiver, and every ruling marked `RISK-ACCEPTANCE NEEDED`.
 

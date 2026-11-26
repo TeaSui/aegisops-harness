@@ -53,6 +53,16 @@ class ApprovalGuardTest(GuardCase):
         self.assertEqual(self.bash(AIDLC + ' approve refunds --by "Tea"', entries)[0], 2)
         self.assertEqual(self.bash('cd repo && ' + AIDLC + ' approve docs/specs/refunds', entries)[0], 2)
 
+    def test_eta_6_a_shell_wrapper_does_not_hide_the_call(self):
+        entries = [command('aidlc', 'Add refunds to the wallet.')]
+        for text in ('bash -c \'' + AIDLC + ' approve refunds\'', 'sh -c "' + AIDLC + ' approve refunds"',
+                     'eval "' + AIDLC + ' approve refunds"', 'sudo -u me ' + AIDLC + ' approve refunds',
+                     'env X=1 ' + AIDLC + ' approve refunds', 'python3 /p/scripts/aidlc.py --repo . approve refunds',
+                     'python3 /p/scripts/aidlc.py approve \\\n refunds', 'ls && (cd x; ' + AIDLC + ' approve refunds)',
+                     'bash <<EOF\n' + AIDLC + ' approve refunds\nEOF', 'python3 /p/scripts/aidlc.py attest refunds'):
+            self.assertEqual(self.bash(text, entries)[0], 2, text)
+        self.assertEqual(self.bash('echo "aidlc.py approve refunds"', entries)[0], 0)
+
     def test_eta_6_the_users_own_command_authorises_it(self):
         entries = [command('aidlc', 'Add refunds.'), command('approve', 'refunds')]
         self.assertEqual(self.bash(AIDLC + ' approve refunds', entries)[0], 0)

@@ -2060,13 +2060,14 @@ def quoted(text):
     return json.dumps(' '.join(str(text).split()), ensure_ascii=False)
 
 
-def run_command(cmd, cwd, timeout):
-    """(exit code, last ~2KB of combined output); 124 on timeout. Nothing is streamed."""
+def run_command(cmd, cwd, timeout, env=None):
+    """(exit code, last ~2KB of combined output); 124 on timeout. Nothing is streamed. `env` adds variables."""
     timed_out = False
     with tempfile.TemporaryFile() as out:
         try:
             proc = subprocess.Popen(cmd, shell=True, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=out,
-                                    stderr=subprocess.STDOUT, start_new_session=os.name == 'posix')
+                                    stderr=subprocess.STDOUT, start_new_session=os.name == 'posix',
+                                    env=dict(os.environ, **env) if env else None)
         except OSError as err:
             return 127, str(err)
         try:
@@ -2344,17 +2345,17 @@ def _put_back(repo, changes):
     """Give the files a revert check rewrote the content HEAD holds. False when git could not restore them."""
     inside = [(status, path) for status, path in changes
               if repo.root in (repo.root / path).resolve().parents]  # never follow a path out of the repository
+    for status, path in inside:  # first: on a case-insensitive filesystem a deleted `Foo.py` and an added `foo.py`
+        if status == 'D':        # are one file, and unlinking it after the checkout would delete what was restored
+            try:
+                (repo.root / path).unlink()
+            except OSError:
+                pass
     at_head = [path for status, path in inside if status != 'D']
     restored = True
     if at_head:
         result = repo.git('checkout', 'HEAD', '--', *at_head)
         restored = result is not None and result.returncode == 0
-    for status, path in inside:
-        if status == 'D':
-            try:
-                (repo.root / path).unlink()
-            except OSError:
-                pass
     return restored
 
 
@@ -2434,20 +2435,23 @@ def revert_check(spec, config, timeout):
     except ValueError:  # not the main thread: no handler, the next command heals
         previous = {}
     try:
-        for status, path in changes:
-            target = repo.root / path
+        for status, path in changes:  # added files go first (see _put_back): a case-only rename is a D and an A
             if status == 'A':
                 try:
-                    target.unlink()
+                    (repo.root / path).unlink()
                 except OSError:
                     pass
+        for status, path in changes:
+            if status == 'A':
                 continue
             data = repo.show(base, path)
             if data is None:
                 raise OSError(f'cannot read {path} at {base[:12]}')
+            target = repo.root / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
-        code, _ = run_command(config['cmd'], config['dir'], timeout)
+        # No bytecode: a same-size edit within one second would leave a stale __pycache__ that outlives the restore.
+        code, _ = run_command(config['cmd'], config['dir'], timeout, env={'PYTHONDONTWRITEBYTECODE': '1'})
         if config['junit']:
             junit, _, _ = _junit_results(config['junit'], started, spec, repo, config['dir'])
     finally:

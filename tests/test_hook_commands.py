@@ -19,7 +19,7 @@ HOOKS = ROOT / 'hooks'
 GIT_ENV = {'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_AUTHOR_NAME': 't',
            'GIT_AUTHOR_EMAIL': 't@e', 'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@e'}
 # Assembled here so that no file in the repository holds a token-shaped string (the plugin's own gate scans pushes).
-SECRET = 'github_token = "%s"\n' % ('gh' + 'p_' + '1234567890abcdefghijklmnopqrstuvwxyzAB')
+SECRET = 'github_token = "%s"\n' % ('gh' + 'p_' + 'R7kQ2mZx9LpVd3TnW8yBc5HfJaE4uGs1oXiN')  # high entropy: gitleaks 8.30 skips sequential tokens
 
 
 def load(name):
@@ -85,6 +85,11 @@ class ParsingTest(unittest.TestCase):
         for command in ('out="$(git push 2>&1)"', 'x=$(git commit -m y)', 'echo "done: $(git -C sub commit -m z)"',
                         "msg='$(echo hi)' && result=\"$(git push)\""):
             self.assertTrue(set(self.subs(command)) & {'commit', 'push'}, command)
+
+    def test_eta_8_every_merge_in_a_command_is_listed(self):
+        self.assertEqual(inv.merge_targets('gh pr merge 5 && gh pr merge 6'), ['5', '6'])
+        self.assertEqual(inv.merge_targets('gh pr merge 5; gh pr merge $X'), ['5', '$'])
+        self.assertEqual(inv.merge_targets('gh pr view 5'), [])
 
     def test_eta_8_a_merge_named_by_a_substitution_cannot_be_known(self):
         for command in ('gh pr merge $(gh pr list --json number -q ".[0].number") --squash',

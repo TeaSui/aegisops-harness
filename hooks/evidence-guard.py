@@ -40,22 +40,40 @@ def words(command):
         return command.split()
 
 
+def simple_commands(command):
+    """The simple commands of a shell command, read as the other gates read them (hooks/invocations.py): inside
+    `bash -c`, `eval`, `$(…)`, `if … then`, a here-document fed to a shell, behind `sudo` and `env`."""
+    try:
+        return load('invocations', 'invocations.py').simple_commands(command.replace('\\\n', ' '))
+    except Exception:
+        return []
+
+
 def aidlc_calls(command):
     """[(subcommand, arguments)] for every `aidlc.py <subcommand> …` in a shell command."""
-    tokens, calls = words(command), []
-    for index, token in enumerate(tokens):
-        if pathlib.PurePosixPath(token.replace('\\', '/')).name != 'aidlc.py':
-            continue
-        rest = []
-        for word in tokens[index + 1:]:
-            if word in SEPARATORS or word.rstrip(';') != word and not rest:
-                break
-            rest.append(word.rstrip(';'))
-            if word.endswith(';'):
-                break
-        sub = next((word for word in rest if not word.startswith('-')), None)
-        if sub:
-            calls.append((sub, rest[rest.index(sub) + 1:]))
+    calls = []
+    for tokens in simple_commands(command) + [words(command)]:  # the flat reading stays as the floor
+        for index, token in enumerate(tokens):
+            if pathlib.PurePosixPath(token.replace('\\', '/')).name != 'aidlc.py':
+                continue
+            rest = []
+            for word in tokens[index + 1:]:
+                if word in SEPARATORS or word.rstrip(';') != word and not rest:
+                    break
+                rest.append(word.rstrip(';'))
+                if word.endswith(';'):
+                    break
+            sub, at = None, 0
+            while at < len(rest):  # `--repo .` takes a value: it is not the subcommand
+                if rest[at] in VALUE_OPTIONS:
+                    at += 2
+                elif rest[at].startswith('-'):
+                    at += 1
+                else:
+                    sub = rest[at]
+                    break
+            if sub and (sub, rest[at + 1:]) not in calls:
+                calls.append((sub, rest[at + 1:]))
     return calls
 
 

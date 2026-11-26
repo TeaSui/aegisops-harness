@@ -162,7 +162,7 @@ def merge_of(payload):
         spec.loader.exec_module(module)
         merging, target = module.merges_pull_request(text)
         if merging:
-            return True, target
+            return (True, '*') if len(module.merge_targets(text)) > 1 else (True, target)
         text = module.unquoted(text)
     except Exception:  # the parser itself failed: the whole text is the floor
         pass
@@ -183,6 +183,9 @@ def main():
     top = run(['git', 'rev-parse', '--show-toplevel'], cwd)
     if not top:
         return 0
+    if target == '*':
+        return deny(['ship-gate: this command merges more than one pull request, and the gate checks one at a time. '
+                     'Run one merge per command.'])
     if target == '$':
         return deny(['ship-gate: the merge command names its PR through a variable or command substitution, so the gate '
                      'cannot check which change ships. Run it with a literal PR number or branch.'])

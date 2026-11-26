@@ -16,6 +16,14 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from test_aidlc import Base, aidlc, REVIEW, SHIP  # noqa: E402  (Base carries no test of its own)
 
+def _case_insensitive():
+    import tempfile
+    with tempfile.TemporaryDirectory() as folder:
+        (pathlib.Path(folder) / 'A').write_text('x')
+        return (pathlib.Path(folder) / 'a').exists()
+
+
+CASE_INSENSITIVE = _case_insensitive()
 RED = sys.executable + ' -c "import sys; sys.exit(1)"'
 # A stand-in test runner: runs nothing, writes the JUnit report it is told to.
 REPORT = sys.executable + ' -c "import pathlib,sys; pathlib.Path(sys.argv[1]).parent.mkdir(parents=True, exist_ok=True); ' \
@@ -570,6 +578,48 @@ class RevertCheckTest(RevertFixture):
         self.assertEqual(model.read_text(), MODEL)
         self.assertEqual(self.git('status', '--porcelain', '--', 'src', 'tests'), '')
         self.assertFalse((pathlib.Path(self.git('rev-parse', '--absolute-git-dir')) / 'aidlc-revert-check.json').exists())
+
+    @unittest.skipUnless(CASE_INSENSITIVE, 'needs a case-insensitive filesystem (the macOS default)')
+    def test_eta_3_a_case_only_rename_is_restored_not_deleted(self):
+        # `Casey.py` -> `casey.py` is a delete and an add that name ONE file here: unlink-then-write order matters.
+        self.write('src/Casey.py', 'v = 1\n')
+        self.config_on_main(UNITTEST, 'none — plain unittest writes no JUnit', revert_check=True)
+        self.building()
+        self.git('mv', 'src/Casey.py', 'src/casey_tmp.py')
+        self.git('mv', 'src/casey_tmp.py', 'src/casey.py')
+        self.write('src/casey.py', 'v = 2\n')
+        self.write('src/refunds/model.py', MODEL)
+        self.write('tests/test_refunds.py', REAL_TEST + '\n\nclass CaseyTest(unittest.TestCase):\n'
+                   '    def test_casey_value(self):\n        import casey\n        self.assertEqual(casey.v, 2)\n')
+        self.commit('code')
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual((self.repo / 'src' / 'casey.py').read_text(), 'v = 2\n')
+        self.assertEqual(self.code_status(), '')
+
+    def test_eta_3_put_back_removes_deleted_files_before_it_restores_others(self):
+        # Order is what keeps a case-only rename safe: unlink the path HEAD no longer has, then check out the rest.
+        seen = []
+        outer = self
+
+        class Repo:
+            root = outer.repo
+
+            def git(self, *args):
+                seen.append((args, (outer.repo / 'old.py').exists()))
+                return subprocess.CompletedProcess(args, 0, '', '')
+
+        (self.repo / 'old.py').write_text('x')
+        aidlc._put_back(Repo(), [('A', 'new.py'), ('D', 'old.py')])
+        self.assertEqual([exists for _, exists in seen], [False])
+
+    def test_eta_3_the_reverted_run_does_not_write_bytecode(self):
+        # Same-size edit inside one second leaves a stale __pycache__ that makes the restored code look old.
+        cmd = "sh -c 'test -z \"$PYTHONDONTWRITEBYTECODE\"'"            # green only when the variable is unset
+        self.ready(REAL_TEST, cmd=cmd, junit='none — shell fixture')
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 0, out + err)                           # red (variable set) then green (unset)
+        self.assertNotEqual(self.last('revert-check')['exit'], 0)
 
     def test_eta_3_the_gate_needs_a_revert_check_of_this_code(self):
         self.ready(REAL_TEST)

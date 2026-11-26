@@ -346,6 +346,13 @@ def opens_pull_request(command):
     return any(kind == 'create' for kind, _ in _pulls(command))
 
 
+def merge_targets(command):
+    """Every pull request a command merges, in order: a number, URL or branch, None for the current branch, '$' when
+    it cannot be known."""
+    return [('$' if target is None and re.search(r'\bmerge\b[^;&|\n]*[$`]', command) else target)
+            for kind, target in _pulls(command) if kind == 'merge']
+
+
 def merges_pull_request(command):
     """(True, target) for the first merge in the command: a PR number, URL or branch, None for the current branch,
     '$' when a variable or a GraphQL call hides which one. (False, None) when it merges nothing."""

@@ -78,6 +78,12 @@ class ShipGateTest(unittest.TestCase):
             self.assertEqual(result.returncode, 2, command)
             self.assertIn('shipped', result.stderr)
 
+    def test_eta_8_two_merges_in_one_command_are_refused_not_half_checked(self):
+        self.spec('reviewed')
+        result = self.run_hook('gh pr merge 7 && gh pr merge 42')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('one merge per command', result.stderr)
+
     def test_eta_8_an_mcp_merge_is_gated(self):
         self.spec('reviewed')
         args = {'owner': 'o', 'repo': 'r', 'pullNumber': 42}

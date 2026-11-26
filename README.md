@@ -92,9 +92,9 @@ Once per repository, by a person:
      with:
        ref: ${{ github.event.pull_request.head.sha }}
        fetch-depth: 0
-   - uses: TeaSui/aegisops-harness/.github/actions/aidlc-gate@main
+   - uses: TeaSui/aegisops-harness/.github/actions/aidlc-gate@<tag-or-sha>  # not @main: the gate is the trust anchor
    ```
-   Bitbucket Pipelines: `python3 <plugin>/scripts/aidlc.py ci` after fetching the destination branch.
+   Bitbucket Pipelines: a ready `bitbucket-pipelines.yml` step is in [references/aidlc.md](references/aidlc.md) §5 (fetch the destination branch with its history first).
 3. **Require it.** Branch protection: the gate job as a required status check, a required review, and CODEOWNERS on `.aidlc.json`, `docs/specs/` and the scripts and workflow the gate runs. `aidlc ci` judges the specs bound to the branch; a change that unbinds a spec gets the suite only, so read the diff of `docs/specs/`.
 
 The job summary lists what it cannot check (who is said to have approved and reviewed, every waiver). Details and the limits of each layer: `references/aidlc.md` §4, §5 and "Trust model".
