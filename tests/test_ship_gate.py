@@ -50,6 +50,44 @@ class ShipGateTest(unittest.TestCase):
         return subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), env=full_env,
                               capture_output=True, text=True, timeout=60)
 
+    def run_tool(self, tool, tool_input):
+        payload = {'session_id': 's1', 'cwd': str(self.repo), 'tool_name': tool, 'tool_input': tool_input}
+        clean = {k: v for k, v in os.environ.items() if not k.startswith('AEGISOPS_HARNESS_')}
+        return subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), capture_output=True, text=True,
+                              timeout=60, env={**clean, **GIT_ENV, 'HOME': str(self.home), 'AIDLC_GH': str(self.gh)})
+
+    def test_eta_8_proof_e_the_api_form_is_gated_like_gh_pr_merge(self):
+        self.spec('reviewed')
+        for command in ('gh api -X PUT repos/o/r/pulls/42/merge',
+                        'gh api --method PUT /repos/o/r/pulls/42/merge -f merge_method=squash',
+                        'curl -X PUT https://api.github.com/repos/o/r/pulls/42/merge'):
+            result = self.run_hook(command)
+            self.assertEqual(result.returncode, 2, command)
+            self.assertIn('shipped', result.stderr)
+        self.assertEqual(self.run_hook('gh api repos/o/r/pulls/42/merge').returncode, 0)       # a read: "is it merged?"
+        self.assertEqual(self.run_hook('gh api -X PUT repos/o/r/pulls/7/merge').returncode, 0)  # a branch with no spec
+
+    def test_eta_8_an_mcp_merge_is_gated(self):
+        self.spec('reviewed')
+        args = {'owner': 'o', 'repo': 'r', 'pullNumber': 42}
+        for tool in ('mcp__github__merge_pull_request', 'mcp__plugin_engineering_github__merge_pull_request',
+                     'mcp__github__enable_pr_auto_merge'):
+            result = self.run_tool(tool, args)
+            self.assertEqual(result.returncode, 2, tool)
+            self.assertIn('shipped', result.stderr)
+        self.assertEqual(self.run_tool('mcp__github__merge_pull_request', dict(args, pullNumber=7)).returncode, 0)
+        self.assertEqual(self.run_tool('mcp__github__pull_request_read', args).returncode, 0)
+
+    def test_eta_8_a_pr_that_cannot_be_resolved_is_judged_by_the_checked_out_branch(self):
+        # No gh (a cloud session): the number cannot be turned into a branch. The session sits on the branch it merges.
+        self.spec('reviewed')
+        result = self.run_tool('mcp__github__merge_pull_request', {'owner': 'o', 'repo': 'r', 'pullNumber': 99})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('could not be resolved', result.stderr)
+        self.assertEqual(self.run_hook('gh pr merge 99').returncode, 2)
+        self.git('checkout', '-q', 'main')                             # a checkout with no spec bound to it
+        self.assertEqual(self.run_tool('mcp__github__merge_pull_request', {'pullNumber': 99}).returncode, 0)
+
     def test_merge_of_a_branch_whose_spec_is_not_shipped_is_blocked(self):
         self.spec('reviewed')
         result = self.run_hook('gh pr merge --squash')

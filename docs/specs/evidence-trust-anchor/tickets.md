@@ -91,10 +91,10 @@ Test: python3 -m unittest tests.test_trust_anchor tests.test_evidence_guard
 ## T10: Hooks parse commands and cover MCP
 Blocked by: none
 Covers: ETA-8
-Status: ready-for-agent
+Status: done
 What to build: the secret, PR and merge gates recognise git global options, absolute paths, the gh API form and the GitHub MCP tools.
-- [ ] Each equivalent command of proof E is gated
-- [ ] An MCP create or merge call is gated
+- [x] Each equivalent command of proof E is gated
+- [x] An MCP create or merge call is gated
 Test: python3 -m unittest tests.test_hook_commands tests.test_ship_gate
 
 ## T11: Schema version, trust model and release

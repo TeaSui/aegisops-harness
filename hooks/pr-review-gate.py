@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for Bash: block opening a PR (`gh pr create`, `scripts/pr.py create`, a Bitbucket API POST) until a
-pre-PR review is recorded for HEAD.
+"""PreToolUse gate: block opening a PR until a pre-PR review is recorded for HEAD.
+
+Opening a PR is read from the command (hooks/invocations.py): `gh pr create`, `gh api …/pulls` with a body,
+`scripts/pr.py create`, `hub pull-request`, a curl POST to GitHub's or Bitbucket's pulls endpoint; and from the tool:
+a GitHub MCP `create_pull_request` (hooks.json routes it here), which is how a cloud session opens one.
 
 The gate verifies that a review was recorded (scripts/mark-pr-review.py) with zero open findings.
-It cannot verify review quality; rules/pre-pr-review.md owns that.
+It cannot verify review quality; rules/pre-pr-review.md owns that. Another tool or a script is not seen:
+enforcement is `aidlc ci` behind branch protection.
 """
 import hashlib
 import json
@@ -73,16 +77,38 @@ def git(args, cwd):
     return subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, timeout=30)
 
 
+MCP_CREATE = re.compile(r'mcp__.+__create_pull_request')
+
+
+def opens_pull_request(command):
+    """Read from the command; the 5.0.0 text match is the floor."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('aegisops_harness_invocations',
+                                                      pathlib.Path(__file__).with_name('invocations.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if module.opens_pull_request(command):
+            return True
+    except Exception:
+        pass
+    return bool(PR_CREATE.search(command))
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
     except ValueError:
         deny('pr-review-gate: unreadable hook input; blocking as a precaution.')
 
-    if payload.get('tool_name') != 'Bash':
-        sys.exit(0)
-    command = (payload.get('tool_input') or {}).get('command', '')
-    if not PR_CREATE.search(command):
+    tool, tool_input = str(payload.get('tool_name')), payload.get('tool_input') or {}
+    mcp_head = None
+    if tool == 'Bash':
+        if not opens_pull_request(tool_input.get('command', '')):
+            sys.exit(0)
+    elif MCP_CREATE.fullmatch(tool):
+        mcp_head = str(tool_input.get('head') or '').split(':')[-1]
+    else:
         sys.exit(0)
 
     cwd = payload.get('cwd') or None
@@ -90,6 +116,11 @@ def main():
     head = git(['rev-parse', 'HEAD'], cwd)
     if top.returncode or head.returncode:
         deny('pr-review-gate: not in a git repository with commits; cannot verify the pre-PR review.')
+    if mcp_head:
+        current = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd).stdout.strip()
+        if current != mcp_head:
+            deny(f'pr-review-gate: this pull request is for {mcp_head} and the checkout is on {current}. The gate '
+                 f'checks the code it can see: check out {mcp_head} and open the pull request from there.')
 
     reviewed, message = spec_review(top.stdout.strip(), cwd)
     if reviewed is False:

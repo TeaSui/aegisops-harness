@@ -78,9 +78,9 @@ questions on the way: files → Atlassian Rovo → recorded assumption → (rare
 | `hooks/question-gate.py` | AskUserQuestion | inside an AegisOps-Harness command: blocked when the input delegated every decision; otherwise the first question before any Rovo search is sent back |
 | `hooks/evidence-guard.py` | Edit / Write / Bash | the ledger and stored reviewer returns are written by `aidlc` only; `aidlc approve` needs the user's own /aegisops-harness:approve |
 | `hooks/record-returns.py` | a reviewer agent returns | in the review stage: stores the return verbatim in the spec folder, for the `reviewed` gate to compare review.md with |
-| `hooks/security-gate.py` | git commit / push | blocked while gitleaks finds a secret |
-| `hooks/pr-review-gate.py` | opening a PR | blocked until the pre-PR review is recorded for HEAD with 0 open findings |
-| `hooks/ship-gate.py` | merging a PR | blocked until the branch's spec passes the `shipped` gate |
+| `hooks/security-gate.py` | git commit / push (any spelling) | blocked while gitleaks finds a secret |
+| `hooks/pr-review-gate.py` | opening a PR (gh, API call or GitHub MCP) | blocked until the pre-PR review is recorded for HEAD with 0 open findings |
+| `hooks/ship-gate.py` | merging a PR (gh, API call or GitHub MCP) | blocked until the branch's spec passes the `shipped` gate |
 
 ## Files one feature leaves behind
 

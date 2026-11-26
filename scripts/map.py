@@ -70,9 +70,11 @@ GATES = (
      '`aidlc approve` needs the user\'s own /aegisops-harness:approve'),
     ('record-returns.py', 'a reviewer agent returns', 'in the review stage: stores the return verbatim in the spec '
      'folder, for the `reviewed` gate to compare review.md with'),
-    ('security-gate.py', 'git commit / push', 'blocked while gitleaks finds a secret'),
-    ('pr-review-gate.py', 'opening a PR', 'blocked until the pre-PR review is recorded for HEAD with 0 open findings'),
-    ('ship-gate.py', 'merging a PR', 'blocked until the branch\'s spec passes the `shipped` gate'),
+    ('security-gate.py', 'git commit / push (any spelling)', 'blocked while gitleaks finds a secret'),
+    ('pr-review-gate.py', 'opening a PR (gh, API call or GitHub MCP)', 'blocked until the pre-PR review is recorded for '
+     'HEAD with 0 open findings'),
+    ('ship-gate.py', 'merging a PR (gh, API call or GitHub MCP)', 'blocked until the branch\'s spec passes the '
+     '`shipped` gate'),
 )
 
 GLOSSARY = (
