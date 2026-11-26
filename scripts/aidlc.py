@@ -1685,6 +1685,9 @@ def _verify_findings(spec):
                              'run aidlc verify again'))
     elif event['req_fail']:
         findings.append(fail(f'{where}: requirement tests failed: {", ".join(event["req_fail"])}'))
+    elif isinstance(event['junit'], dict) and event['junit'].get('failed'):
+        findings.append(fail(f'{where}: the JUnit results hold {event["junit"]["failed"]} failed test(s) although the '
+                             'pinned command exited 0 (a runner that ignores failures is not a green suite)'))
     return findings + _junit_coverage(spec, event, where)
 
 
@@ -2790,6 +2793,10 @@ def cmd_ci(args):
                 continue
             spec.fresh['revert-check'] = _fresh(text)
             findings += result
+            if text.startswith('revert-check skipped') and 'no merge base' in text:
+                findings.append(fail('no merge base with the base ref (a shallow checkout): the revert check cannot '
+                                     'run, so this job cannot vouch for the tests; fetch the history '
+                                     '(actions/checkout fetch-depth: 0) and re-run'))
         text, result, _ = run_pinned(spec, config, args.timeout)
         findings += result
         if not bound:
@@ -2814,9 +2821,12 @@ def cmd_ci(args):
 
 
 def _ci_summary(head, branch, trusted, rows, findings):
+    bound = any(row['stage'] != '-' for row in rows)
+    ran = ('The suite and the revert check were run by this job; nothing was taken from a ledger.' if bound else
+           'No spec is bound to this branch. Only the pinned suite was run by this job (no revert check, no stage '
+           'required); nothing was taken from a ledger.')
     lines = [f'## Lifecycle gate: {"FAIL" if failed(findings) else "PASS"}', '',
-             f'Head `{head}` ({branch or "detached"}) against `{trusted}`. The suite and the revert check were run by '
-             'this job; nothing was taken from a ledger.', '']
+             f'Head `{head}` ({branch or "detached"}) against `{trusted}`. {ran}', '']
     for row in rows:
         lines.append(f'- **{row["name"]}**, stage `{row["stage"]}`, verify command {row["config"] or "(none)"}')
     claims = [(row['name'], claim) for row in rows for claim in row['claims']]

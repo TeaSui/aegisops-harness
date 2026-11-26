@@ -274,6 +274,12 @@ class DynamicTraceabilityTest(ConfigCase):
         self.assertEqual(self.cli('verify', 'refunds')[0], 1)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1')
 
+    def test_eta_2_a_failed_test_in_the_report_fails_the_gate_even_when_the_command_exits_zero(self):
+        # A runner told to ignore failures (`|| true`, `--no-fail`) exits 0 and still writes the red report.
+        self.ready(junit(('RFD-1 refunds', 'pass'), ('unrelated checkout test', 'fail')))
+        self.assertEqual(self.cli('verify', 'refunds')[0], 0)
+        self.assertFails(aidlc.check(self.spec, 'verified'), '1 failed test')
+
     def test_eta_2_a_run_without_its_report_fails_the_gate(self):
         self.config_on_main('true', junit='ignored/*.xml')            # the runner writes nothing
         self.verified_ready(verify=False)
@@ -736,6 +742,29 @@ class CiCommandTest(RevertFixture):
         code, out, _ = self.ci('--require', 'none')
         self.assertEqual(code, 1, out)
         self.assertIn('still passes without the production change', out)
+
+    def test_eta_4_no_merge_base_is_a_failure_in_ci_not_a_skip(self):
+        # A shallow checkout cannot show what the branch changed; a job that cannot run the revert check
+        # must not pass the tests it could not question.
+        self.reviewed()
+        empty = self.git('hash-object', '-t', 'tree', '/dev/null')
+        unrelated = self.git('commit-tree', empty, '-m', 'unrelated history')
+        self.git('branch', 'unrelated', unrelated)
+        code, out, _ = self.cli('ci', '--base', 'unrelated', '--branch', 'feat/refunds')
+        self.assertEqual(code, 1, out)
+        self.assertIn('no merge base', out)
+        self.assertIn('fetch-depth: 0', out)
+
+    def test_eta_4_the_summary_says_which_checks_this_job_ran(self):
+        self.ready(REAL_TEST)
+        summary = self.base / 'summary.md'
+        self.ci('--require', 'none', '--summary', str(summary))
+        self.assertIn('The suite and the revert check were run', summary.read_text())
+                                                                       # a branch with no spec bound: only the suite runs
+        self.cli('ci', '--base', 'main', '--branch', 'chore/other', '--summary', str(summary))
+        tail = summary.read_text().split('## Lifecycle gate')[-1]
+        self.assertIn('Only the pinned suite was run', tail)
+        self.assertNotIn('and the revert check were run', tail)
 
     def test_eta_4_a_spec_below_the_required_stage_fails(self):
         self.ready(REAL_TEST)                                         # stage: building, suite green
