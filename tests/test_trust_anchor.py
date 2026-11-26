@@ -133,6 +133,50 @@ class PinnedVerifyTest(ConfigCase):
         self.assertEqual(self.cli('verify', 'refunds')[0], 1)
         self.assertEqual(self.last('verify')['cmd'], RED)
 
+    def test_eta_1_a_service_config_only_on_the_branch_does_not_replace_the_pin_on_main(self):
+        self.config_on_main(RED, revert_check=False)
+        self.git('checkout', '-q', '-b', 'feat/pay')
+        spec = self.repo / 'services' / 'pay' / 'docs' / 'specs' / 'payouts'
+        self.assertEqual(self.cli('init', str(spec), '--key', 'PAY')[0], 0)
+        self.write('services/pay/.aidlc.json', json.dumps({'schema': 1, 'verify': {
+            'cmd': 'true', 'junit': 'none — fixture', 'revert_check': False}}))
+        code, out, err = self.cli('verify', str(spec))
+        self.assertEqual(code, 1, out + err)                      # main's command (red) ran, not the branch's `true`
+        self.assertIn('pinned command exited 1', out)
+        self.assertIn('services/pay/.aidlc.json', out)            # and the ignored file is named
+        self.assertIn('pinned=base', (spec / 'ledger.md').read_text())
+
+    def test_eta_1_a_tag_named_like_the_remote_branch_does_not_move_the_trusted_ref(self):
+        self.config_on_main(RED, revert_check=False)
+        origin = self.base / 'origin.git'
+        subprocess.run(['git', 'init', '-q', '--bare', '-b', 'main', str(origin)], check=True)
+        self.git('remote', 'add', 'origin', str(origin))
+        self.git('push', '-q', '-u', 'origin', 'main')
+        self.building()
+        self.pin('true', revert_check=False)
+        self.commit('the branch pins true')
+        self.git('tag', 'origin/main', 'HEAD')  # git resolves a short `origin/main` to this tag before the remote branch
+        self.assertEqual(self.cli('verify', 'refunds')[0], 1)
+        self.assertEqual(self.last('verify')['cmd'], RED)
+
+    def test_eta_1_a_remote_without_a_resolvable_default_branch_fails_closed(self):
+        self.git('branch', '-m', 'trunk')
+        origin = self.base / 'origin.git'
+        subprocess.run(['git', 'init', '-q', '--bare', '-b', 'trunk', str(origin)], check=True)
+        self.git('remote', 'add', 'origin', str(origin))
+        self.git('push', '-q', '-u', 'origin', 'trunk')
+        self.git('remote', 'set-head', 'origin', '--delete')
+        self.git('config', 'init.defaultBranch', 'nothing-like-it')
+        self.git('branch', '-m', 'feat/refunds')
+        self.git('push', '-q', 'origin', 'feat/refunds')            # the remote has trunk and the branch; no HEAD, no main
+        self.git('branch', '-m', 'trunk')
+        self.building()
+        self.pin('true')
+        code, out, err = self.cli('verify', 'refunds')
+        self.assertEqual(code, 1, out + err)
+        self.assertIn('default branch', out)
+        self.assertIn('set-head', out)
+
     def test_eta_1_a_ledger_line_without_the_pin_does_not_count(self):
         # What a 5.x ledger holds, and what a hand-written line looked like in proof B.
         self.config_on_main('true')

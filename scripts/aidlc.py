@@ -929,30 +929,43 @@ def load_config(repo, folders):
     a warning a person is meant to read). Adds: source ('base' | 'onboarding'), ref, dir (where the command runs),
     label, findings."""
     trusted = repo.trusted_ref
+    found = []
     for folder in folders:
         rel = repo.rel(folder / CONFIG_NAME)
         base = repo.show(trusted, rel) if trusted else None
         local, _ = read_text(folder / CONFIG_NAME, rel)
-        if base is None and local is None:
-            continue
-        if base is not None:
-            text = base.decode('utf-8', 'replace').replace('\r\n', '\n')
-            config, findings = parse_config(text, f'{rel} on {trusted}')
-            if local is None:
-                findings.append(warn(f'{rel} is missing here: the gates use the version on {trusted}'))
-            elif _canonical(local) != _canonical(text):
-                findings.append(warn(f'{rel} differs from {trusted}: the gates use the version on {trusted} until this '
-                                     'change is merged (a branch does not choose the command that verifies it)'))
-            source = 'base'
-        else:
-            config, findings = parse_config(local, rel)
-            where = f'not on {trusted} yet' if trusted else 'no default branch was found to read it from'
-            findings.append(warn(f'onboarding: {rel} exists only on this branch ({where}). A person must read it '
-                                 'before the merge: it names the command every later gate trusts'))
-            source = 'onboarding'
-        config.update(source=source, ref=trusted, dir=folder, label=rel, findings=findings)
-        return config
-    return None
+        if base is not None or local is not None:
+            found.append((folder, rel, base, local))
+    if not found:
+        return None
+    # A config that is on the trusted ref wins, wherever it is: a branch that adds a nearer one (a service folder)
+    # does not choose its own command. Onboarding is for a repository that has none there.
+    first = next((item for item in found if item[2] is not None), found[0])
+    folder, rel, base, local = first
+    ignored = [item[1] for item in found if item[2] is None and first[2] is not None]
+    if base is not None:
+        text = base.decode('utf-8', 'replace').replace('\r\n', '\n')
+        config, findings = parse_config(text, f'{rel} on {trusted}')
+        if local is None:
+            findings.append(warn(f'{rel} is missing here: the gates use the version on {trusted}'))
+        elif _canonical(local) != _canonical(text):
+            findings.append(warn(f'{rel} differs from {trusted}: the gates use the version on {trusted} until this '
+                                 'change is merged (a branch does not choose the command that verifies it)'))
+        findings += [warn(f'{name} exists only on this branch and is ignored: the gates use {rel} on {trusted}')
+                     for name in ignored]
+        source = 'base'
+    else:
+        config, findings = parse_config(local, rel)
+        where = f'not on {trusted} yet' if trusted else 'no default branch was found to read it from'
+        findings.append(warn(f'onboarding: {rel} exists only on this branch ({where}). A person must read it '
+                             'before the merge: it names the command every later gate trusts'))
+        if not trusted and repo.has_origin():
+            findings.append(fail('the default branch of origin was not found (no origin/HEAD, and no main, master or '
+                                 'init.defaultBranch there): run `git remote set-head origin -a` so that the config '
+                                 'is read from it, not from this branch'))
+        source = 'onboarding'
+    config.update(source=source, ref=trusted, dir=folder, label=rel, findings=findings)
+    return config
 
 
 def same_command(a, b):
@@ -1307,9 +1320,18 @@ class Repo:
             if not ref or str(ref).startswith('-'):
                 continue
             found = self.git('rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}')
-            if found is not None and found.returncode == 0:
-                return ref
+            if found is None or found.returncode != 0:
+                continue
+            if str(ref).startswith('origin/'):  # a tag or a local branch named `origin/x` would shadow the short name
+                full = self.git('rev-parse', '--verify', '--quiet', f'refs/remotes/{ref}^{{commit}}')
+                if full is None or full.returncode != 0 or full.stdout.strip() != found.stdout.strip():
+                    continue
+            return ref
         return None
+
+    def has_origin(self):
+        remotes = self.git('remote')
+        return remotes is not None and remotes.returncode == 0 and 'origin' in remotes.stdout.split()
 
     def show(self, ref, rel):
         """The bytes of `rel` at `ref`, or None when it is not there."""
