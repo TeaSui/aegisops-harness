@@ -21,10 +21,10 @@ Thumbs.db
 /reports/
 
 # Skills synced in by the Claude app; not part of this plugin
-skills/synced/
+plugins/aegisops-harness/skills/synced/
 
 # Bundled files must ship even when a personal core.excludesFile matches them (e.g. a global `cdk*` or `**/build/`).
-!/skills/cdk-testing/
-!/skills/cdk-testing/**
-!/skills/build/
-!/skills/build/**
+!/plugins/aegisops-harness/skills/cdk-testing/
+!/plugins/aegisops-harness/skills/cdk-testing/**
+!/plugins/aegisops-harness/skills/build/
+!/plugins/aegisops-harness/skills/build/**
