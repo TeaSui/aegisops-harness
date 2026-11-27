@@ -36,7 +36,6 @@ COMMANDS = (
 # Commands in commands/ with the situation they serve (their own descriptions follow in the map).
 COMMAND_FILES = {
     'prompt-builder': 'Turn a rough idea into an input that meets the AIDLC standard (checked with aidlc lint)',
-    'eval-upgrade': 'Score, upgrade or A/B-duel one part of the plugin or a .claude directory',
     'upgrade-service-docs': 'After the merge: promote the spec into the living docs, close it',
     'generate-service-docs': 'A service has no living docs yet',
 }

@@ -45,7 +45,6 @@ Setup for the last row, once per repository: `aidlc config init` (pins the verif
 | Review comments arrived | `/aegisops-harness:receiving-code-review` | `test-driven-development` → `verify` |
 | Challenge a plan or a belief | `/aegisops-harness:reframe` | — |
 | What a top practitioner would do | `/aegisops-harness:expert-lens` | — |
-| Score, upgrade or A/B-duel one part of the plugin or a .claude directory | `/aegisops-harness:eval-upgrade` | — |
 | A service has no living docs yet | `/aegisops-harness:generate-service-docs` | — |
 | Turn a rough idea into an input that meets the AIDLC standard (checked with aidlc lint) | `/aegisops-harness:prompt-builder` | — |
 | After the merge: promote the spec into the living docs, close it | `/aegisops-harness:upgrade-service-docs` | — |

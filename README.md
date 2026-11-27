@@ -73,7 +73,6 @@ Check with `python3 <plugin>/scripts/pr.py auth` in the repository: exit 0 means
 | After the merge | `/aegisops-harness:upgrade-service-docs` |
 | Service has no living docs | `/aegisops-harness:generate-service-docs` |
 | A second opinion | `/aegisops-harness:reframe` · `/aegisops-harness:expert-lens` |
-| Score, upgrade or A/B-duel part of the plugin | `/aegisops-harness:eval-upgrade` |
 
 What each command loads, which gate stops it and which files it leaves: [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 

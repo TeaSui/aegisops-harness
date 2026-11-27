@@ -15,7 +15,7 @@ import sys
 
 MODELS = {'haiku', 'sonnet', 'opus', 'fable', 'inherit'}
 EFFORTS = {'low', 'medium', 'high', 'xhigh', 'max'}
-BUNDLED_DIRS = ('rules', 'references', 'skills', 'templates', 'scripts', 'hooks', 'commands', 'agents', 'tools')
+BUNDLED_DIRS = ('rules', 'references', 'skills', 'templates', 'scripts', 'hooks', 'commands', 'agents')
 # Prose that the plugin authors and loads; vendored/synced skill docs are excluded.
 SCANNED = ('agents', 'commands', 'rules', 'references', 'skills', 'hooks', 'scripts')
 EXCLUDED = ('skills/synced/',)

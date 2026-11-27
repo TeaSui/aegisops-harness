@@ -23,7 +23,6 @@ AegisOps-Harness is the backend engineering lifecycle **spec → plan → build 
 | After the merge | `/aegisops-harness:upgrade-service-docs` | living docs updated, spec closed (`implemented`) |
 | A service has no living docs | `/aegisops-harness:generate-service-docs` | `docs/` for the service |
 | Challenge a plan, or a top practitioner's view | `/aegisops-harness:reframe` · `/aegisops-harness:expert-lens` | an opinion, no code |
-| Score or upgrade one part of this plugin (or a `.claude` folder) | `/aegisops-harness:eval-upgrade [eval \| arena …]` | static score, upgrade proposals, A/B duels |
 
 **Inside a command:** follow its file to the end without asking for permission between steps. Support skills (TDD, debugging, stack patterns, security catalogue) are loaded by the stage files by path, chosen from the repository's files (`rules/workflow-routing.md`), never from prompt keywords. Plugin root: `${CLAUDE_PLUGIN_ROOT}`. Paths `rules/…`, `references/…`, `scripts/…`, `skills/…` are under it, and a literal `${CLAUDE_PLUGIN_ROOT}` in a file you Read means it too (write the real path in commands); `docs/…` is in the project.
 
