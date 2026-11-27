@@ -247,7 +247,7 @@ class PluginIntegrityTest(unittest.TestCase):
             '    sys.argv = ["x", "--root", root, "--project", root]; out = io.StringIO()\n'
             '    with contextlib.redirect_stdout(out): m.main()\n'
             '    print(json.dumps(json.loads(out.getvalue())["errors"]))\n')
-        result = subprocess.run([sys.executable, '-c', probe, str(PLUGIN / 'scripts' / 'check-setup.py'), str(ROOT),
+        result = subprocess.run([sys.executable, '-c', probe, str(PLUGIN / 'scripts' / 'check-setup.py'), str(PLUGIN),
                                  str(self.root)], capture_output=True, text=True, timeout=120)
         first, second = [json.loads(line) for line in result.stdout.splitlines()[-2:]]
         self.assertEqual(first, [])
@@ -268,14 +268,14 @@ class PluginIntegrityTest(unittest.TestCase):
     def test_bundled_file_ignored_by_git_fails(self):
         # Seen for real: a global `cdk*` exclude kept skills/cdk-testing out of every release.
         env = {**os.environ, **ISOLATED_ENV}
-        excludes = self.root.parent / 'excludes'
+        excludes = self.copy.parent / 'excludes'
         excludes.write_text('cdk*\n')
         for args in (['init', '-q'], ['config', 'core.excludesFile', str(excludes)]):
-            subprocess.run(['git', *args], cwd=self.root, env=env, check=True, capture_output=True)
-        gitignore = self.root / '.gitignore'
+            subprocess.run(['git', *args], cwd=self.copy, env=env, check=True, capture_output=True)
+        gitignore = self.copy / '.gitignore'
         gitignore.write_text('\n'.join(l for l in gitignore.read_text().splitlines() if 'cdk-testing' not in l) + '\n')
         result = subprocess.run([sys.executable, str(self.root / 'scripts' / 'check-setup.py'), '--root', str(self.root),
-                                 '--project', str(self.root)], capture_output=True, text=True, timeout=60, env=env)
+                                 '--project', str(self.copy)], capture_output=True, text=True, timeout=60, env=env)
         self.assertIn('skills/cdk-testing/SKILL.md', ' '.join(json.loads(result.stdout)['errors']))
 
 

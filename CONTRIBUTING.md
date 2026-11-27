@@ -43,7 +43,7 @@ Rare. If you must restate, add a provenance marker so drift is detectable: `sync
 
 ## This repository runs its own lifecycle
 
-A change to the engine, a hook, a stage skill or the evals goes through the plugin itself, loaded from the checkout (`claude --plugin-dir .`): `/aegisops-harness:aidlc <request>`, with the spec in `docs/specs/<slug>/`. `.aidlc.json` pins the verify command (`tests/junit_runner.py`, which writes the JUnit report the gates read), and CI runs `aidlc ci` on every pull request (`lifecycle gate`).
+A change to the engine, a hook, a stage skill or the evals goes through the plugin itself, loaded from the checkout (`claude --plugin-dir plugins/aegisops-harness`): `/aegisops-harness:aidlc <request>`, with the spec in `docs/specs/<slug>/`. `.aidlc.json` pins the verify command (`tests/junit_runner.py`, which writes the JUnit report the gates read), and CI runs `aidlc ci` on every pull request (`lifecycle gate`).
 
 - **Tests name the story they prove** (`test_rfd_1_…`): the gate needs a passing test per story in the pinned run, and the revert check needs the suite to fail without the production change. A gap found by a proof, an eval run or a review becomes a failing test first.
 - **A new gate says what it cannot stop.** A check that reads files the session can write is a guard rail; write that in its docstring and keep `references/aidlc.md` "Trust model" true.

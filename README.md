@@ -2,7 +2,7 @@
 
 > The backend engineering lifecycle for Claude Code: **spec → plan → build → verify → review → ship**, started only by slash commands and held by gates.
 
-[How it works (one page)](HOW-IT-WORKS.md) · [Changelog](CHANGELOG.md) (the version is in `.claude-plugin/plugin.json`) · MIT
+[How it works (one page)](HOW-IT-WORKS.md) · [Changelog](CHANGELOG.md) (the version is in `plugins/aegisops-harness/.claude-plugin/plugin.json`) · MIT
 
 No workflow starts until you run one of its commands. No keyword in a prompt starts one and the model cannot load an AegisOps-Harness skill on its own (every skill has `disable-model-invocation: true`, and `check-setup.py` fails if one does not). Inside a command each stage is a fixed file, support skills are chosen from the repository's files, business questions go to Atlassian Rovo before a person, and every stage ends at an `aidlc` gate. The hook gates (secret scan, TDD reminder, PR and merge gates, evidence guard) are on in every session.
 
@@ -27,7 +27,7 @@ claude --plugin-dir /path/to/aegisops-harness
 
 ### Updating
 
-Releases are driven by `version` in `.claude-plugin/plugin.json`; pushing commits without bumping it does not reach installed users. Third-party marketplaces do not auto-update by default:
+Releases are driven by `version` in `plugins/aegisops-harness/.claude-plugin/plugin.json`; pushing commits without bumping it does not reach installed users. Third-party marketplaces do not auto-update by default:
 
 ```text
 /plugin marketplace update AegisOps-Harness
@@ -110,10 +110,10 @@ The job summary lists what it cannot check (who is said to have approved and rev
 ## ✅ Validating changes
 
 ```bash
-python3 scripts/check-setup.py                 # manifests, frontmatter, references, no model-invocable skill, map freshness, version drift
+python3 plugins/aegisops-harness/scripts/check-setup.py                 # manifests, frontmatter, references, no model-invocable skill, map freshness, version drift
 python3 -m unittest discover -s tests          # node and gitleaks on PATH run the eval-fixture and secret-gate tests too
-python3 scripts/aidlc.py ci --base origin/main # this repository's own lifecycle gate (docs/specs/, .aidlc.json)
-python3 scripts/map.py                         # regenerate HOW-IT-WORKS.md after changing skills, agents or hooks
+python3 plugins/aegisops-harness/scripts/aidlc.py ci --base origin/main # this repository's own lifecycle gate (docs/specs/, .aidlc.json)
+python3 plugins/aegisops-harness/scripts/map.py                         # regenerate HOW-IT-WORKS.md after changing skills, agents or hooks
 python3 evals/descriptions/run.py              # description lint, free
 python3 evals/headless/run.py --suite lifecycle,tdd --runs 2 --model claude-opus-5-5   # real sessions, paid
 ```
