@@ -20,7 +20,8 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DOC = ROOT / 'references' / 'aidlc.md'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+DOC = PLUGIN / 'references' / 'aidlc.md'
 
 
 def load(name, rel):
@@ -884,7 +885,7 @@ class ReviewedGateTest(Base):
         data = json.loads(record.read_text())
         self.assertEqual((data['head'], data['open_findings']), (head, 0))
         self.assertEqual(set(data), {'head', 'reviewer', 'open_findings', 'note', 'recorded_at'})
-        hook = subprocess.run([sys.executable, str(ROOT / 'hooks' / 'pr-review-gate.py')], capture_output=True, text=True,
+        hook = subprocess.run([sys.executable, str(PLUGIN / 'hooks' / 'pr-review-gate.py')], capture_output=True, text=True,
                               input=json.dumps({'tool_name': 'Bash', 'cwd': str(self.repo),
                                                 'tool_input': {'command': 'gh pr create --fill'}}))
         self.assertEqual(hook.returncode, 0, hook.stderr)
@@ -952,7 +953,7 @@ class ReviewedGateTest(Base):
         self.assertPasses(aidlc.check(self.spec, 'verified'))
 
     def pr_create(self):
-        return subprocess.run([sys.executable, str(ROOT / 'hooks' / 'pr-review-gate.py')], capture_output=True,
+        return subprocess.run([sys.executable, str(PLUGIN / 'hooks' / 'pr-review-gate.py')], capture_output=True,
                               text=True, input=json.dumps({'tool_name': 'Bash', 'cwd': str(self.repo),
                                                            'tool_input': {'command': 'gh pr create --fill'}}))
 
@@ -1513,7 +1514,7 @@ class MarkPrReviewTest(Base):
                          / hashlib.sha256(top.encode()).hexdigest()[:16] / f'{head}.json')
         from_function = json.loads(target.read_text())
         target.unlink()
-        cli = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'mark-pr-review.py'), '--reviewer', 'code-reviewer',
+        cli = subprocess.run([sys.executable, str(PLUGIN / 'scripts' / 'mark-pr-review.py'), '--reviewer', 'code-reviewer',
                               '--open-findings', '0', '--note', 'pass 1'], cwd=self.repo, capture_output=True, text=True)
         self.assertEqual(cli.returncode, 0, cli.stderr)
         from_cli = json.loads(target.read_text())
@@ -1606,7 +1607,7 @@ class LockAndTickTest(Base):
     def test_parallel_task_done_keeps_every_tick(self):
         plan = self.spec / 'plan.md'
         plan.write_text(plan.read_text().replace('  - depends: T1\n', '  - depends: none\n'))
-        procs = [subprocess.Popen([sys.executable, str(ROOT / 'scripts' / 'aidlc.py'), 'task-done', 'refunds', t,
+        procs = [subprocess.Popen([sys.executable, str(PLUGIN / 'scripts' / 'aidlc.py'), 'task-done', 'refunds', t,
                                    '--cmd', 'sleep 0.2'], cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                  for t in ('T1', 'T2')]
         self.assertEqual([proc.wait(30) for proc in procs], [0, 0])

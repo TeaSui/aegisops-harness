@@ -306,6 +306,7 @@ class DynamicTraceabilityTest(ConfigCase):
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
 QUIET = 'PYTHONDONTWRITEBYTECODE=1 '
 UNITTEST = QUIET + sys.executable + ' -m unittest discover -s tests -q'
 JUNIT_RUN = QUIET + '%s %s -s tests -o ignored/junit.xml' % (sys.executable, ROOT / 'tests' / 'junit_runner.py')
@@ -1137,13 +1138,13 @@ class SchemaTest(Base):
         self.assertFails(aidlc.check(self.spec, 'accepted'), "schema: 'one' is not a version number")
 
     def test_eta_13_the_reference_states_the_trust_model_and_the_compatibility_rule(self):
-        text = (ROOT / 'references' / 'aidlc.md').read_text()
+        text = (PLUGIN / 'references' / 'aidlc.md').read_text()
         for needle in ('## Trust model', '## Compatibility', 'schema: 1', 'aidlc ci', 'branch protection',
                        'guard rail'):
             self.assertIn(needle, text)
 
     def test_eta_13_the_config_example_in_the_reference_is_a_valid_config(self):
-        text = (ROOT / 'references' / 'aidlc.md').read_text()
+        text = (PLUGIN / 'references' / 'aidlc.md').read_text()
         block = text.split('### `.aidlc.json`', 1)[1].split('```json', 1)[1].split('```', 1)[0]
         config, findings = aidlc.parse_config(block, '.aidlc.json')
         self.assertEqual([m for level, m in findings if level == 'FAIL'], [])

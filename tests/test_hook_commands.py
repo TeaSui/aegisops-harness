@@ -15,7 +15,8 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HOOKS = ROOT / 'hooks'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+HOOKS = PLUGIN / 'hooks'
 GIT_ENV = {'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_AUTHOR_NAME': 't',
            'GIT_AUTHOR_EMAIL': 't@e', 'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@e'}
 # Assembled here so that no file in the repository holds a token-shaped string (the plugin's own gate scans pushes).
@@ -326,7 +327,7 @@ class PullRequestGateTest(GateCase):
         self.git('commit', '-qm', 'work')
 
     def record_review(self):
-        subprocess.run([sys.executable, str(ROOT / 'scripts' / 'mark-pr-review.py'), '--reviewer', 'code-review',
+        subprocess.run([sys.executable, str(PLUGIN / 'scripts' / 'mark-pr-review.py'), '--reviewer', 'code-review',
                         '--open-findings', '0'], cwd=self.repo, check=True, capture_output=True, env=self.env)
 
     def test_eta_8_proof_e_the_api_form_is_gated_like_gh_pr_create(self):

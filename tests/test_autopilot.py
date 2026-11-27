@@ -7,8 +7,9 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HOOK = ROOT / 'hooks' / 'autopilot.py'
-SESSION_START = ROOT / 'hooks' / 'session-start'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+HOOK = PLUGIN / 'hooks' / 'autopilot.py'
+SESSION_START = PLUGIN / 'hooks' / 'session-start'
 
 
 class HookCase(unittest.TestCase):
@@ -47,7 +48,7 @@ class NoPassiveActivationTest(HookCase):
     """AegisOps-Harness starts only from slash commands: no hook adds a note naming skills to a prompt or a tool result."""
 
     def test_prompt_hook_is_not_registered(self):
-        hooks = json.loads((ROOT / 'hooks' / 'hooks.json').read_text())['hooks']
+        hooks = json.loads((PLUGIN / 'hooks' / 'hooks.json').read_text())['hooks']
         self.assertNotIn('UserPromptSubmit', hooks)
 
     def test_prompt_mode_is_silent_even_for_workflow_words(self):
@@ -63,7 +64,7 @@ class NoPassiveActivationTest(HookCase):
                 self.assertEqual((result.returncode, result.stdout.strip()), (0, ''), command)
 
     def test_every_skill_and_command_is_user_invoked_only(self):
-        for path in sorted((ROOT / 'skills').glob('*/SKILL.md')) + sorted((ROOT / 'commands').glob('*.md')):
+        for path in sorted((PLUGIN / 'skills').glob('*/SKILL.md')) + sorted((PLUGIN / 'commands').glob('*.md')):
             head = path.read_text()[:1500]
             self.assertRegex(head, r'(?m)^disable-model-invocation:\s*true\s*$', str(path))
 
@@ -241,7 +242,7 @@ class SessionSnapshotTest(HookCase):
         from unittest import mock
         found = {}
         with mock.patch.dict(os.environ, {'HOME': str(self.home)}):
-            for path in sorted((ROOT / 'hooks').glob('*.py')):
+            for path in sorted((PLUGIN / 'hooks').glob('*.py')):
                 spec = importlib.util.spec_from_file_location('state_probe_' + path.stem.replace('-', '_'), path)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)

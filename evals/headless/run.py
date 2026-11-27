@@ -189,7 +189,7 @@ def main(argv=None):
                         help='passive, tdd, lifecycle or all; repeat or comma-separate')
     parser.add_argument('--runs', type=int, default=1, help='runs per case (default 1)')
     parser.add_argument('--parallel', type=int, default=4, help='concurrent sessions (default 4)')
-    parser.add_argument('--plugin-dir', type=pathlib.Path, default=ROOT, help='plugin under test (default: this repo)')
+    parser.add_argument('--plugin-dir', type=pathlib.Path, default=ROOT / 'plugins' / 'aegisops-harness', help='plugin under test (default: plugins/aegisops-harness)')
     parser.add_argument('--model', help='model alias or id passed to claude --model (default: the CLI default)')
     parser.add_argument('--arm', choices=('plugin', 'control', 'both'), default='plugin',
                         help='plugin: with the plugin (default). control: the same cases with no plugin and no slash '

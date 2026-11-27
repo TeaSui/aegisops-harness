@@ -13,7 +13,8 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-OUT = ROOT / 'HOW-IT-WORKS.md'
+REPO = ROOT.parent.parent if (ROOT.parent.parent / '.claude-plugin' / 'marketplace.json').is_file() else ROOT
+OUT = REPO / 'HOW-IT-WORKS.md'  # the repository's page, not part of what ships
 
 # Situation → command → what it loads. The only hand-kept part; check-setup fails when a skill is in no row.
 COMMANDS = (
@@ -205,7 +206,7 @@ def main(argv):
             return 1
         return 0
     OUT.write_text(text)
-    print(f'wrote {OUT.relative_to(ROOT)} ({len(text.splitlines())} lines)')
+    print(f'wrote {OUT.relative_to(REPO)} ({len(text.splitlines())} lines)')
     return 0
 
 

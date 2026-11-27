@@ -8,7 +8,8 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HOOK = ROOT / 'hooks' / 'ship-gate.py'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+HOOK = PLUGIN / 'hooks' / 'ship-gate.py'
 GIT_ENV = {'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_AUTHOR_NAME': 't',
            'GIT_AUTHOR_EMAIL': 't@e', 'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@e'}
 

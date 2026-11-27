@@ -12,7 +12,8 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GUARD = ROOT / 'hooks' / 'evidence-guard.py'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+GUARD = PLUGIN / 'hooks' / 'evidence-guard.py'
 AIDLC = 'python3 "/plugins/aegisops-harness/scripts/aidlc.py"'
 
 
@@ -174,7 +175,7 @@ class EvidenceFilesTest(GuardCase):
 
 class RegistrationTest(unittest.TestCase):
     def test_the_guard_is_registered_for_shell_and_file_edits(self):
-        hooks = json.loads((ROOT / 'hooks' / 'hooks.json').read_text())['hooks']['PreToolUse']
+        hooks = json.loads((PLUGIN / 'hooks' / 'hooks.json').read_text())['hooks']['PreToolUse']
         for matcher in ('Bash', 'Edit|Write|MultiEdit'):
             entry = next(e for e in hooks if e['matcher'] == matcher)
             self.assertTrue(any('evidence-guard.py' in h['command'] for h in entry['hooks']), matcher)

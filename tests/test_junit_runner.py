@@ -9,8 +9,9 @@ import textwrap
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
 RUNNER = ROOT / 'tests' / 'junit_runner.py'
-SPEC = importlib.util.spec_from_file_location('junit_runner_aidlc', ROOT / 'scripts' / 'aidlc.py')
+SPEC = importlib.util.spec_from_file_location('junit_runner_aidlc', PLUGIN / 'scripts' / 'aidlc.py')
 aidlc = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(aidlc)
 

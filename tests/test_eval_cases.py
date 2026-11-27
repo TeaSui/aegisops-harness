@@ -19,6 +19,7 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
 HEADLESS = ROOT / 'evals' / 'headless'
 SUITE = HEADLESS / 'suites' / 'lifecycle'
 REFERENCE = pathlib.Path(__file__).resolve().parent / 'eval_reference'
@@ -37,7 +38,7 @@ def load(path, name):
 
 
 fixture = load(SUITE / 'fixture.py', 'eval_cases_lifecycle_fixture')
-aidlc = load(ROOT / 'scripts' / 'aidlc.py', 'eval_cases_aidlc')
+aidlc = load(PLUGIN / 'scripts' / 'aidlc.py', 'eval_cases_aidlc')
 CASES = {case['id']: case for case in (json.loads(line) for line in (SUITE / 'cases.jsonl').read_text().splitlines()
                                        if line.startswith('{'))}
 HARDER = {'L4-brownfield-fee': 'brownfield', 'L5-storage-migration': 'migration', 'L6-concurrent-transfers': 'concurrency'}

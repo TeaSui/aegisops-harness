@@ -10,8 +10,8 @@
   "plugins": [
     {
       "name": "aegisops-harness",
-      "description": "Slash-command driven backend lifecycle: spec \u2192 plan \u2192 build \u2192 verify \u2192 review \u2192 ship, with a pinned verify command, a revert check and a CI gate that recomputes the evidence on the pull request head.",
-      "source": "./",
+      "description": "Slash-command driven backend lifecycle: spec → plan → build → verify → review → ship, with a pinned verify command, a revert check and a CI gate that recomputes the evidence on the pull request head.",
+      "source": "./plugins/aegisops-harness",
       "category": "development",
       "homepage": "https://github.com/TeaSui/aegisops-harness"
     }

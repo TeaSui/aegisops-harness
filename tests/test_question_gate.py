@@ -7,7 +7,8 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GATE = ROOT / 'hooks' / 'question-gate.py'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+GATE = PLUGIN / 'hooks' / 'question-gate.py'
 
 
 def command(name, args, uuid):

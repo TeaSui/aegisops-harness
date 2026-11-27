@@ -61,6 +61,13 @@ def project_warnings(project):
     return top, warnings
 
 
+def repo_root(root):
+    """The repository that holds this plugin folder (it carries the marketplace manifest), or None for an installed
+    copy, where the README, changelog and evals do not exist."""
+    top = root.parent.parent
+    return top if (top / '.claude-plugin' / 'marketplace.json').is_file() else None
+
+
 def scanned_files(root):
     for directory in SCANNED:
         for path in (root / directory).rglob('*'):
@@ -68,7 +75,9 @@ def scanned_files(root):
             if path.is_file() and path.suffix in {'.md', '.py', '.sh', ''} and not rel.startswith(EXCLUDED) \
                     and '__pycache__' not in rel:
                 yield path, rel
-    yield root / 'README.md', 'README.md'
+    repo = repo_root(root)
+    if repo and (repo / 'README.md').is_file():
+        yield repo / 'README.md', 'README.md'
 
 
 def frontmatter(path):
@@ -106,18 +115,18 @@ puts JSON.generate(errors)
     return ['YAML diagnostics failed: exit %d' % result.returncode] if result.returncode else json.loads(result.stdout)
 
 
-def version_drift(root, version):
+def version_drift(repo, version):
     """plugin.json holds the version. A copy in the README, or a changelog that leads with another release, is an
     error: 5.0.0 shipped a README that still said 4.0.0."""
     errors = []
     try:
-        for found in re.findall(r'\*\*Version (\d+\.\d+\.\d+)\*\*', (root / 'README.md').read_text(errors='replace')):
+        for found in re.findall(r'\*\*Version (\d+\.\d+\.\d+)\*\*', (repo / 'README.md').read_text(errors='replace')):
             if found != version:
                 errors.append('README.md names version %s; plugin.json says %s (drop the copy or fix it)' % (found, version))
     except OSError:
         pass
     try:
-        lead = re.search(r'^## (\d+\.\d+\.\d+)\b', (root / 'CHANGELOG.md').read_text(errors='replace'), re.M)
+        lead = re.search(r'^## (\d+\.\d+\.\d+)\b', (repo / 'CHANGELOG.md').read_text(errors='replace'), re.M)
         if lead and lead.group(1) != version:
             errors.append('CHANGELOG.md leads with %s; plugin.json says %s' % (lead.group(1), version))
     except OSError:
@@ -125,10 +134,10 @@ def version_drift(root, version):
     return errors
 
 
-def stale_baseline(root, version):
+def stale_baseline(repo, version):
     """Warn when the eval baseline was measured on another minor version: its numbers describe that plugin."""
     try:
-        suites = json.loads((root / 'evals' / 'headless' / 'baseline.json').read_text()).get('suites', {})
+        suites = json.loads((repo / 'evals' / 'headless' / 'baseline.json').read_text()).get('suites', {})
     except (OSError, ValueError, AttributeError):
         return []
     now = version.split('.')[:2]
@@ -158,10 +167,12 @@ def main():
         warnings.extend(project_warn)
 
     # Manifests
-    manifests = {}
-    for name in ('plugin.json', 'marketplace.json'):
+    manifests, repo = {}, repo_root(root)
+    for name, folder in (('plugin.json', root), ('marketplace.json', repo)):
+        if folder is None:  # an installed copy carries no marketplace manifest
+            continue
         try:
-            manifests[name] = json.loads((root / '.claude-plugin' / name).read_text())
+            manifests[name] = json.loads((folder / '.claude-plugin' / name).read_text())
         except (OSError, ValueError) as error:
             errors.append('.claude-plugin/%s unreadable: %s' % (name, type(error).__name__))
     map_script = root / 'scripts' / 'map.py'
@@ -176,8 +187,9 @@ def main():
     for entry in manifests.get('marketplace.json', {}).get('plugins', []):
         if 'version' in entry and entry['version'] != plugin.get('version'):
             errors.append('marketplace.json version differs from plugin.json')
-    errors.extend(version_drift(root, str(plugin.get('version', ''))))
-    warnings.extend(stale_baseline(root, str(plugin.get('version', ''))))
+    if repo:
+        errors.extend(version_drift(repo, str(plugin.get('version', ''))))
+        warnings.extend(stale_baseline(repo, str(plugin.get('version', ''))))
     try:
         hooks = json.loads((root / 'hooks/hooks.json').read_text())
         for command in re.findall(r'\$\{CLAUDE_PLUGIN_ROOT\}/([^"\s]+)', json.dumps(hooks)):
@@ -238,7 +250,7 @@ def main():
     # Every bundled file must ship: a personal core.excludesFile pattern (e.g. `cdk*`) can keep one out of every
     # release while it still works in the author's checkout. Only meaningful when the root is its own repository.
     top = git(['rev-parse', '--show-toplevel'], root)
-    if top.returncode == 0 and Path(top.stdout.strip()).resolve() == root:
+    if top.returncode == 0 and Path(top.stdout.strip()).resolve() in (root, repo):
         shipped = [p.relative_to(root).as_posix() for d in SCANNED + ('.claude-plugin',) for p in (root / d).rglob('*')
                    if p.is_file() and '__pycache__' not in p.parts and p.name != '.DS_Store'
                    and not p.relative_to(root).as_posix().startswith(EXCLUDED)]

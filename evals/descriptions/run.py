@@ -22,7 +22,7 @@ import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-ROOT = HERE.parent.parent
+ROOT = HERE.parent.parent / 'plugins' / 'aegisops-harness'
 MIN_LEN = 80
 MAX_LEN = 1024          # the Agent Skills limit for `description`
 WARN_LEN = 700          # long descriptions crowd the skill listing every session pays for

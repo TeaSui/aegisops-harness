@@ -10,7 +10,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from test_aidlc import Base, aidlc  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HOOK = ROOT / 'hooks' / 'record-returns.py'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+HOOK = PLUGIN / 'hooks' / 'record-returns.py'
 RETURN = '### Findings\n- [ ] S1 (must): RFD-1 — not rejected at src/x.py:3 (confidence: high)\n### Assessment\nStatus: BLOCKED\n'
 
 
@@ -69,7 +70,7 @@ class RecordReturnsTest(Base):
         self.assertEqual((result.returncode, result.stdout), (0, ''))
 
     def test_it_is_registered_for_the_subagent_tool(self):
-        hooks = json.loads((ROOT / 'hooks' / 'hooks.json').read_text())['hooks']['PostToolUse']
+        hooks = json.loads((PLUGIN / 'hooks' / 'hooks.json').read_text())['hooks']['PostToolUse']
         entry = next(e for e in hooks if e['matcher'] == 'Agent|Task')
         self.assertTrue(any('record-returns.py' in h['command'] for h in entry['hooks']))
 

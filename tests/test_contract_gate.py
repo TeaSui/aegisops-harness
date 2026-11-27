@@ -8,8 +8,9 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GATE = ROOT / 'hooks' / 'contract-gate.py'
-PR_GATE = ROOT / 'hooks' / 'pr-review-gate.py'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+GATE = PLUGIN / 'hooks' / 'contract-gate.py'
+PR_GATE = PLUGIN / 'hooks' / 'pr-review-gate.py'
 
 BAD = {'paths': {'/u': {'get': {'operationId': 'getUser', 'responses': {'200': {'description': 'ok'}}}}}}
 ERR = {'content': {'application/json': {'schema': {'type': 'object', 'properties': {'error': {

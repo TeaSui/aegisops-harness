@@ -28,4 +28,4 @@ runs:
       run: |
         args=(--require "$AIDLC_REQUIRE" --timeout "$AIDLC_TIMEOUT" --summary "$GITHUB_STEP_SUMMARY")
         if [ -n "$AIDLC_BASE" ]; then args+=(--base "$AIDLC_BASE"); fi
-        python3 "$GITHUB_ACTION_PATH/../../../scripts/aidlc.py" ci "${args[@]}"
+        python3 "$GITHUB_ACTION_PATH/../../../plugins/aegisops-harness/scripts/aidlc.py" ci "${args[@]}"

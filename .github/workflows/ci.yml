@@ -33,7 +33,7 @@ jobs:
       - name: Unit tests
         run: python3 -m unittest discover -s tests
       - name: Plugin structure
-        run: python3 scripts/check-setup.py
+        run: python3 plugins/aegisops-harness/scripts/check-setup.py
       - name: Description lint
         run: python3 evals/descriptions/run.py
 

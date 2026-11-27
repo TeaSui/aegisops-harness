@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 
-HOOK = pathlib.Path(__file__).resolve().parent.parent / 'hooks' / 'tdd-gate.py'
+HOOK = pathlib.Path(__file__).resolve().parent.parent / 'plugins' / 'aegisops-harness' / 'hooks' / 'tdd-gate.py'
 
 
 class TddGateTest(unittest.TestCase):

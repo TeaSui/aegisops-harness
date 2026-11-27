@@ -13,9 +13,10 @@ import unittest
 import urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PR = ROOT / 'scripts' / 'pr.py'
-SHIP_GATE = ROOT / 'hooks' / 'ship-gate.py'
-REVIEW_GATE = ROOT / 'hooks' / 'pr-review-gate.py'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+PR = PLUGIN / 'scripts' / 'pr.py'
+SHIP_GATE = PLUGIN / 'hooks' / 'ship-gate.py'
+REVIEW_GATE = PLUGIN / 'hooks' / 'pr-review-gate.py'
 _spec = importlib.util.spec_from_file_location('aegisops_harness_pr', PR)
 pr = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(pr)

@@ -4,7 +4,7 @@ import pathlib
 import tempfile
 import unittest
 
-SCRIPT = pathlib.Path(__file__).resolve().parent.parent / 'scripts' / 'check-contract.py'
+SCRIPT = pathlib.Path(__file__).resolve().parent.parent / 'plugins' / 'aegisops-harness' / 'scripts' / 'check-contract.py'
 spec = importlib.util.spec_from_file_location('check_contract', SCRIPT)
 cc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cc)

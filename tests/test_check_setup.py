@@ -15,7 +15,8 @@ import unittest
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = ROOT / 'scripts' / 'check-setup.py'
+PLUGIN = ROOT / 'plugins' / 'aegisops-harness'
+SCRIPT = PLUGIN / 'scripts' / 'check-setup.py'
 SPEC = importlib.util.spec_from_file_location('check_setup', SCRIPT)
 check_setup = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(check_setup)
@@ -149,9 +150,12 @@ class PluginIntegrityTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name) / 'plugin'
+        self.copy = Path(tmp.name) / 'repo'
         import shutil
-        shutil.copytree(ROOT, self.root, ignore=shutil.ignore_patterns('.git', '__pycache__', '.idea', 'node_modules'))
+        skip = shutil.ignore_patterns('.git', '__pycache__', '.idea', 'node_modules')
+        shutil.copytree(ROOT, self.copy, ignore=lambda folder, names: set(skip(folder, names)) | {
+            n for n in names if (Path(folder) / n).is_symlink()})  # no local convenience links
+        self.root = self.copy / 'plugins' / 'aegisops-harness'  # what check-setup is pointed at
 
     def check(self):
         result = subprocess.run([sys.executable, str(self.root / 'scripts' / 'check-setup.py'), '--root',
@@ -192,7 +196,7 @@ class PluginIntegrityTest(unittest.TestCase):
         self.assertEqual(self.check()['errors'], [])
 
     def test_stale_map_and_unphased_skill_fail(self):
-        (self.root / 'HOW-IT-WORKS.md').write_text('# old\n')
+        (self.copy / 'HOW-IT-WORKS.md').write_text('# old\n')
         self.assertIn('HOW-IT-WORKS.md is stale', ' '.join(self.check()['errors']))
         subprocess.run([sys.executable, str(self.root / 'scripts' / 'map.py')], check=True, capture_output=True)
         new = self.root / 'skills' / 'brand-new' / 'SKILL.md'
@@ -203,17 +207,17 @@ class PluginIntegrityTest(unittest.TestCase):
     def test_eta_14_version_drift_fails(self):
         # 5.0.0 shipped a README that said 4.0.0 while check-setup said PASS.
         version = json.loads((self.root / '.claude-plugin' / 'plugin.json').read_text())['version']
-        readme = self.root / 'README.md'
+        readme = self.copy / 'README.md'
         readme.write_text(readme.read_text() + '\n**Version 0.0.1** of the plugin.\n')
         self.assertIn('README.md names version 0.0.1; plugin.json says ' + version, ' '.join(self.check()['errors']))
 
     def test_eta_14_changelog_must_lead_with_the_manifest_version(self):
-        changelog = self.root / 'CHANGELOG.md'
+        changelog = self.copy / 'CHANGELOG.md'
         changelog.write_text(changelog.read_text().replace('\n## ', '\n## 0.0.1 — 2020-01-01\n\nOld.\n\n## ', 1))
         self.assertIn('CHANGELOG.md leads with 0.0.1', ' '.join(self.check()['errors']))
 
     def test_eta_12_stale_eval_baseline_is_a_warning(self):
-        baseline = self.root / 'evals' / 'headless' / 'baseline.json'
+        baseline = self.copy / 'evals' / 'headless' / 'baseline.json'
         data = json.loads(baseline.read_text())
         for entry in data['suites'].values():
             entry['plugin_version'] = '0.1.0'
@@ -243,7 +247,7 @@ class PluginIntegrityTest(unittest.TestCase):
             '    sys.argv = ["x", "--root", root, "--project", root]; out = io.StringIO()\n'
             '    with contextlib.redirect_stdout(out): m.main()\n'
             '    print(json.dumps(json.loads(out.getvalue())["errors"]))\n')
-        result = subprocess.run([sys.executable, '-c', probe, str(ROOT / 'scripts' / 'check-setup.py'), str(ROOT),
+        result = subprocess.run([sys.executable, '-c', probe, str(PLUGIN / 'scripts' / 'check-setup.py'), str(ROOT),
                                  str(self.root)], capture_output=True, text=True, timeout=120)
         first, second = [json.loads(line) for line in result.stdout.splitlines()[-2:]]
         self.assertEqual(first, [])
