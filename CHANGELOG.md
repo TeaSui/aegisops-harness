@@ -1,5 +1,20 @@
 # Changelog
 
+## 7.0.0 — 2026-11-27
+
+A smaller install. The plugin is now its own folder, `plugins/aegisops-harness/`, and the marketplace points there: tests, evals, specs and CI stay in the repository and are no longer copied to every user (the package is 90 files, 544 KB, where the whole repository is 1.4 MB). Nothing a session loads changed, except what is listed under Removed.
+
+### Breaking
+- **`/aegisops-harness:eval-upgrade` is gone.** The tool behind it (`tools/eval-upgrade/`, a Node application with a web UI) has no part in the lifecycle and moves to its own repository.
+- **A checkout is loaded from the plugin folder:** `claude --plugin-dir plugins/aegisops-harness`, not `--plugin-dir .`. Installing from the marketplace is unchanged.
+
+### Changed
+- `scripts/aidlc.py` (3,100 lines in one file) is the entry point and facade for `scripts/aidlc_lib/`, seven layers that import only downwards (`core`, `parsers`, `graph`, `model`, `gates`, `api`, `commands`); no module is over 1,000 lines. Function bodies are unchanged, `aidlc.py` still exports every name, and `tests/test_engine_layers.py` keeps the layering.
+- `check-setup.py` now enforces what an install pays for: a package budget (120 files, 700 KB, 6 KB of bootstrap) and an error for a rule, reference or skill file that no other file names. Repository-level checks (README and changelog version, eval baseline) run only where the repository is present, so an installed copy checks itself.
+
+### Removed
+- Nine files that nothing named, so no session ever loaded them: `references/agent-discipline.md`, `aws-patterns.md`, `bootstrap-checklist.md`; `rules/agents.md`, `context7.md`, `dispatch-prompt-contract.md`, `reduce-hallucinations.md`, `strategic-output-persistence.md`; `skills/spec/visual-companion.md` with its local server (`skills/spec/scripts/`). They are in git history at 6.0.0; to bring one back, name it from a skill, command, agent or hook.
+
 ## 6.0.0 — 2026-11-26
 
 The trust anchor moves to where the session cannot write. An assessment reproduced fourteen ways past the gates: every gate up to `shipped` passed on red tests (`aidlc verify --cmd true`, a story ID in a comment, a typed review), four text files passed the merge gate, an equivalent command or a GitHub MCP tool skipped each hook, the lifecycle eval gave that broken repository pass=True, and the eval job was green on sessions that never reached a model. Spec: `docs/specs/evidence-trust-anchor/`, built through the plugin's own lifecycle.

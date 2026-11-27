@@ -1,5 +1,9 @@
 # scripts/
 
+`aidlc.py` is the lifecycle engine's entry point and public facade (hooks and tests load it by path). The code is in
+`aidlc_lib/`, in layers that import only downwards: `core` (constants, text helpers, the spec lock) → `parsers` →
+`graph` → `model` (`Repo`, `Spec`) → `gates` → `api` → `commands`. `tests/test_engine_layers.py` keeps it that way.
+
 Headless Claude Code scripts for non-interactive tasks.
 
 ## validate.sh
