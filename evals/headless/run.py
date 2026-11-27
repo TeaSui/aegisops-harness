@@ -9,10 +9,12 @@ These suites cost money (each run is a full Claude Code session). Suites live in
 
 Examples
   run.py --suite passive --runs 1 --parallel 6
-  run.py --suite passive,tdd --runs 3 --compare            # exit 1 on a regression against baseline.json
+  run.py --suite passive,tdd --runs 3 --compare            # exit 1 on a regression against baseline.json,
+                                                           # exit 3 when too few runs were judged (no signal)
   run.py --suite tdd --rejudge evals/headless/results/X    # re-judge recorded sessions, no model calls
   run.py --suite passive --cases 01-feature,03-expert --runs 1
   run.py --suite tdd --runs 3 --update-baseline            # accept these scores as the new baseline
+  run.py --suite tdd,lifecycle --runs 3 --arm both         # also run every case WITHOUT the plugin (control arm)
 
 Outputs in --out: results.json (every run, summaries, comparison) and report.md (per-case outcome, cost, duration).
 Each run keeps its fixture repo, out.jsonl (stream-json), err.txt and judge.json under <out>/<suite>/<case>-r<n>/.
@@ -24,6 +26,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -66,9 +69,20 @@ def find_claude(explicit):
     return shutil.which('claude')
 
 
+def control_prompt(case):
+    """The case's request for the control arm: the same words without the plugin's slash command."""
+    if case.get('control_prompt'):
+        return case['control_prompt']
+    return re.sub(r'^/aegisops-harness:[\w-]+\s*', '', case['prompt'], count=1)
+
+
 def claude_command(claude, prompt, plugin_dir, config, case, model, extra_args):
-    command = [claude, '-p', prompt, '--plugin-dir', str(plugin_dir), '--output-format', 'stream-json', '--verbose',
-               '--max-turns', str(case.get('max_turns', config.get('max_turns', 20)))]
+    """`plugin_dir` None is the control arm: plain Claude Code, no plugin loaded."""
+    command = [claude, '-p', prompt]
+    if plugin_dir is not None:
+        command += ['--plugin-dir', str(plugin_dir)]
+    command += ['--output-format', 'stream-json', '--verbose',
+                '--max-turns', str(case.get('max_turns', config.get('max_turns', 20)))]
     if config.get('permission_mode'):
         command += ['--permission-mode', config['permission_mode']]
     if model:
@@ -81,8 +95,14 @@ def claude_command(claude, prompt, plugin_dir, config, case, model, extra_args):
     return command
 
 
-def judge_run(suite, case, run_dir, plugin_dir):
+def suite_key(suite, arm):
+    return suite['name'] + (harness.CONTROL if arm == 'control' else '')
+
+
+def judge_run(suite, case, run_dir, plugin_dir, arm='plugin'):
     stream = harness.read_stream(run_dir / 'out.jsonl')
+    if arm == 'control' and suite['config'].get('control_judge'):  # e.g. lifecycle: no spec folder to score
+        case = dict(case, judge=suite['config']['control_judge'])
     try:
         verdict = suite['judge'].judge(case, stream, run_dir / 'repo', plugin_dir)
     except Exception as error:  # a judge bug must not hide the other runs
@@ -90,7 +110,8 @@ def judge_run(suite, case, run_dir, plugin_dir):
     (run_dir / 'judge.json').write_text(json.dumps(verdict, indent=2, default=str))
     result = stream['result']
     return stream, {
-        'suite': suite['name'], 'case': case['id'], 'pass': bool(verdict.get('pass')), 'score': verdict.get('score'),
+        'suite': suite_key(suite, arm), 'arm': arm, 'case': case['id'], 'pass': bool(verdict.get('pass')),
+        'score': verdict.get('score'), 'outcome_pass': verdict.get('outcome_pass'),
         'judge': verdict, 'infra_error': harness.infra_error(stream),
         'cost_usd': result.get('total_cost_usd'), 'duration_ms': result.get('duration_ms'),
         'num_turns': result.get('num_turns'), 'session_error': result.get('is_error'),
@@ -99,8 +120,9 @@ def judge_run(suite, case, run_dir, plugin_dir):
         'dir': str(run_dir)}
 
 
-def execute(suite, case, index, args, claude):
-    run_dir = args.out / suite['name'] / ('%s-r%d' % (case['id'], index))
+def execute(suite, case, index, args, claude, arm='plugin'):
+    control = arm == 'control'
+    run_dir = args.out / suite_key(suite, arm) / ('%s-r%d' % (case['id'], index))
     if run_dir.exists():
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True)
@@ -108,7 +130,8 @@ def execute(suite, case, index, args, claude):
     started = time.time()
     try:
         suite['fixture'].build(run_dir / 'repo', case)
-        command = claude_command(claude, case['prompt'], args.plugin_dir, suite['config'], case, args.model,
+        command = claude_command(claude, control_prompt(case) if control else case['prompt'],
+                                 None if control else args.plugin_dir, suite['config'], case, args.model,
                                  args.extra_arg)
         env = {k: v for k, v in os.environ.items() if not k.startswith('AEGISOPS_HARNESS_')}
         env.update({k: str(v) for k, v in (case.get('env') or {}).items()})  # e.g. AEGISOPS_HARNESS_WORKFLOW=full
@@ -125,7 +148,7 @@ def execute(suite, case, index, args, claude):
                 error = 'timeout after %ds' % timeout
     except Exception as exc:
         error = '%s: %s' % (type(exc).__name__, exc)
-    _, record = judge_run(suite, case, run_dir, args.plugin_dir)
+    _, record = judge_run(suite, case, run_dir, args.plugin_dir, arm)
     record['run'] = index
     # Wall clock of the whole session: a session that waits on background agents emits several `result` events,
     # each with only its own segment's duration, so the last one undercounts badly.
@@ -134,20 +157,20 @@ def execute(suite, case, index, args, claude):
         record['error'] = error
     outcome = 'INFRA' if record.get('infra_error') else ('PASS' if record['pass'] else ('ERR' if error else 'FAIL'))
     print('%-5s %-10s %-16s r%d  %s  $%.3f %4.0fs' % (outcome,
-                                                      suite['name'], case['id'], index,
+                                                      suite_key(suite, arm), case['id'], index,
                                                       (record['judge'] or {}).get('summary', '')[:80],
                                                       record['cost_usd'] or 0, record['duration_ms'] / 1000),
           flush=True)
     return record
 
 
-def rejudge(suite, cases, args):
+def rejudge(suite, cases, args, arm='plugin'):
     records = []
     for case in cases:
-        for run_dir in sorted((args.rejudge / suite['name']).glob('%s-r*' % case['id'])):
+        for run_dir in sorted((args.rejudge / suite_key(suite, arm)).glob('%s-r*' % case['id'])):
             if not (run_dir / 'out.jsonl').exists():
                 continue
-            _, record = judge_run(suite, case, run_dir, args.plugin_dir)
+            _, record = judge_run(suite, case, run_dir, args.plugin_dir, arm)
             record['run'] = int(run_dir.name.rsplit('-r', 1)[1])
             records.append(record)
     return records
@@ -168,6 +191,9 @@ def main(argv=None):
     parser.add_argument('--parallel', type=int, default=4, help='concurrent sessions (default 4)')
     parser.add_argument('--plugin-dir', type=pathlib.Path, default=ROOT, help='plugin under test (default: this repo)')
     parser.add_argument('--model', help='model alias or id passed to claude --model (default: the CLI default)')
+    parser.add_argument('--arm', choices=('plugin', 'control', 'both'), default='plugin',
+                        help='plugin: with the plugin (default). control: the same cases with no plugin and no slash '
+                             'command, results under <suite>@control. both: run the two and report the difference')
     parser.add_argument('--out', type=pathlib.Path, help='output folder (default evals/headless/results/<UTC time>)')
     parser.add_argument('--cases', help='comma-separated case ids to run (default: all)')
     parser.add_argument('--claude-bin', help='claude executable (default $CLAUDE_BIN or claude on PATH)')
@@ -179,6 +205,9 @@ def main(argv=None):
                         help='allowed pass-rate drop before a regression is considered (default 0.10)')
     parser.add_argument('--strict', action='store_true',
                         help='fail on any drop beyond the tolerance, even when the Wilson interval reaches the baseline')
+    parser.add_argument('--min-judged', type=float, default=0.8,
+                        help='share of the planned runs that must be judged (not excluded as infrastructure) for a '
+                             'suite to count; below it --compare and --update-baseline exit 3 (default 0.8)')
     parser.add_argument('--update-baseline', action='store_true', help='write these scores into the baseline file')
     args = parser.parse_args(argv)
 
@@ -210,13 +239,17 @@ def main(argv=None):
         cases = [c for c in suite['cases'] if wanted is None or c['id'] in wanted]
         if not cases:
             continue
-        if args.rejudge:
-            records = rejudge(suite, cases, args)
-        else:
-            jobs = [(case, index) for case in cases for index in range(1, args.runs + 1)]
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
-                records = list(pool.map(lambda job: execute(suite, job[0], job[1], args, claude), jobs))
-        all_runs[suite['name']] = sorted(records, key=lambda r: (r['case'], r['run']))
+        for arm in (('plugin', 'control') if args.arm == 'both' else (args.arm,)):
+            if arm == 'control' and not suite['config'].get('control', True):
+                print('%s has no control arm (suite.json "control": false): skipped' % suite['name'])
+                continue
+            if args.rejudge:
+                records = rejudge(suite, cases, args, arm)
+            else:
+                jobs = [(case, index) for case in cases for index in range(1, args.runs + 1)]
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
+                    records = list(pool.map(lambda job, arm=arm: execute(suite, job[0], job[1], args, claude, arm), jobs))
+            all_runs[suite_key(suite, arm)] = sorted(records, key=lambda r: (r['case'], r['run']))
 
     versions = {r.get('claude_version') for runs in all_runs.values() for r in runs if r.get('claude_version')}
     models = {r.get('model') for runs in all_runs.values() for r in runs if r.get('model')}
@@ -228,27 +261,34 @@ def main(argv=None):
         baseline = json.loads(args.baseline.read_text())
     except (OSError, ValueError):
         baseline = {}
-    verdicts = harness.compare(summaries, baseline, args.tolerance, noise_guard=not args.strict)
-    results = {'meta': meta, 'suites': summaries, 'compare': verdicts, 'runs': all_runs,
-               'tolerance': args.tolerance, 'strict': args.strict}
+    verdicts = harness.compare(summaries, baseline, args.tolerance, noise_guard=not args.strict,
+                               min_judged=args.min_judged, plugin_version=meta['plugin_version'])
+    results = {'meta': meta, 'suites': summaries, 'compare': verdicts, 'arms': harness.arms(summaries),
+               'runs': all_runs, 'tolerance': args.tolerance, 'strict': args.strict}
     (args.out / 'results.json').write_text(json.dumps(results, indent=2, default=str))
     report = harness.markdown_report(results)
     (args.out / 'report.md').write_text(report)
     print('\n' + report.split('\n## ')[0])
     print('Results: %s\nReport:  %s' % (args.out / 'results.json', args.out / 'report.md'))
 
+    silent = [name for name, verdict in verdicts.items() if verdict.get('no_signal')]
     if args.update_baseline:
-        baseline.setdefault('suites', {})
-        for name, summary in summaries.items():
-            baseline['suites'][name] = harness.baseline_entry(summary, meta)
-        args.baseline.write_text(json.dumps(baseline, indent=2) + '\n')
-        print('Baseline updated: ' + ', '.join(summaries))
-    if args.compare:
-        regressions = [name for name, verdict in verdicts.items() if verdict['regression']]
-        if regressions:
-            print('REGRESSION: ' + ', '.join(regressions))
-            return 1
-    return 0
+        # Never record a score nobody measured; the control arm is a comparison, not a baseline of the plugin.
+        accepted = [name for name in summaries if name not in silent and not name.endswith(harness.CONTROL)]
+        if accepted:
+            baseline.setdefault('suites', {})
+            for name in accepted:
+                baseline['suites'][name] = harness.baseline_entry(summaries[name], meta)
+            args.baseline.write_text(json.dumps(baseline, indent=2) + '\n')
+            print('Baseline updated: ' + ', '.join(accepted))
+    regressions = [name for name, verdict in verdicts.items() if verdict['regression']] if args.compare else []
+    if regressions:
+        print('REGRESSION: ' + ', '.join(regressions))
+    if silent and (args.compare or args.update_baseline):
+        print('NO SIGNAL: ' + '; '.join('%s (%s)' % (name, verdicts[name]['notes'][0]) for name in silent))
+    if regressions:
+        return 1
+    return 3 if silent and (args.compare or args.update_baseline) else 0
 
 
 if __name__ == '__main__':

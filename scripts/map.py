@@ -21,6 +21,7 @@ COMMANDS = (
      ('spec', 'plan', 'build', 'verify', 'review', 'ship')),
     ('Open decisions; interview me before the spec', 'grilling', ()),
     ('Stage 1: spec.md, security, the one approval', 'spec', ('fintech-security',)),
+    ('Approve a spec as it is written now (the one approval)', 'approve', ()),
     ('Stage 2: tickets (vertical slices)', 'plan', ()),
     ('Stage 3: build the tickets test-first', 'build', ('test-driven-development', 'systematic-debugging')),
     ('Stage 4: full suite, trace, placeholders → verified', 'verify', ()),
@@ -65,9 +66,15 @@ GATES = (
     ('contract-gate.py', 'Edit / Write / Bash', 'external API contract must pass check-contract.py (advisory)'),
     ('question-gate.py', 'AskUserQuestion', 'inside an AegisOps-Harness command: blocked when the input delegated every '
      'decision; otherwise the first question before any Rovo search is sent back'),
-    ('security-gate.py', 'git commit / push', 'blocked while gitleaks finds a secret'),
-    ('pr-review-gate.py', 'opening a PR', 'blocked until the pre-PR review is recorded for HEAD with 0 open findings'),
-    ('ship-gate.py', 'merging a PR', 'blocked until the branch\'s spec passes the `shipped` gate'),
+    ('evidence-guard.py', 'Edit / Write / Bash', 'the ledger and stored reviewer returns are written by `aidlc` only; '
+     '`aidlc approve` needs the user\'s own /aegisops-harness:approve'),
+    ('record-returns.py', 'a reviewer agent returns', 'in the review stage: stores the return verbatim in the spec '
+     'folder, for the `reviewed` gate to compare review.md with'),
+    ('security-gate.py', 'git commit / push (any spelling)', 'blocked while gitleaks finds a secret'),
+    ('pr-review-gate.py', 'opening a PR (gh, API call or GitHub MCP)', 'blocked until the pre-PR review is recorded for '
+     'HEAD with 0 open findings'),
+    ('ship-gate.py', 'merging a PR (gh, API call or GitHub MCP)', 'blocked until the branch\'s spec passes the '
+     '`shipped` gate'),
 )
 
 GLOSSARY = (
@@ -80,10 +87,18 @@ GLOSSARY = (
                    'for risk, money/regulatory, irreversible or contradictory cases (`references/aidlc.md` §0).'),
     ('spec.md', 'the to-spec template: Problem, Solution, numbered User Stories, Implementation Decisions '
                 '(incl. Security), Testing Decisions, Out of Scope, Further Notes (Sources, Assumptions).'),
-    ('Story ID', 'user story n of a spec with `key: RFD` is `RFD-n`; tests name it so `aidlc trace` can find them.'),
+    ('Story ID', 'user story n of a spec with `key: RFD` is `RFD-n`; a test carries it in its name, and the gate needs '
+                 'that test to have run and passed in the pinned run.'),
+    ('Pinned command', 'the full-suite command in `.aidlc.json`, read from the default branch: the session that is '
+                       'verified does not choose what verifies it.'),
+    ('Revert check', 'the suite run with this branch\'s production source put back to its base version; it must fail, '
+                     'or no test depends on the change.'),
+    ('Approval', 'a ledger event with the hash of spec.md, recorded when the user types `/aegisops-harness:approve`; an '
+                 'edit to the spec afterwards needs a new one.'),
     ('Ticket', 'one tracer-bullet vertical slice in tickets.md, with Blocked by, Covers and acceptance checkboxes.'),
     ('Seam', 'the public interface tests go through; the fewer the better, agreed in Testing Decisions.'),
-    ('Gate', 'a hook or `aidlc` check that blocks the next step until its evidence exists.'),
+    ('Gate', 'a hook or `aidlc` check that blocks the next step until its evidence exists; every gate up to `shipped` '
+             're-checks the gates before it.'),
 )
 
 
@@ -130,14 +145,25 @@ def render():
            'the repository\'s files.', '',
            '## The lifecycle', '', '```text',
            '/aegisops-harness:aidlc <request or pasted spec>     (or each stage on its own)',
-           '  spec     spec.md: stories, decisions, Security, seams      ── one approval (skipped: ready-for-agent)',
+           '  spec     spec.md: stories, decisions, Security, seams      gate: your approval of that text (/aegisops-harness:approve)',
            '  plan     tickets.md: vertical slices                        gate: every story covered',
-           '  build    TDD at the seams, ticket by ticket                 gate: failing test before code',
-           '  verify   full suite at this code, stories traced           gate: aidlc verify green',
-           '  review   Spec + Standards axes, QA                          gate: PR create',
-           '  ship     PR, CI green, ship.md                             gate: PR merge',
+           '  build    TDD at the seams, ticket by ticket                 reminder: failing test before code',
+           '  verify   the pinned suite at this code                      gate: red without the change, green with it,',
+           '                                                                    a passing test per story (JUnit)',
+           '  review   Spec + Standards axes, QA                          gate: review.md = what the reviewers returned',
+           '  ship     PR, CI green, ship.md                              gate: a result from CI; then the merge',
            'questions on the way: files → Atlassian Rovo → recorded assumption → (rarely) you',
            '```', '',
+           '## What enforces what', '',
+           '| Layer | What it is | Stops |', '|---|---|---|',
+           '| Prompts | skills, rules, agents | nothing: they advise |',
+           '| Hooks and local gates | `hooks/`, `aidlc check` | the default path: a session that forgets or takes the short '
+           'way. They read files the session can write, so they are a guard rail, not a control |',
+           '| CI on a protected branch | `aidlc ci` as a required status check, plus a required review by a person | a '
+           'session that writes its own evidence: it cannot write CI\'s result or the base branch\'s config |', '',
+           'Setup for the last row, once per repository: `aidlc config init` (pins the verify command in `.aidlc.json`), '
+           'the `aidlc-gate` action in CI, branch protection that requires it (`references/aidlc.md` §4, §5, Trust model).',
+           '',
            '## Situation → command → what it loads', '',
            '| Situation | Command | Loads, in order |', '|---|---|---|']
     for situation, cmd, loads in COMMANDS:
@@ -156,7 +182,10 @@ def render():
             '| `docs/specs/<feature>/tickets.md` | when planning | the slices and their order |',
             '| `GLOSSARY.md`, `docs/adr/` | when a term or decision is unclear | domain words; hard-to-reverse choices |',
             '| the pull request | yes | the change, the threats checked, the review |',
-            '| `README.md`, `ledger.md`, `review.md`, `ship.md` in the spec folder | no | evidence the gates check |',
+            '| `README.md`, `ledger.md`, `returns/`, `review.md`, `ship.md` in the spec folder | no | evidence the gates '
+            'check (`ledger.md` and `returns/` are written by `aidlc` only) |',
+            '| `.aidlc.json` at the repository root | once, by a person | the verify command every gate trusts; read from '
+            'the default branch |',
             '', '## Words', '', '| Term | Meaning |', '|---|---|']
     out += [f'| {term} | {meaning} |' for term, meaning in GLOSSARY]
     out += ['', 'Exact rules: `rules/workflow-routing.md` (fix or aidlc, trust boundary, stack skills), '

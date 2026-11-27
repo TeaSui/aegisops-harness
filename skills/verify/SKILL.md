@@ -12,14 +12,16 @@ disable-model-invocation: true
 ## 1. Spec stage
 1. `aidlc status`: spec at `building` with every ticket `Status: done` (else `/aegisops-harness:build`).
 2. **Version:** a manifest that holds the release version (`package.json`, `pyproject.toml`, `build.gradle`, `plugin.json`, `VERSION`) gets its semver bump now (breaking major, capability minor, fix patch; skip when release tooling owns it): a manifest change after `verify` invalidates the evidence.
-3. **Full suite through the CLI**, with `--junit` when the runner writes JUnit XML so failing story tests are seen:
+3. **Commit the code, then the full suite through the CLI.** You do not choose the command: it is the one pinned in `.aidlc.json` on the default branch (`${CLAUDE_PLUGIN_ROOT}/references/aidlc.md` §4).
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f> --cmd "<full test suite>" --junit "<junit glob>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc.py" verify <f>
 ```
+It first puts this branch's production source back to its base version and runs the suite, which must fail: a suite that stays green proves nothing about the change, so write the test that exercises it (never weaken the check). Then it runs the suite on the real code. With a JUnit glob in the config, each `Verify: test` story needs a test that ran and passed with its ID in the name.
+   **No `.aidlc.json`:** `aidlc config init --cmd "<the project's full-suite command>" --junit "<report glob>"`, make the runner write that report into a git-ignored folder, commit, and name the file first in the final report: it is the command every later gate trusts, and a person must read it before the merge.
 4. **Integration:** run the project's integration or contract tests when they exist and need no new service; a check that needs a service you cannot start is BLOCKED, named in the report, not skipped silently.
 5. **Placeholders:** scan the changed production code for stubs, sample data, `TODO`/`FIXME`, hard-coded `localhost`; fix real ones (tests and fixtures are fine).
 6. `aidlc trace <f>`: every `Verify: test` story has a passing test; `check`/`manual` stories have their evidence.
-7. `aidlc advance <f> verified`. Fails → `aidlc check <f> --to verified` names it (open ticket or criterion, story without a test, failing story test, code changed after `verify`): fix test-first and rerun from 3.
+7. `aidlc advance <f> verified`. Fails → `aidlc check <f> --to verified` names it (open ticket or criterion, story without a passing test under its ID, failing story test, a revert check that stayed green, code changed after `verify`): fix test-first and rerun from 3.
 
 Next: `/aegisops-harness:review`.
 

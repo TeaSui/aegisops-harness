@@ -1,5 +1,5 @@
 {
-  "description": "AegisOps-Harness gates (secrets, pre-PR review, TDD, contract, ship, verification, Rovo-first questions) and the session snapshot; no prompt routing: workflows start only from AegisOps-Harness slash commands",
+  "description": "AegisOps-Harness gates (secrets, pre-PR review, TDD, contract, ship, verification, Rovo-first questions, evidence guard) and the session snapshot; no prompt routing: workflows start only from AegisOps-Harness slash commands",
   "hooks": {
     "PreToolUse": [
       {
@@ -29,6 +29,11 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/contract-gate.py\"",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/evidence-guard.py\"",
+            "timeout": 10
           }
         ]
       },
@@ -44,6 +49,11 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/contract-gate.py\"",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/evidence-guard.py\"",
+            "timeout": 10
           }
         ]
       },
@@ -54,6 +64,26 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/question-gate.py\"",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__create_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pr-review-gate.py\"",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__(merge_pull_request|enable_pr_auto_merge)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/ship-gate.py\"",
+            "timeout": 60
           }
         ]
       }
@@ -93,6 +123,16 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/autopilot.py\" post",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/record-returns.py\"",
+            "timeout": 20
           }
         ]
       }

@@ -167,6 +167,22 @@ class Base(unittest.TestCase):
         except ValueError:
             self.fail(f'not JSON: {out!r} {err!r}')
 
+    def pin(self, cmd='true', junit='none — the fixture runner writes no JUnit', revert_check=False, **top):
+        """Write the repository config (.aidlc.json) in the working tree. With none on main this is onboarding mode,
+        which the engine accepts with a warning; reading it from the default branch is tested in test_trust_anchor.py.
+        CI and reviewer returns are waived here so that each can be tested on its own."""
+        config = {'schema': 1, 'verify': {'cmd': cmd, 'junit': junit, 'revert_check': revert_check},
+                  'ci': 'none — the fixture has no CI', 'review': {'returns': 'none — the fixture has no reviewers'}}
+        config.update(top)
+        return self.write('.aidlc.json', json.dumps(config, indent=2) + '\n')
+
+    def verify(self, cmd='true', junit=None, as_json=False, **config):
+        """Pin `cmd` (and a JUnit glob) and run `aidlc verify`: the command is the config's, not an argument."""
+        if junit:
+            config['junit'] = junit
+        self.pin(cmd, **config)
+        return (self.cli_json if as_json else self.cli)('verify', 'refunds')
+
     def fails(self, findings):
         return [m for level, m in findings if level == 'FAIL']
 
@@ -181,11 +197,19 @@ class Base(unittest.TestCase):
         return (self.spec / 'ledger.md').read_text()
 
     # stage builders ------------------------------------------------------------------------------------------
-    def accepted_ready(self, **meta):
+    def accepted_ready(self, approve=True, **meta):
+        """approve=False leaves the spec without an `approve` event (README still names somebody)."""
         self.readme(**meta)
         self.spec_file('requirements.md', REQS)
         self.spec_file('spec-check.md', SPEC_CHECK)
         self.spec_file('security.md', '# Security\nThreat model: refunds move money.\n')
+        if approve:
+            self.approve()
+
+    def approve(self, spec='refunds'):
+        """A person approved the spec text as it is now (and README accepted_by says who)."""
+        code, out, err = self.cli('approve', spec, '--by', 'Tea')
+        self.assertEqual(code, 0, out + err)
 
     def planned_ready(self):
         self.accepted_ready()
@@ -199,15 +223,19 @@ class Base(unittest.TestCase):
         code, out, err = self.cli('advance', 'refunds', 'building')
         self.assertEqual(code, 0, out + err)
 
-    def verified_ready(self):
+    def verified_ready(self, verify=True):
+        """verify=False: the caller pinned its own config and runs `aidlc verify` itself."""
         self.building()
         self.write('src/refunds/model.py', 'def refund(amount):\n    return amount\n')
         self.write('tests/test_refunds.py', '# RFD-1: refund a captured payment\n')
         self.write('load/refund-visibility.js', 'export default function () {}\n')
+        if verify:
+            self.pin()
         self.commit('code')  # the reviewed gate needs the verified code committed
         self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
         self.assertEqual(self.cli('task-done', 'refunds', 'T2', '--cmd', 'true')[0], 0)
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        if verify:
+            self.assertEqual(self.verify()[0], 0)
 
     def reviewed_ready(self):
         self.verified_ready()
@@ -275,15 +303,18 @@ class DocContractTest(Base):
     def test_ledger_example(self):
         events, findings = aidlc.parse_ledger(doc_blocks()['ledger.md'], 'ledger.md')
         self.assertEqual(findings, [])
-        self.assertEqual([e['kind'] for e in events], ['advance', 'task-done', 'ruling', 'verify', 'stamp'])
-        self.assertEqual((events[0]['from'], events[0]['to']), ('accepted', 'planned'))
-        self.assertEqual((events[1]['task'], events[1]['exit']), ('T1', 0))
-        self.assertEqual(events[2]['task'], 'T2')
-        self.assertIn('double refunds', events[2]['if_wrong'])
-        self.assertEqual(events[3]['junit'], {'passed': 42, 'failed': 0})
-        self.assertEqual(events[3]['cmd'], 'npm test')
-        self.assertEqual(events[4]['fingerprint'], '8a01c6e95f3b')
-        self.assertEqual(events[1]['fingerprint'], '3f9c0b7d21e4')
+        self.assertEqual([e['kind'] for e in events],
+                         ['approve', 'advance', 'task-done', 'ruling', 'revert-check', 'verify', 'stamp'])
+        approve, advance, done, ruling, revert, verify, stamp = events
+        self.assertEqual((approve['by'], approve['how'], len(approve['spec'])), ('Tea', 'approved', 64))
+        self.assertEqual((advance['from'], advance['to']), ('accepted', 'planned'))
+        self.assertEqual((done['task'], done['exit'], done['fingerprint']), ('T1', 0, '3f9c0b7d21e4'))
+        self.assertEqual(ruling['task'], 'T2')
+        self.assertIn('double refunds', ruling['if_wrong'])
+        self.assertEqual((revert['exit'], revert['files'], revert['skipped']), (1, '3', False))
+        self.assertEqual(verify['junit'], {'passed': 42, 'failed': 0})
+        self.assertEqual((verify['cmd'], verify['pinned'], verify['req_pass']), ('npm run test:ci', 'base', ['RFD-1']))
+        self.assertEqual(stamp['fingerprint'], '8a01c6e95f3b')
 
     def test_review_example(self):
         review, findings = aidlc.parse_review(doc_blocks()['review.md'], 'review.md')
@@ -333,6 +364,7 @@ class AcceptedGateTest(Base):
     def test_story_headings_without_acceptance_are_not_requirements(self):
         self.accepted_ready()
         self.spec_file('requirements.md', REQS + '\n### BR-1: no refunds after 180 days\nPlain business rule.\n')
+        self.approve()
         self.assertPasses(aidlc.check(self.spec, 'accepted'))
 
     def test_verify_defaults_to_test_and_criteria_tolerate_blank_lines(self):
@@ -383,7 +415,7 @@ class AcceptedGateTest(Base):
 
     def test_accepted_by(self):
         for value in (None, '', '<name> (<date>)'):
-            self.accepted_ready(accepted_by=value)
+            self.accepted_ready(approve=False, accepted_by=value)
             self.assertFails(aidlc.check(self.spec, 'accepted'), 'accepted_by')
 
     def test_external_contract_must_pass_the_contract_gate(self):
@@ -691,19 +723,19 @@ class VerifyTest(Base):
         return [e for e in events if e['kind'] == 'verify'][-1]
 
     def test_logs_exit_and_fingerprint(self):
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         event = self.last_verify()
         self.assertEqual((event['exit'], event['fingerprint'], event['junit']), (0, aidlc.fingerprint(self.repo), None))
 
     def test_failing_command_is_logged_and_exits_1(self):
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'echo red; exit 4')
+        code, out, _ = self.verify('echo red; exit 4')
         self.assertEqual(code, 1)
         self.assertIn('red', out)
         self.assertEqual(self.last_verify()['exit'], 4)
 
     def test_pytest_junit(self):
         self.write('reports/a.xml', JUNIT_PYTEST)
-        code, payload = self.cli_json('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/*.xml')
+        code, payload = self.verify('true', junit='reports/*.xml', as_json=True)
         self.assertEqual(code, 0)
         self.assertEqual(payload['junit']['passed'], 1)
         self.assertEqual(payload['junit']['failed'], 1)
@@ -714,26 +746,26 @@ class VerifyTest(Base):
 
     def test_jest_junit_failure_of_a_requirement_test(self):
         self.write('reports/jest.xml', JUNIT_JEST)
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/**/*.xml')
+        code, out, _ = self.verify('true', junit='reports/**/*.xml')
         self.assertEqual(code, 1)
         self.assertIn('RFD-1', out)
         self.assertEqual(self.last_verify()['req_fail'], ['RFD-1'])
 
     def test_gradle_junit_does_not_confuse_rfd_10_with_rfd_1(self):
         self.write('build/test-results/test/TEST-com.x.RefundTest.xml', JUNIT_GRADLE)
-        code, payload = self.cli_json('verify', 'refunds', '--cmd', 'true', '--junit', 'build/test-results/**/*.xml')
+        code, payload = self.verify('true', junit='build/test-results/**/*.xml', as_json=True)
         self.assertEqual(code, 0)
         self.assertEqual(payload['junit']['req_pass'], ['RFD-1'])
         self.assertEqual(payload['junit']['req_fail'], [])
 
     def test_glob_without_match_is_recorded_as_missing(self):
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'nothing/*.xml')
+        code, out, _ = self.verify('true', junit='nothing/*.xml')
         self.assertEqual(code, 1)
         self.assertEqual(self.last_verify()['junit'], 'missing')
 
     def test_malformed_junit_reports_file_and_line(self):
         self.write('reports/bad.xml', '<testsuite>\n<testcase name="x">\n')
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/bad.xml')
+        code, out, _ = self.verify('true', junit='reports/bad.xml')
         self.assertEqual(code, 1)
         self.assertRegex(out, r'reports/bad\.xml:\d+')
         self.assertEqual(self.last_verify()['junit'], 'unreadable')
@@ -749,7 +781,7 @@ class VerifiedGateTest(Base):
         self.write('tests/test_refunds.py', '# RFD-1\n')
         self.assertEqual(self.cli('task-done', 'refunds', 'T1', '--cmd', 'true')[0], 0)
         plan = self.spec / 'plan.md'
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'T2 is not done')
         plan.write_text(plan.read_text().replace('- [ ] T2', '- [x] T2'))
         self.assertFails(aidlc.check(self.spec, 'verified'), 'T2 is ticked but has no green task-done')
@@ -757,21 +789,23 @@ class VerifiedGateTest(Base):
     def test_requirement_without_test_reference(self):
         self.verified_ready()
         self.write('tests/test_refunds.py', '# RFD-10 only\n')
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1 (Verify: test) is not referenced')
 
     def test_requirement_reference_forms(self):
         self.verified_ready()
         for text in ('def test_rfd_1_refund(): pass\n', 'it("RFD-1 refunds", () => {})\n'):
             self.write('tests/test_refunds.py', text)
-            self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+            self.assertEqual(self.verify()[0], 0)
             self.assertPasses(aidlc.check(self.spec, 'verified'))
 
     def test_no_verify_or_failed_verify(self):
         self.building()
+        self.assertFails(aidlc.check(self.spec, 'verified'), 'no pinned verify command')
+        self.pin()
         self.assertFails(aidlc.check(self.spec, 'verified'), 'no verify event')
         self.verified_ready_from_building()
-        self.cli('verify', 'refunds', '--cmd', 'exit 1')
+        self.verify('exit 1')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'exited 1')
 
     def verified_ready_from_building(self):
@@ -798,18 +832,18 @@ class VerifiedGateTest(Base):
 
     def test_latest_verify_wins(self):
         self.verified_ready()
-        self.cli('verify', 'refunds', '--cmd', 'exit 2')
+        self.verify('exit 2')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'exited 2')
-        self.cli('verify', 'refunds', '--cmd', 'true')
+        self.verify()
         self.assertPasses(aidlc.check(self.spec, 'verified'))
 
     def test_failed_requirement_test_and_unreadable_junit_block(self):
         self.verified_ready()
         self.write('reports/jest.xml', JUNIT_JEST)
-        self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/jest.xml')
+        self.verify('true', junit='reports/jest.xml')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1')
         self.write('reports/jest.xml', '<oops')
-        self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/jest.xml')
+        self.verify('true', junit='reports/jest.xml')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'JUnit')
 
 
@@ -1056,7 +1090,7 @@ class AdvanceTest(Base):
         self.assertEqual((events[-1]['kind'], events[-1]['from'], events[-1]['to']), ('advance', 'proposed', 'accepted'))
 
     def test_gate_failure_changes_nothing(self):
-        self.accepted_ready(accepted_by='')
+        self.accepted_ready(approve=False, accepted_by='')
         before = (self.spec / 'README.md').read_text()
         code, out, _ = self.cli('advance', 'refunds', 'accepted')
         self.assertEqual(code, 1)
@@ -1079,7 +1113,7 @@ class AdvanceTest(Base):
         self.assertTrue(events[-1]['back'])
         self.assertEqual(events[-1]['reason'], 'late finding: split T1')
         meta, _ = aidlc.parse_frontmatter((self.spec / 'README.md').read_text())
-        self.assertEqual(meta['accepted_by'], 'Tea (2026-11-19)')
+        self.assertRegex(meta['accepted_by'], r'^Tea \(')
 
     def test_back_to_proposed_clears_the_approval(self):
         self.planned_ready()
@@ -1199,9 +1233,11 @@ What to build: visible in the console within 1 minute.
 class SpecTemplateLifecycleTest(Base):
     """spec.md (the to-spec template) + tickets.md through every gate."""
 
-    def accepted_ready(self, **meta):
+    def accepted_ready(self, approve=True, **meta):
         self.readme(**meta)
         self.spec_file('spec.md', SPEC_MD)
+        if approve:
+            self.approve()
 
     def test_stories_are_requirements(self):
         stories, findings = aidlc.parse_spec(SPEC_MD, 'spec.md', 'RFD')
@@ -1274,7 +1310,7 @@ class SpecTemplateLifecycleTest(Base):
         text = tickets.read_text()
         self.assertEqual(text.count('Status: done'), 2)
         self.assertNotIn('ready-for-agent', text)
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true')[0], 0)
+        self.assertEqual(self.verify()[0], 0)
         self.assertPasses(aidlc.check(self.spec, 'verified'))
         rows = {r['id']: r for r in aidlc.trace_rows(aidlc.Spec(self.spec))}
         self.assertEqual((rows['RFD-1']['tasks'], rows['RFD-1']['result']), (['T1'], 'pass'))
@@ -1341,8 +1377,7 @@ class InitTest(Base):
         self.assertEqual(self.cli('init', 'refunds', '--key', 'RFD')[0], 0)
         blocks = doc_blocks()
         self.spec_file('spec.md', blocks['spec.md'])
-        readme = self.spec / 'README.md'
-        readme.write_text(readme.read_text().replace('accepted_by:', 'accepted_by: Tea (2026-11-19)'))
+        self.approve()
         self.assertPasses(aidlc.check(self.spec, 'accepted'))
         self.assertEqual(self.cli('advance', 'refunds', 'accepted')[0], 0)
         self.spec_file('tickets.md', '# Tickets\n\n' + blocks['tickets.md'])
@@ -1492,14 +1527,14 @@ class MarkPrReviewTest(Base):
 class EvidenceChainTest(Base):
     def test_red_latest_verify_blocks_reviewed_and_shipped(self):
         self.shipped_ready()
-        self.cli('verify', 'refunds', '--cmd', 'exit 1')
+        self.verify('exit 1')
         self.assertFails(aidlc.check(self.spec, 'reviewed'), 'exited 1')
         self.assertFails(aidlc.check(self.spec, 'shipped'), 'exited 1')
 
     def test_dirty_code_blocks_reviewed_and_writes_no_record(self):
         self.reviewed_ready()
         self.write('src/refunds/extra.py', 'x = 1\n')
-        self.cli('verify', 'refunds', '--cmd', 'true')
+        self.verify()
         self.cli('stamp', 'refunds', 'review')
         findings = aidlc.check(self.spec, 'reviewed')
         self.assertEqual(len(self.fails(findings)), 1, findings)
@@ -1525,7 +1560,7 @@ class EvidenceChainTest(Base):
         self.reviewed_ready()
         self.write('src/refunds/model.py', 'v = 2\n')
         self.commit()
-        self.cli('verify', 'refunds', '--cmd', 'true')
+        self.verify()
         findings = aidlc.evidence_findings(self.spec)
         self.assertFails(findings, 'review stamp')
 
@@ -1656,10 +1691,10 @@ class TraceabilityMatchingTest(Base):
         skipped = ('<testsuite><testcase classname="t" name="test_RFD_1_refund"><skipped/></testcase>'
                    '<testcase classname="t" name="test_other"/></testsuite>')
         self.write('reports/a.xml', skipped)
-        self.cli('verify', 'refunds', '--cmd', 'touch reports/a.xml', '--junit', 'reports/a.xml')
+        self.verify('touch reports/a.xml', junit='reports/a.xml')
         self.assertFails(aidlc.check(self.spec, 'verified'), 'RFD-1 has no passing test')
         self.write('reports/a.xml', '<testsuite><testcase classname="t" name="test_RFD_1_refund"/></testsuite>')
-        self.cli('verify', 'refunds', '--cmd', 'touch reports/a.xml', '--junit', 'reports/a.xml')
+        self.verify('touch reports/a.xml', junit='reports/a.xml')
         findings = aidlc.check(self.spec, 'verified')
         self.assertPasses(findings)
         self.assertFalse(any('static' in m for _, m in findings))
@@ -1674,10 +1709,10 @@ class TraceabilityMatchingTest(Base):
         self.verified_ready()
         report = self.write('reports/old.xml', '<testsuite><testcase classname="t" name="test_RFD_1_x"/></testsuite>')
         os.utime(report, (report.stat().st_atime - 600, report.stat().st_mtime - 600))
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/*.xml')[0], 1)
+        self.assertEqual(self.verify('true', junit='reports/*.xml')[0], 1)
         self.assertIn('junit=missing', self.ledger().splitlines()[-1])
         self.write('reports/new.xml', '<testsuites><testsuite name="empty"/></testsuites>')
-        self.assertEqual(self.cli('verify', 'refunds', '--cmd', 'true', '--junit', 'reports/new.xml')[0], 1)
+        self.assertEqual(self.verify('true', junit='reports/new.xml')[0], 1)
         self.assertIn('junit=missing', self.ledger().splitlines()[-1])
 
 
@@ -1699,13 +1734,13 @@ class VerifyHardeningTest(Base):
         self.write('tests/test_refunds.py', '# RFD-1\n')
 
     def test_json_exit_is_the_cli_exit(self):
-        code, payload = self.cli_json('verify', 'refunds', '--cmd', 'exit 4')
+        code, payload = self.verify('exit 4', as_json=True)
         self.assertEqual((code, payload['exit'], payload['command_exit']), (1, 1, 4))
         code, payload = self.cli_json('task-done', 'refunds', 'T1', '--cmd', 'exit 5')
         self.assertEqual((code, payload['exit'], payload['command_exit']), (1, 1, 5))
 
     def test_code_changed_during_the_run_is_not_green(self):
-        code, out, _ = self.cli('verify', 'refunds', '--cmd', 'echo "y = 1" >> src/app.py')
+        code, out, _ = self.verify('echo "y = 1" >> src/app.py')
         self.assertEqual(code, 1)
         self.assertIn('changed code', out)
         self.assertFails(aidlc.check(self.spec, 'verified'), 'changed code during')

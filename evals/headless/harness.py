@@ -83,6 +83,14 @@ INFRA = re.compile(r"^\W*(you'?ve hit your .{0,40}limit|claude ai usage limit|us
 NOTICE_MAX = 300
 
 
+def no_model_turn(event):
+    """A result event that reports no cost and no output tokens: the CLI never reached a model (no API key, not signed
+    in, no network). An event that reports neither field says nothing either way, unless it is an error."""
+    cost, tokens = event.get('total_cost_usd'), (event.get('usage') or {}).get('output_tokens')
+    reported = cost is not None or tokens is not None or bool(event.get('is_error'))
+    return reported and not cost and not tokens
+
+
 def infra_error(stream):
     """A short reason when the session ended for an account/API reason rather than by itself, else None."""
     results = stream.get('results') or ([stream['result']] if stream.get('result') else [])
@@ -92,6 +100,9 @@ def infra_error(stream):
         text = str(event.get('result') or event.get('error') or '').strip()
         if len(text) <= NOTICE_MAX and INFRA.search(text):
             return 'cut off: %s' % text[:120]
+    if all(no_model_turn(event) for event in results):
+        text = str(results[-1].get('result') or results[-1].get('error') or '').strip()
+        return 'no model turn ($0, no output tokens): %s' % (text[:100] or 'the CLI never reached a model')
     return None
 
 
@@ -123,8 +134,43 @@ def wilson(passed, total, z=1.96):
     return max(0.0, centre - half), min(1.0, centre + half)
 
 
+def difference(a_passed, a_total, b_passed, b_total):
+    """(a - b, low, high): difference of two pass rates with Newcombe's hybrid score 95% interval (built from the
+    two Wilson intervals). (None, None, None) when either side has no run."""
+    if a_total <= 0 or b_total <= 0:
+        return None, None, None
+    a, b = a_passed / a_total, b_passed / b_total
+    (a_low, a_high), (b_low, b_high) = wilson(a_passed, a_total), wilson(b_passed, b_total)
+    diff = a - b
+    low = diff - math.sqrt((a - a_low) ** 2 + (b_high - b) ** 2)
+    high = diff + math.sqrt((a_high - a) ** 2 + (b - b_low) ** 2)
+    return diff, max(-1.0, low), min(1.0, high)
+
+
+CONTROL = '@control'  # results key of a suite's control arm: the same cases without the plugin
+
+
+def arms(summaries):
+    """{suite: plugin against control} for every suite that has both arms. Compared on the outcome (does the software
+    work) when both arms report it, since only the plugin arm has lifecycle documents to score; else on pass."""
+    table = {}
+    for name, plugin in summaries.items():
+        control = summaries.get(name + CONTROL)
+        if name.endswith(CONTROL) or control is None:
+            continue
+        on_outcome = bool(plugin.get('outcome_total') and control.get('outcome_total'))
+        keys = ('outcome_passed', 'outcome_total') if on_outcome else ('passed', 'total')
+        diff, low, high = difference(plugin[keys[0]], plugin[keys[1]], control[keys[0]], control[keys[1]])
+        table[name] = {'plugin': '%d/%d' % (plugin[keys[0]], plugin[keys[1]]),
+                       'control': '%d/%d' % (control[keys[0]], control[keys[1]]),
+                       'metric': 'outcome' if on_outcome else 'pass', 'difference': diff,
+                       'interval': None if diff is None else [round(low, 3), round(high, 3)]}
+    return table
+
+
 def summarize(runs):
-    """Aggregate run records of one suite."""
+    """Aggregate run records of one suite. `planned` counts every run, `total` only the judged ones."""
+    planned = len(runs)
     infra = [r for r in runs if r.get('infra_error')]
     runs = [r for r in runs if not r.get('infra_error')]  # cut off by the account or the API: no signal
     total = len(runs)
@@ -133,26 +179,52 @@ def summarize(runs):
     costs = [r.get('cost_usd') or 0.0 for r in runs]
     durations = [r.get('duration_ms') or 0 for r in runs]
     scores = [r.get('score') for r in runs if isinstance(r.get('score'), (int, float))]
+    outcomes = [r['outcome_pass'] for r in runs if isinstance(r.get('outcome_pass'), bool)]
     return {'passed': passed, 'total': total, 'rate': passed / total if total else 0.0,
+            'outcome_passed': sum(outcomes), 'outcome_total': len(outcomes),
             'wilson95': [round(low, 3), round(high, 3)],
             'mean_score': round(sum(scores) / len(scores), 3) if scores else None,
             'cost_usd': round(sum(costs), 4), 'mean_duration_s': round(sum(durations) / total / 1000, 1) if total else 0,
             'cases': sorted({r['case'] for r in runs}), 'errors': sum(1 for r in runs if r.get('error')),
-            'infra_errors': len(infra)}
+            'infra_errors': len(infra), 'planned': planned}
 
 
-def compare(current, baseline, tolerance=0.10, noise_guard=True):
+def minor(version):
+    """'4.0.1' -> ('4', '0'); None when the text is not a version."""
+    parts = str(version or '').split('.')
+    return tuple(parts[:2]) if len(parts) >= 2 and all(p.isdigit() for p in parts[:2]) else None
+
+
+def signal(summary, min_judged):
+    """(enough judged runs, note). A suite with no judged run, or fewer than `min_judged` of the planned ones, says
+    nothing about the plugin: an outage must not read as a green (or a red) result."""
+    planned = summary.get('planned', summary['total'])
+    need = max(1, math.ceil(min_judged * planned))
+    if summary['total'] >= need:
+        return True, None
+    return False, 'judged %d of %d planned runs (%d excluded as infrastructure); %d needed' % (
+        summary['total'], planned, summary.get('infra_errors', 0), need)
+
+
+def compare(current, baseline, tolerance=0.10, noise_guard=True, min_judged=0.8, plugin_version=None):
     """Compare suite summaries against baseline entries.
 
     A suite regresses when its pass rate is more than `tolerance` below the baseline rate and, with the noise guard
     on, the baseline rate also lies above the upper bound of the current Wilson 95% interval (so a drop that small-N
-    noise can explain is reported, not failed). Returns {suite: verdict dict}.
+    noise can explain is reported, not failed). A suite with too few judged runs is `no-signal` whatever its rate.
+    A baseline measured on another minor version of the plugin is flagged `stale`. Returns {suite: verdict dict}.
     """
     verdicts = {}
     for suite, summary in current.items():
         base = (baseline.get('suites') or {}).get(suite)
+        enough, shortfall = signal(summary, min_judged)
+        if not enough:
+            verdicts[suite] = {'status': 'no-signal', 'regression': False, 'no_signal': True, 'stale': False,
+                               'baseline': '%d/%d' % (base['passed'], base['total']) if base and base.get('total') else '-',
+                               'notes': [shortfall]}
+            continue
         if not base or not base.get('total'):
-            verdicts[suite] = {'status': 'no-baseline', 'regression': False}
+            verdicts[suite] = {'status': 'no-baseline', 'regression': False, 'no_signal': False, 'stale': False}
             continue
         base_rate = base['passed'] / base['total']
         drop = base_rate - summary['rate']
@@ -170,7 +242,13 @@ def compare(current, baseline, tolerance=0.10, noise_guard=True):
         notes = []
         if sorted(base.get('cases') or []) and sorted(base.get('cases') or []) != summary.get('cases'):
             notes.append('case set differs from the baseline')
-        verdicts[suite] = {'status': status, 'regression': regression, 'baseline_rate': round(base_rate, 3),
+        measured, now = minor(base.get('plugin_version')), minor(plugin_version)
+        stale = bool(measured and now and measured != now)
+        if stale:
+            notes.append('baseline measured on plugin %s, this is %s: re-measure before trusting the comparison'
+                         % (base['plugin_version'], plugin_version))
+        verdicts[suite] = {'status': status, 'regression': regression, 'no_signal': False, 'stale': stale,
+                           'baseline_rate': round(base_rate, 3),
                            'baseline': '%d/%d' % (base['passed'], base['total']), 'rate': round(summary['rate'], 3),
                            'drop': round(drop, 3), 'wilson95': [round(low, 3), round(high, 3)], 'notes': notes}
     return verdicts
@@ -211,6 +289,16 @@ def markdown_report(results):
             verdict.get('baseline', '-'), verdict.get('status', 'not compared')
             + ('' if not verdict.get('notes') else ' (' + '; '.join(verdict['notes']) + ')'),
             summary['cost_usd'], summary['mean_duration_s'], summary.get('infra_errors', 0)))
+    if results.get('arms'):
+        lines += ['', '## Plugin against control (the same cases without the plugin)', '',
+                  '| Suite | Plugin | Control | Difference | 95% interval | Compared on |', '|---|---|---|---|---|---|']
+        for suite, row in results['arms'].items():
+            if row['difference'] is None:
+                lines.append('| %s | %s | %s | - | - | %s |' % (suite, row['plugin'], row['control'], row['metric']))
+                continue
+            lines.append('| %s | %s | %s | %+.0f pp | %+.0f to %+.0f pp | %s |' % (
+                suite, row['plugin'], row['control'], 100 * row['difference'], 100 * row['interval'][0],
+                100 * row['interval'][1], row['metric']))
     for suite, runs in results.get('runs', {}).items():
         lines += ['', '## %s' % suite, '', '| Case | Run | Outcome | Score | Cost (USD) | Duration | Detail |',
                   '|---|---|---|---|---|---|---|']

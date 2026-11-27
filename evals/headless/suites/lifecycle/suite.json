@@ -24,5 +24,6 @@
     "Bash(mkdir *)",
     "Bash(gitleaks *)",
     "Bash(gh *)"
-  ]
+  ],
+  "control_judge": "outcome"
 }

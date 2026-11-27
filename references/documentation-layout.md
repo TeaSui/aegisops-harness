@@ -56,7 +56,7 @@ Same owners as §2.
 
 `<feature>`: stable kebab-case slug for **one change** (`auth-login`, later `auth-login-mfa`); no numbers, dates or `-v2`. Reuse the folder only while active; afterwards a new slug links back. Create with `scripts/aidlc.py init`.
 
-The integrating (main) session writes every file except `spec-check.md` (blind checker, `skills/spec/checker-prompt.md`; the session closes guesses) and `ledger.md` (`aidlc` only, append-only). `aidlc advance` edits README `status`/`updated`/`branch`; `Status: done` in `tickets.md` only via `aidlc task-done`; `aidlc stamp review` writes review.md `fingerprint:`. Format: `references/aidlc.md` §2.
+The integrating (main) session writes every file except `spec-check.md` (blind checker, `skills/spec/checker-prompt.md`; the session closes guesses) and `ledger.md` and `returns/` (`aidlc` only, append-only). `aidlc advance` edits README `status`/`updated`/`branch`; `Status: done` in `tickets.md` only via `aidlc task-done`; `aidlc stamp review` writes review.md `fingerprint:`. Format: `references/aidlc.md` §2.
 
 | File | Content | When |
 |---|---|---|
@@ -81,7 +81,7 @@ branch: feat/<slug>     # written by `aidlc advance building`
 security: required      # or: not-applicable — <reason> (no trust boundary)
 scope: <service> | system
 affects: [<service-or-module>, ...]
-accepted_by: <name> (<date>)        # explicit approval only, or `<name> (delegated in request)`
+accepted_by: <name> (<date>)        # written by `aidlc approve`: a person's approval, or `<name> (delegated in request)`
 source_revision: [<repo>@<sha>, ...] # set on promotion; one per affected repo
 superseded_by: <slug>
 contract: external                  # none only if no consumer outside the module; omitted = auto-detect from contracts/
@@ -95,7 +95,7 @@ updated: YYYY-MM-DD
 
 Only `aidlc advance` changes `status:`; never edit it by hand.
 1. **Propose.** `aidlc init`; the main session writes the spec.
-2. **Accept.** Only explicit user/team approval, recorded in `accepted_by`. Implementers use `accepted`+ specs (`proposed` only if the dispatch says so).
+2. **Accept.** Only explicit user/team approval of the spec text, recorded by `aidlc approve` (an edit afterwards needs a new one). Implementers use `accepted`+ specs (`proposed` only if the dispatch says so).
 3. **Decide.** A decision that outlives the change → ADR, linked from the spec. A smaller build-time decision → ruling in `ledger.md`.
 4. **Implement.** Implementers apply the accepted `contracts/` delta to the authoritative contract source (§6.4). They never rewrite spec files; contradictions found in code → `DONE_WITH_CONCERNS`.
 5. **Promote.** After merge, `/aegisops-harness:upgrade-service-docs <service> <feature>` folds verified behaviour into living files, appends active security rules to the living register as `<feature>/AUTH-01`, writes `## Traceability`, sets `source_revision` (must contain the change: `git merge-base --is-ancestor`), advances to `implemented` or `partially-implemented`. Never rewrite intent to match what shipped. Not merged yet → keep status, report it.

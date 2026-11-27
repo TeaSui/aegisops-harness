@@ -40,3 +40,12 @@ Rare. If you must restate, add a provenance marker so drift is detectable: `sync
 ## Reachability
 
 `rules/` and `references/` are never auto-loaded. Every file in them must be named from the session bootstrap, a skill or command, an agent, or a hook message (as `${CLAUDE_PLUGIN_ROOT}/…` in agents, commands and `SKILL.md`; plugin-root-relative inside `rules/` and `references/`). Prefer one hop; a `rules/` stub that only points to a reference is a smell. `python3 scripts/check-setup.py` verifies that every `aegisops-harness:<name>` and bundled path resolves.
+
+## This repository runs its own lifecycle
+
+A change to the engine, a hook, a stage skill or the evals goes through the plugin itself, loaded from the checkout (`claude --plugin-dir .`): `/aegisops-harness:aidlc <request>`, with the spec in `docs/specs/<slug>/`. `.aidlc.json` pins the verify command (`tests/junit_runner.py`, which writes the JUnit report the gates read), and CI runs `aidlc ci` on every pull request (`lifecycle gate`).
+
+- **Tests name the story they prove** (`test_rfd_1_…`): the gate needs a passing test per story in the pinned run, and the revert check needs the suite to fail without the production change. A gap found by a proof, an eval run or a review becomes a failing test first.
+- **A new gate says what it cannot stop.** A check that reads files the session can write is a guard rail; write that in its docstring and keep `references/aidlc.md` "Trust model" true.
+- **An eval case ships with its proof.** A hidden check must fail on the fixture as shipped, pass on a reference solution and fail on the wrong solutions you expect (`tests/test_eval_cases.py`). Scores are read with their interval (`evals/README.md`).
+- **The formats are frozen at schema 1** (`references/aidlc.md` "Compatibility"): add optional fields and event kinds; anything that changes what an existing file means is schema 2 and a major version.

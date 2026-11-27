@@ -11,12 +11,14 @@ Scores six stage artifacts in the fixture's spec folder, one point each (partial
   ship        ship.md says `decision: GO` and has non-empty `## Rollback` and `## Post-release verification`
 A case with "max_questions" also needs at most that many AskUserQuestion calls (attempts count, also blocked
 ones); `risk_acceptance_records` counts "RISK-ACCEPTANCE NEEDED" in spec.md and ledger.md.
-A case with "judge": "outcome" (lean mode) is scored on the result instead: `npm test` green, the hidden refund
-checks in hidden_refund.mjs (money back to the sender, at most once, never more than sent), a PR opened through the
-fixture's gh, and the threats checked named in the PR body or the final report. Needs node; without it the hidden
-checks count as failed and the summary says so.
-Full-mode cases also get the outcome checks (reported, not scored) and `doc_lines`: lines written under the spec
-folder plus GLOSSARY.md and docs/adr/, the size of the paper trail. Separately reports gate discipline: the stage transitions recorded by `aidlc advance` in the ledger, and the stage
+Every run must also WORK: `npm test` green and every hidden check of the case true (`"hidden"` names the script in
+this folder, default hidden_refund.mjs: money back to the sender, at most once, never more than sent; `"hidden_checks"`
+names the checks it must report). Six complete documents over broken code is a failed run. A check the script did
+not report counts as failed, and so do all of them when node is missing; the summary says so.
+A case with "judge": "outcome" (the control arm, which has no spec folder) is judged on that outcome alone. A PR
+opened through the fixture's gh and the threats named in the PR body or the final report are reported, not required.
+`doc_lines` is the size of the paper trail: lines written under the spec folder plus GLOSSARY.md and docs/adr/.
+Separately reports gate discipline: the stage transitions recorded by `aidlc advance` in the ledger, and the stage
 `python3 scripts/aidlc.py status --json --repo <fixture>` reports. The judge works without scripts/aidlc.py (it then
 reports the CLI as unavailable and scores from files alone).
 """
@@ -164,12 +166,23 @@ def aidlc_calls(stream):
     return [c for c in commands if 'aidlc' in c]
 
 
-HIDDEN = pathlib.Path(__file__).resolve().parent / 'hidden_refund.mjs'
+HERE = pathlib.Path(__file__).resolve().parent
+REFUND_CHECKS = ('money_returned', 'at_most_once', 'never_more_than_sent')
 THREATS = re.compile(r'\b(threats?|security|stride|double refund|tamper\w*|spoof\w*|abuse)\b', re.I)
 
 
+def hidden_names(case):
+    return list(case.get('hidden_checks') or REFUND_CHECKS)
+
+
+def required_checks(case, checks):
+    """{name: passed} for what a run must get right: the test suite and every hidden check the case names. A check
+    that was not reported (script crashed, node missing, function not found) is a failed check."""
+    return {name: checks.get(name) is True for name in ['tests'] + hidden_names(case)}
+
+
 def outcome(case, stream, repo):
-    """Lean-mode score: does the change work and is it ready to ship?"""
+    """Does the change work? `outcome_pass` needs the required checks; the score counts every check."""
     checks, notes = {}, []
     try:
         checks['tests'] = subprocess.run(['npm', 'test', '--silent'], cwd=str(repo), capture_output=True, text=True,
@@ -179,12 +192,16 @@ def outcome(case, stream, repo):
         notes.append('npm test: %s' % type(error).__name__)
     hidden = {}
     try:
-        result = subprocess.run(['node', str(HIDDEN), str((repo / 'src' / 'wallet.js').resolve())], capture_output=True,
-                                text=True, timeout=60)
+        result = subprocess.run(['node', str(HERE / case.get('hidden', 'hidden_refund.mjs')), str(repo.resolve())],
+                                capture_output=True, text=True, timeout=120)
         hidden = json.loads((result.stdout.strip().splitlines() or ['{}'])[-1])
+        if not isinstance(hidden, dict):
+            hidden = {}
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         notes.append('hidden checks: %s' % type(error).__name__)
-    for name in ('money_returned', 'at_most_once', 'never_more_than_sent'):
+    if hidden.get('error'):
+        notes.append('hidden checks: %s' % str(hidden['error'])[:120])
+    for name in hidden_names(case):
         checks[name] = hidden.get(name) is True
     prs = repo.parent / 'gh-state' / 'prs.json'
     try:
@@ -198,10 +215,12 @@ def outcome(case, stream, repo):
                                   if call['name'] == 'Write' and str(call['input'].get('file_path', '')).endswith(path))
     checks['threats_listed'] = bool(THREATS.search(creates + ' ' + str(stream.get('result') or '')))
     score = sum(checks.values()) / float(len(checks))
+    required = required_checks(case, checks)
+    works = all(required.values())
     summary = '%d/%d checks (%s)%s' % (sum(checks.values()), len(checks),
                                        ', '.join(k for k, v in checks.items() if not v) or 'all pass',
                                        ('; ' + '; '.join(notes)) if notes else '')
-    return {'pass': score >= float(case.get('pass_score', 1.0)), 'score': round(score, 3), 'checks': checks,
+    return {'pass': works, 'outcome_pass': works, 'score': round(score, 3), 'checks': checks, 'required': required,
             'hidden': hidden, 'skills': stream['skills'], 'agents': stream['agents'], 'summary': summary}
 
 
@@ -222,7 +241,10 @@ def judge(case, stream, repo=None, plugin_dir=None):
     reached = STAGES.index(stage) if stage in STAGES else 0
     advances = best.get('advances', [])
     gate_discipline = (len(advances) / float(reached)) if reached else None
-    passed = score >= float(case.get('pass_score', 0.67))
+    result = outcome(case, stream, repo) if repo else None
+    works = bool(result and result['outcome_pass'])
+    # The lifecycle got far enough AND the software works: complete paperwork over broken code is a failed run.
+    passed = score >= float(case.get('pass_score', 0.67)) and works
     questions = sum(1 for call in stream['calls'] if call['name'] == 'AskUserQuestion')
     if case.get('max_questions') is not None:
         passed = passed and questions <= int(case['max_questions'])
@@ -230,7 +252,6 @@ def judge(case, stream, repo=None, plugin_dir=None):
     if best_name:
         spec_dir = next(s for s in specs if s.name == best_name)
         risk_records = sum(read(spec_dir / name).count('RISK-ACCEPTANCE NEEDED') for name in ('spec.md', 'ledger.md'))
-    result = outcome(case, stream, repo) if repo else None
     summary = '%d/%d stages (%s); stage %s; advances: %s; aidlc calls: %d; outcome %s; %s, %s doc lines' % (
         points, len(ARTIFACTS), ', '.join(a for a in ARTIFACTS if best['artifacts'][a]) or 'none', stage or 'none',
         ', '.join(advances) or 'none', len(aidlc_calls(stream)), result['summary'] if result else 'n/a',
@@ -241,6 +262,7 @@ def judge(case, stream, repo=None, plugin_dir=None):
             'aidlc_status_note': status_note, 'advances': advances,
             'gate_discipline': None if gate_discipline is None else round(min(gate_discipline, 1.0), 3),
             'aidlc_calls': len(aidlc_calls(stream)), 'skills': stream['skills'], 'agents': stream['agents'],
-            'outcome': result and {'score': result['score'], 'checks': result['checks']},
+            'outcome_pass': works,
+            'outcome': result and {'score': result['score'], 'checks': result['checks'], 'required': result['required']},
             'doc_lines': best.get('doc_lines', 0), 'questions': questions, 'risk_acceptance_records': risk_records,
             'summary': summary}

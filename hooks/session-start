@@ -37,7 +37,7 @@ try:
             content = handle.read(LIMIT + 1)
         if len(content) > LIMIT:
             omit('the local 48 KiB input budget was exceeded')
-            payload['hookSpecificOutput']['additionalContext'] = '[TRUNCATED: bootstrap omitted in full. Load session-bootstrap via Skill if needed.]'
+            payload['hookSpecificOutput']['additionalContext'] = '[TRUNCATED: bootstrap omitted in full. Read skills/session-bootstrap/SKILL.md in the plugin folder if needed.]'
         else:
             text = content.decode('utf-8')
             # Hook-injected text is not substituted by Claude Code; resolve the plugin root here.
@@ -56,9 +56,8 @@ try:
         autopilot.prune_state()
         lines, user_message = autopilot.snapshot(cwd or os.getcwd())
         if lines:
-            payload['hookSpecificOutput']['additionalContext'] += (
-                '\n<AegisOps-Harness>\nProject state at session start:\n- ' + '\n- '.join(lines[:10])
-                + '\n</aegisops-harness>')
+            payload['hookSpecificOutput']['additionalContext'] += '\n' + autopilot.wrap(
+                'Project state at session start:\n- ' + '\n- '.join(lines[:10]))
         if user_message:
             messages.append(user_message)
 except Exception:
@@ -68,7 +67,7 @@ if messages:
     payload['systemMessage'] = ' '.join(messages)
 encoded = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
 if len((encoded + '\n').encode('utf-8')) > LIMIT:
-    payload['hookSpecificOutput']['additionalContext'] = '[TRUNCATED: bootstrap omitted in full because serialized JSON exceeds the local 48 KiB budget. Load session-bootstrap via Skill if needed.]'
+    payload['hookSpecificOutput']['additionalContext'] = '[TRUNCATED: bootstrap omitted in full because serialized JSON exceeds the local 48 KiB budget. Read skills/session-bootstrap/SKILL.md in the plugin folder if needed.]'
     payload['systemMessage'] = 'Bootstrap omitted: the local serialized-output budget was exceeded.'
     encoded = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
 print(encoded)

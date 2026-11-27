@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for Bash: a PR merge (`gh pr merge`, `scripts/pr.py merge`, a Bitbucket API merge) waits until the branch's spec has passed the `shipped` gate.
+"""PreToolUse gate: a PR merge waits until the branch's spec has passed the `shipped` gate.
+
+A merge is read from the command (hooks/invocations.py): `gh pr merge`, `gh api -X PUT …/pulls/N/merge`,
+`scripts/pr.py merge`, a curl call to GitHub's or Bitbucket's merge endpoint; and from the tool: a GitHub MCP
+`merge_pull_request` or `enable_pr_auto_merge` (hooks.json routes them here), which is how a cloud session merges.
+A direct push to the default branch is not a PR merge and is not seen: that is branch protection's job.
 
 A full-workflow change is bound to its branch by `aidlc advance <spec> building` (README `branch:`). The gate:
 - evaluates the spec as it is on the branch being merged: the current checkout when that branch is checked out,
   otherwise a temporary detached worktree of the PR head (or the branch);
 - re-checks specs already at `shipped` (code may have changed since), and refuses the branch of an abandoned spec;
-- refuses a PR whose head is not the commit checked locally, and a PR named through a variable.
+- refuses a PR whose head is not the commit checked locally, and a PR named through a variable;
+- a PR number that cannot be resolved to its branch (no gh, as in a cloud session) is judged by the checked-out branch.
 Branches with no bound spec (fast path, chores) are not gated. Blocks only on real findings; an infrastructure error
 (gh unavailable, engine unreadable, branch not fetched) lets the merge through with a note. Off with
 AEGISOPS_HARNESS_SHIP_GATE=off. Spec: references/aidlc.md.
@@ -135,6 +141,34 @@ def deny(lines):
     return 2
 
 
+MCP_MERGE = re.compile(r'mcp__.+__(merge_pull_request|enable_pr_auto_merge)')
+
+
+def merge_of(payload):
+    """(True, target) when this tool call merges a pull request: read from the command, with the 5.0.0 text match on
+    the unquoted text as the floor (a mention inside a string or a written file merges nothing), or from a GitHub MCP
+    merge tool. target: PR number, URL or branch; None = the current branch; '$' = cannot be known."""
+    tool, tool_input = str(payload.get('tool_name')), payload.get('tool_input') or {}
+    if MCP_MERGE.fullmatch(tool):
+        number = next((tool_input[key] for key in ('pullNumber', 'pull_number', 'number') if tool_input.get(key)), None)
+        return True, '$' if number is None else str(number)
+    if tool != 'Bash':
+        return False, None
+    text = str(tool_input.get('command', ''))
+    try:
+        spec = importlib.util.spec_from_file_location('aegisops_harness_invocations',
+                                                      pathlib.Path(__file__).with_name('invocations.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        merging, target = module.merges_pull_request(text)
+        if merging:
+            return (True, '*') if len(module.merge_targets(text)) > 1 else (True, target)
+        text = module.unquoted(text)
+    except Exception:  # the parser itself failed: the whole text is the floor
+        pass
+    return (True, merge_target(text)) if MERGE.search(text) else (False, None)
+
+
 def main():
     if os.environ.get('AEGISOPS_HARNESS_SHIP_GATE', '').lower() == 'off':
         return 0
@@ -142,24 +176,28 @@ def main():
         payload = json.load(sys.stdin)
     except ValueError:
         return 0
-    command = str((payload.get('tool_input') or {}).get('command', '')) if payload.get('tool_name') == 'Bash' else ''
-    if not MERGE.search(command):
+    merging, target = merge_of(payload)
+    if not merging:
         return 0
     cwd = payload.get('cwd') or None
     top = run(['git', 'rev-parse', '--show-toplevel'], cwd)
     if not top:
         return 0
-    target = merge_target(command)
+    if target == '*':
+        return deny(['ship-gate: this command merges more than one pull request, and the gate checks one at a time. '
+                     'Run one merge per command.'])
     if target == '$':
         return deny(['ship-gate: the merge command names its PR through a variable or command substitution, so the gate '
                      'cannot check which change ships. Run it with a literal PR number or branch.'])
     current = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], top)
-    oid = None
+    oid, unresolved = None, False
     if target is None:
         branch = current
         _, oid = pr_head(current, top) if current else (None, None)
     elif PR_REF.fullmatch(target):
         branch, oid = pr_head(target, top)
+        if not branch:  # no gh, or not signed in: the session is normally on the branch it merges
+            branch, unresolved = current, True
     else:
         branch = target
         _, oid = pr_head(target, top)
@@ -186,6 +224,9 @@ def main():
         return 0
     cli = f'python3 "{PLUGIN_ROOT}/scripts/aidlc.py"'
     lines = [f'ship-gate: branch {branch} carries a spec that has not passed the `shipped` gate:']
+    if unresolved:
+        lines.insert(0, f'ship-gate: pull request {target} could not be resolved to its branch (no gh here, or not '
+                        f'signed in); judged by the checked-out branch {branch}.')
     for rel, stage, findings in problems:
         lines.append(f'  {rel} (stage {stage}):')
         lines.extend(f'    - {finding}' for finding in findings[:8])

@@ -8,14 +8,19 @@ CLI: python3 scripts/aidlc.py <command> [--json] [--repo DIR]   exit 0 pass, 1 g
                                            abandoned (--reason), superseded (README superseded_by:), partially-implemented
   next SPEC                                ready tasks in conflict-free parallel batches
   task-done SPEC T<n> [--cmd CMD]          run CMD (default: the task's `test:` field); on exit 0 tick it and log it
-  verify SPEC --cmd CMD [--junit GLOB]     run the tests; log exit code, code fingerprint and JUnit totals
+  verify SPEC                              run the command pinned in .aidlc.json (revert check first); log exit code,
+                                           code fingerprint and JUnit totals. --cmd/--junit only if equal to the pin
+  approve SPEC [--by NAME] [--delegated]   log the SHA-256 of spec.md as approved (a person's act; see hooks/evidence-guard.py)
+  attest SPEC --agent A --axis AXIS [--file F]  store a review done elsewhere in <spec>/returns/
+  config init|show                         write .aidlc.json (never overwrites) / show the config the gates use
+  ci [--base REF] [--branch B] [--require reviewed|verified|none]  recompute the evidence on the checked-out head
   ruling SPEC --decision T --why T --if-wrong T [--task T<n>]
   stamp SPEC review                        write the code fingerprint into review.md and log it
   trace SPEC [--write]                     requirement -> tasks -> tests -> result; --write fills README ## Traceability
   init SPEC --key KEY                      create the spec folder with skeletons
   lint FILE [--key KEY] [--no-security]    check a standalone spec.md (a drafted prompt) against the spec rules
 SPEC is a folder path (contains '/') or a slug found under any docs/specs/ folder (init: <repo>/docs/specs/<slug>).
---repo may be any folder of the repository (normalized to the git top level). task-done and verify accept
+--repo may be any folder of the repository (normalized to the git top level). task-done, verify and ci accept
 --timeout SECONDS (default 1800). JSON: `exit` is always the CLI exit code; `command_exit` is the run command's.
 Writers of tickets.md (or plan.md), README.md and ledger.md hold an exclusive flock on the spec folder (no-op without fcntl).
 
@@ -115,6 +120,16 @@ FINDING = re.compile(r'^([A-Z]+\d+)\b\s*(?:\(([^)]*)\))?\s*:?\s*(.*)$')
 GH_STATES = ('pass', 'fail', 'pending', 'skipping', 'cancel')
 TAIL_BYTES = 2048
 DEFAULT_TIMEOUT = 1800
+CONFIG_NAME = '.aidlc.json'  # the repository config: pins the verify command (parse_config)
+REVERT_MARKER = 'aidlc-revert-check.json'  # in the git dir while a revert check has production files rewritten
+RETURNS = 'returns'  # folder in a spec folder: what each review-stage reviewer returned, verbatim (record_return)
+RETURNED_FINDING = re.compile(r'^\s*[-*+]\s+(?:\[[ xX]\]\s+)?[*_`]*([SQ]\d+)\b[*_`]*\s*(?:\(([^)]*)\))?')
+VERDICT = re.compile(r'^\s*(?:[-*+]\s+)?[*_]*verdict[*_]*\s*:[*_]*\s*(.*)$', re.I)
+SCHEMA = 1  # of the repository config and the spec README; a file written for a newer schema is refused
+WAIVER = re.compile(r'^none\b' + DASH + r'(.*)$', re.I)
+NO_CONFIG = ('no pinned verify command: {name} is on neither the default branch nor this branch. The command that '
+             'counts as gate evidence is not the session\'s to choose: a person adds the file (aidlc config init '
+             '--cmd "<full test suite>" --junit "<report glob>" writes it) and merges it to the default branch')
 
 
 class UsageError(Exception):
@@ -131,6 +146,21 @@ def warn(message):
 
 def failed(findings):
     return any(level == 'FAIL' for level, _ in findings)
+
+
+def earlier(findings):
+    """The findings of an earlier gate as a later gate carries them: every gate re-checks the gates before it, so a
+    stage that was set by hand, or evidence that went stale, grants nothing. The earlier gate's OK line is dropped."""
+    return [finding for finding in findings if finding[0] != 'OK']
+
+
+def unique(findings):
+    seen, kept = set(), []
+    for finding in findings:
+        if finding not in seen:
+            seen.add(finding)
+            kept.append(finding)
+    return kept
 
 
 def today():
@@ -573,9 +603,30 @@ def _event(kind, rest):
         data = _kv(match.group(3))
         return {'from': match.group(1), 'to': match.group(2), 'back': bool(re.match(r'back\b', match.group(3))),
                 'reason': data.get('reason')}, None
+    head = rest.split(None, 1)
+    if kind == 'revert-check':
+        skipped = bool(head) and head[0] == 'skipped'
+        data = _kv((head[1] if len(head) > 1 else '') if skipped else rest)
+        event = {'skipped': skipped, 'reason': data.get('reason'), 'base': data.get('base', ''),
+                 'files': data.get('files'), 'junit': data.get('junit'),
+                 'still_green': [x for x in str(data.get('still_green', '')).split(',') if x],
+                 'fingerprint': str(data.get('fingerprint', '')).rstrip('…')}
+        if not re.match(r'^[0-9a-f]+$', event['fingerprint']):
+            return None, fail('revert-check needs fingerprint=<hex>')
+        if not skipped:
+            try:
+                event['exit'] = int(data.get('exit'))
+            except (TypeError, ValueError):
+                return None, fail('revert-check needs exit=<code>')
+        return event, None
+    if kind == 'approve':
+        data = _kv(rest)
+        event = {'spec': str(data.get('spec', '')), 'by': str(data.get('by', '')), 'how': str(data.get('how', ''))}
+        if not re.match(r'^[0-9a-f]{64}$', event['spec']) or event['how'] not in ('approved', 'delegated'):
+            return None, fail('approve needs spec=<sha256> by="<name>" how=approved|delegated')
+        return event, None
     if kind not in ('task-done', 'verify', 'stamp'):
         return {'text': rest}, warn(f'unknown ledger event {kind!r}')
-    head = rest.split(None, 1)
     event = {}
     if kind == 'task-done':
         if not head or not TASK_ID.match(head[0]):
@@ -631,6 +682,115 @@ def parse_review(text, label):
                     'severity': (match.group(2) or '').strip().lower() if match else '', 'text': box.group(3).strip(),
                     'line': i + 1})
     return review, problems
+
+
+def verdict_kind(text):
+    """NO-GO | CONDITIONAL GO | GO, or None when the text is none of them."""
+    for kind in ('NO-GO', 'CONDITIONAL GO', 'GO'):
+        if re.match(r'^' + re.escape(kind) + r'\b', (text or '').strip(), re.I):
+            return kind
+    return None
+
+
+def parse_return(text, label):
+    """(return, findings) for one stored reviewer return: frontmatter (agent, axis, fingerprint, sha256, recorded) and
+    the reviewer's words. `findings`: (ID, severity) of every S<n>/Q<n> line; `verdict`: the first Verdict: line."""
+    meta, start = parse_frontmatter(text)
+    body = '\n'.join(text.split('\n')[start:])
+    item = {'agent': (meta or {}).get('agent', ''), 'axis': (meta or {}).get('axis', ''),
+            'fingerprint': (meta or {}).get('fingerprint', ''), 'recorded': (meta or {}).get('recorded', ''),
+            'label': label, 'findings': [], 'verdict': None}
+    problems = []
+    if meta is None or item['axis'] not in ('spec', 'standards', 'both', 'qa'):
+        return item, [fail(f'{label}: not a stored reviewer return (frontmatter with agent, axis, sha256)')]
+    if hashlib.sha256(body.encode('utf-8')).hexdigest() != meta.get('sha256'):
+        problems.append(fail(f'{label}: was changed after it was recorded (the text no longer matches its sha256): '
+                             'a return is the reviewer\'s account, not the implementer\'s'))
+    for line in body.split('\n'):
+        found = RETURNED_FINDING.match(line)
+        if found:
+            item['findings'].append((found.group(1), (found.group(2) or '').strip().lower()))
+        verdict = VERDICT.match(line)
+        if verdict and item['verdict'] is None:
+            item['verdict'] = re.sub(r'\*\*|__|`', '', verdict.group(1)).strip()  # emphasis is not part of the verdict
+    return item, problems
+
+
+def record_return(spec_dir, agent, axis, text):
+    """Store what a reviewer returned, verbatim, as its own file in <spec>/returns/. (path, True) when written,
+    (path, False) when the same text is already stored. Called by hooks/record-returns.py and `aidlc attest`."""
+    spec = Spec(spec_dir)
+    body = text.replace('\r\n', '\n').strip('\n') + '\n'
+    digest = hashlib.sha256(body.encode('utf-8')).hexdigest()
+    folder = spec.dir / RETURNS
+    with spec_lock(spec.dir):
+        folder.mkdir(exist_ok=True)
+        existing = sorted(folder.glob('*.md'))
+        for path in existing:
+            meta, _ = parse_frontmatter(path.read_text(encoding='utf-8', errors='replace'))
+            if meta and meta.get('sha256') == digest:
+                return path, False
+        now = datetime.datetime.now(datetime.timezone.utc)
+        name = '%s-%02d-%s-%s.md' % (now.strftime('%Y%m%dT%H%M%SZ'), len(existing) + 1,
+                                     re.sub(r'[^a-z0-9-]', '-', str(agent).split(':')[-1].lower()), axis)
+        header = (f'---\nagent: {agent}\naxis: {axis}\nfingerprint: {spec.repo.fingerprint}\nsha256: {digest}\n'
+                  f'recorded: {now.strftime("%Y-%m-%dT%H:%M:%SZ")}\n---\n')
+        write_atomic(folder / name, header + body)
+    return folder / name, True
+
+
+def returns_findings(spec, review, qa_waived):
+    """review.md rests on what the reviewers returned: both axes and QA covered, every returned finding present with
+    the severity it was given, the QA verdict the one QA gave last."""
+    config = spec.config or {}
+    if config.get('returns_waiver'):
+        return [warn(f'reviewer returns are waived in {config["label"]} ({config["returns_waiver"]}): review.md is the '
+                     'session\'s own account of the review')]
+    returns, findings = spec.returns
+    folder = spec.label(RETURNS)
+    if not returns:
+        return findings + [fail(
+            f'{folder}/: no reviewer return is stored, so review.md rests on nothing. Dispatch '
+            'aegisops-harness:code-reviewer (AXIS: spec and AXIS: standards) and aegisops-harness:qa-subagent in the '
+            'foreground: the plugin stores what each returns (a person can store one with `aidlc attest`). A '
+            f'repository that reviews another way says so in {CONFIG_NAME}: "review": {{"returns": "none — <reason>"}}')]
+    covered = set()
+    for item in returns:
+        covered |= {'spec', 'standards'} if item['axis'] == 'both' else {item['axis']}
+    findings += [fail(f'{folder}/: no stored return covers the {axis} axis') for axis in ('spec', 'standards')
+                 if axis not in covered]
+    if not qa_waived and 'qa' not in covered:
+        findings.append(fail(f'{folder}/: no stored return from the QA agent'))
+    mine = {item['id']: item for item in review['findings'] if item['id']}
+    for item in returns:
+        for finding, severity in item['findings']:
+            kept = mine.get(finding)
+            if kept is None:
+                findings.append(fail(f'{item["label"]}: {finding}{" (" + severity + ")" if severity else ""} was '
+                                     f'returned by {item["agent"]} and is not in review.md (a finding is closed with '
+                                     '"fixed:" or "cleared:", never left out)'))
+            elif severity and not kept['severity']:
+                findings.append(fail(f'{spec.label("review.md")}:{kept["line"]}: {finding} has no severity here but was '
+                                     f'returned as ({severity}) by {item["agent"]}: a finding is closed with its severity'))
+            elif severity and kept['severity'] != severity:
+                findings.append(fail(f'{spec.label("review.md")}:{kept["line"]}: {finding} is ({kept["severity"]}) here '
+                                     f'but was returned as ({severity}) by {item["agent"]}'))
+    latest = next((item for item in reversed(returns) if item['axis'] == 'qa'), None)
+    if latest and not qa_waived:
+        kind = verdict_kind(latest['verdict'])
+        if not kind:
+            findings.append(fail(f'{folder}/: the latest QA return has no verdict the gate can read ({latest["label"]}): '
+                                 'a line "Verdict: GO", "Verdict: CONDITIONAL GO — <conditions>" or "Verdict: NO-GO — '
+                                 '<reason>" (ask the QA agent again; an unreadable verdict is not a pass)'))
+        elif verdict_kind(review['qa']) != kind:
+            findings.append(fail(f'{spec.label("review.md")}: the QA verdict here is {verdict_kind(review["qa"]) or "missing"}; '
+                                 f'the latest QA return says {kind} ({latest["label"]}). Only a new return from the QA '
+                                 'agent changes it'))
+    if review['fingerprint'] and not any(fp_matches(review['fingerprint'], item['fingerprint']) or
+                                         fp_matches(item['fingerprint'], review['fingerprint']) for item in returns):
+        findings.append(warn(f'{spec.label("review.md")}: code changed after the last reviewer return: what was stamped '
+                             'is not exactly what a reviewer read (the fixes made after the re-review)'))
+    return findings
 
 
 def review_findings(review, label, qa_waived=False):
@@ -697,6 +857,133 @@ def ship_findings(ship, label):
         if not ship['sections'].get(title.lower()):
             findings.append(fail(f'{label}: "## {title}" is missing or empty'))
     return findings
+
+
+def _switch(value, name, label, findings):
+    """The reason of a `none — <reason>` waiver, or None for `required` (the default)."""
+    if value is None or (isinstance(value, str) and value.strip().lower() == 'required'):
+        return None
+    waiver = WAIVER.match(value.strip()) if isinstance(value, str) else None
+    if not waiver:
+        findings.append(fail(f'{label}: {name} must be "required" or "none — <reason>"'))
+    elif not waiver.group(1).strip():
+        findings.append(fail(f'{label}: {name}: "none" needs a reason ("none — <reason>")'))
+    else:
+        return waiver.group(1).strip()
+    return None
+
+
+def parse_config(text, label):
+    """(config, findings) for the repository config, schema 1:
+
+      {"schema": 1,
+       "verify": {"cmd": "<the full test suite>",
+                  "junit": "<glob of the reports it writes>" | "none — <reason>",
+                  "revert_check": true},                          optional, default true
+       "ci": "required" | "none — <reason>",                      optional, default required
+       "review": {"returns": "required" | "none — <reason>"}}     optional, default required
+
+    config: cmd, junit (glob or None), junit_waiver, revert_check, ci_waiver, returns_waiver. Waivers hold the reason."""
+    try:
+        data = json.loads(text)
+    except ValueError as err:
+        return {}, [fail(f'{label}: not valid JSON ({err})')]
+    if not isinstance(data, dict):
+        return {}, [fail(f'{label}: must be a JSON object')]
+    findings = []
+    schema = data.get('schema')
+    if not isinstance(schema, int) or isinstance(schema, bool) or schema < 1:
+        findings.append(fail(f'{label}: "schema": {SCHEMA} is required'))
+    elif schema > SCHEMA:
+        findings.append(fail(f'{label}: schema {schema} is newer than this plugin reads ({SCHEMA}): update the plugin'))
+    verify = data.get('verify')
+    if not isinstance(verify, dict):
+        verify = {}
+    cmd = verify.get('cmd')
+    if not isinstance(cmd, str) or not cmd.strip():
+        findings.append(fail(f'{label}: "verify.cmd" must be the command that runs the full test suite'))
+        cmd = ''
+    junit, glob, junit_waiver = verify.get('junit'), None, None
+    if not isinstance(junit, str) or not junit.strip():
+        findings.append(fail(f'{label}: "verify.junit" must be the glob of the JUnit reports the command writes, or '
+                             '"none — <reason>"'))
+    else:
+        waiver = WAIVER.match(junit.strip())
+        if waiver and not waiver.group(1).strip():
+            findings.append(fail(f'{label}: "verify.junit": "none" needs a reason ("none — <reason>")'))
+        elif waiver:
+            junit_waiver = waiver.group(1).strip()
+        else:
+            glob = junit.strip()
+    revert = verify.get('revert_check', True)
+    if not isinstance(revert, bool):
+        findings.append(fail(f'{label}: "verify.revert_check" must be true or false'))
+        revert = True
+    review = data.get('review', {})
+    if not isinstance(review, dict):
+        findings.append(fail(f'{label}: "review" must be an object'))
+        review = {}
+    return {'cmd': cmd.strip(), 'junit': glob, 'junit_waiver': junit_waiver, 'revert_check': revert,
+            'ci_waiver': _switch(data.get('ci'), '"ci"', label, findings),
+            'returns_waiver': _switch(review.get('returns'), '"review.returns"', label, findings)}, findings
+
+
+def _canonical(text):
+    try:
+        return json.dumps(json.loads(text), sort_keys=True)
+    except ValueError:
+        return text.strip()
+
+
+def load_config(repo, folders):
+    """The repository config for the first of `folders` that has one, or None.
+
+    The gates read it from the trusted ref (the default branch; `--base` in CI): the command that verifies a branch
+    is not the branch's to choose. A config that exists only on this branch is `onboarding` (trust on first use, with
+    a warning a person is meant to read). Adds: source ('base' | 'onboarding'), ref, dir (where the command runs),
+    label, findings."""
+    trusted = repo.trusted_ref
+    found = []
+    for folder in folders:
+        rel = repo.rel(folder / CONFIG_NAME)
+        base = repo.show(trusted, rel) if trusted else None
+        local, _ = read_text(folder / CONFIG_NAME, rel)
+        if base is not None or local is not None:
+            found.append((folder, rel, base, local))
+    if not found:
+        return None
+    # A config that is on the trusted ref wins, wherever it is: a branch that adds a nearer one (a service folder)
+    # does not choose its own command. Onboarding is for a repository that has none there.
+    first = next((item for item in found if item[2] is not None), found[0])
+    folder, rel, base, local = first
+    ignored = [item[1] for item in found if item[2] is None and first[2] is not None]
+    if base is not None:
+        text = base.decode('utf-8', 'replace').replace('\r\n', '\n')
+        config, findings = parse_config(text, f'{rel} on {trusted}')
+        if local is None:
+            findings.append(warn(f'{rel} is missing here: the gates use the version on {trusted}'))
+        elif _canonical(local) != _canonical(text):
+            findings.append(warn(f'{rel} differs from {trusted}: the gates use the version on {trusted} until this '
+                                 'change is merged (a branch does not choose the command that verifies it)'))
+        findings += [warn(f'{name} exists only on this branch and is ignored: the gates use {rel} on {trusted}')
+                     for name in ignored]
+        source = 'base'
+    else:
+        config, findings = parse_config(local, rel)
+        where = f'not on {trusted} yet' if trusted else 'no default branch was found to read it from'
+        findings.append(warn(f'onboarding: {rel} exists only on this branch ({where}). A person must read it '
+                             'before the merge: it names the command every later gate trusts'))
+        if not trusted and repo.has_origin():
+            findings.append(fail('the default branch of origin was not found (no origin/HEAD, and no main, master or '
+                                 'init.defaultBranch there): run `git remote set-head origin -a` so that the config '
+                                 'is read from it, not from this branch'))
+        source = 'onboarding'
+    config.update(source=source, ref=trusted, dir=folder, label=rel, findings=findings)
+    return config
+
+
+def same_command(a, b):
+    return ' '.join(str(a).split()) == ' '.join(str(b).split())
 
 
 def says_green(value):
@@ -893,11 +1180,14 @@ def _digest(entries):
 class Repo:
     """A repository root with cached file listing, fingerprint and test-file contents.
 
-    fast=True (status for the session-start snapshot) skips gh and the contract gate; only cheap git runs."""
+    fast=True (status for the session-start snapshot) skips gh and the contract gate; only cheap git runs.
+    base: the ref the repository config is read from and the branch is compared with (CI passes the PR's base ref);
+    default: the default branch."""
 
-    def __init__(self, root, fast=False):
+    def __init__(self, root, fast=False, base=None):
         self.root = pathlib.Path(root).resolve()
         self.fast = fast
+        self.base = base
 
     def git(self, *args, stdin=None):
         try:
@@ -1033,6 +1323,39 @@ class Repo:
         return {'main', 'master'} | extra
 
     @cached_property
+    def trusted_ref(self):
+        """`base` when given, else the default branch as the remote has it (a session can commit to its local default
+        branch, not move the remote's without a push), else the local one. None outside git or when none resolves."""
+        if not self.is_git:
+            return None
+        names = [self.base] if self.base else [ref for name in sorted(self.default_branches())
+                                               for ref in (f'origin/{name}', name)]
+        for ref in names:
+            if not ref or str(ref).startswith('-'):
+                continue
+            found = self.git('rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}')
+            if found is None or found.returncode != 0:
+                continue
+            if str(ref).startswith('origin/'):  # a tag or a local branch named `origin/x` would shadow the short name
+                full = self.git('rev-parse', '--verify', '--quiet', f'refs/remotes/{ref}^{{commit}}')
+                if full is None or full.returncode != 0 or full.stdout.strip() != found.stdout.strip():
+                    continue
+            return ref
+        return None
+
+    def has_origin(self):
+        remotes = self.git('remote')
+        return remotes is not None and remotes.returncode == 0 and 'origin' in remotes.stdout.split()
+
+    def show(self, ref, rel):
+        """The bytes of `rel` at `ref`, or None when it is not there."""
+        try:
+            result = subprocess.run(['git', 'show', f'{ref}:{rel}'], cwd=self.root, capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result.stdout if result.returncode == 0 else None
+
+    @cached_property
     def spec_dirs_cached(self):
         dirs = {(self.root / rel).parent for rel in self.files if SPEC_README.search(rel)}
         return sorted((d for d in dirs if (d / 'README.md').is_file()), key=lambda d: self.rel(d))
@@ -1049,6 +1372,7 @@ class Spec:
         self.dir = pathlib.Path(path).resolve()
         self.repo = repo if repo is not None else Repo(repo_root(self.dir))
         self.slug = self.dir.name
+        self.fresh = {}  # {kind: event} produced by this run (`aidlc ci`); read instead of the ledger's line
 
     def label(self, name):
         return self.repo.rel(self.dir / name)
@@ -1075,10 +1399,18 @@ class Spec:
         meta, _ = parse_frontmatter(text)
         if meta is None:
             return {}, text, [fail(f'{label}:1: no frontmatter (--- block with status:, key:, …)')]
+        findings = []
         status = meta.get('status') or 'proposed'
         if status not in STAGES + SIDE:
-            return meta, text, [fail(f'{label}: status: {status} is not an AIDLC stage')]
-        return meta, text, []
+            findings.append(fail(f'{label}: status: {status} is not an AIDLC stage'))
+        schema = meta.get('schema')
+        if schema not in (None, ''):  # absent: schema 1, what every spec before the field looked like
+            if not str(schema).isdigit() or int(schema) < 1:
+                findings.append(fail(f'{label}: schema: {schema!r} is not a version number'))
+            elif int(schema) > SCHEMA:
+                findings.append(fail(f'{label}: schema {schema} is newer than this plugin reads ({SCHEMA}): update the '
+                                     'plugin before working on this spec'))
+        return meta, text, findings
 
     @property
     def meta(self):
@@ -1147,8 +1479,37 @@ class Spec:
     def ship(self):
         return self._parse('ship.md', parse_ship)
 
+    @cached_property
+    def returns(self):
+        """(stored reviewer returns in the order they were recorded, findings)."""
+        items, findings = [], []
+        for path in sorted((self.dir / RETURNS).glob('*.md')) if (self.dir / RETURNS).is_dir() else []:
+            item, problems = self._parse(f'{RETURNS}/{path.name}', parse_return)
+            findings += problems
+            if item is not None:
+                items.append(item)
+        return items, findings
+
+    @property
+    def service(self):
+        """The folder that holds this spec's `docs/specs/` (a service root in a monorepo, else the repository)."""
+        nested = self.dir.parent.name == 'specs' and self.dir.parent.parent.name == 'docs'
+        return self.dir.parents[2] if nested else self.repo.root
+
+    @cached_property
+    def config(self):
+        """The repository config that applies to this spec (load_config), the service's own before the root's."""
+        folders = [self.service] if self.repo.root in self.service.parents else []
+        return load_config(self.repo, folders + [self.repo.root])
+
     def last(self, kind):
+        if kind in self.fresh:
+            return self.fresh[kind]
         return next((e for e in reversed(self.ledger[0]) if e['kind'] == kind), None)
+
+    def at(self, event):
+        """Where a finding about `event` points: its ledger line, or this run."""
+        return 'this run' if event.get('fresh') else f'{self.label("ledger.md")}:{event["line"]}'
 
 
 def fp_matches(recorded, current):
@@ -1195,11 +1556,41 @@ def gate_accepted(spec):
     return findings + _accepted_by(spec)
 
 
+def spec_digest(spec):
+    """SHA-256 of the text a person approves: spec.md (requirements.md for a legacy spec), line ends normalised."""
+    text, _ = read_text(spec.dir / spec.spec_name, spec.label(spec.spec_name))
+    return None if text is None else hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def approval(spec):
+    """The approval in force: the latest `approve` event that no later move back to `proposed` has voided."""
+    found = None
+    for event in spec.ledger[0]:
+        if event['kind'] == 'approve':
+            found = event
+        elif event['kind'] == 'advance' and event.get('back') and event.get('to') == 'proposed':
+            found = None
+    return found
+
+
 def _accepted_by(spec):
+    """Somebody approved this spec text. `accepted_by:` names them; the `approve` event carries the hash of what
+    they approved, so an edit after the approval (a story added during the build) needs a new one."""
+    findings = []
     accepted_by = spec.meta.get('accepted_by', '')
     if not accepted_by or re.search(r'<[^>]*>', accepted_by):
-        return [fail(f'{spec.label("README.md")}: accepted_by: is not set (record who approved the spec, and when)')]
-    return []
+        findings.append(fail(f'{spec.label("README.md")}: accepted_by: is not set (aidlc approve records who approved '
+                             'the spec, and when)'))
+    event, digest = approval(spec), spec_digest(spec)
+    if event is None:
+        findings.append(fail(f'{spec.label("ledger.md")}: no approval of this spec is recorded: a person approves it '
+                             f'(/aegisops-harness:approve {spec.slug}, or `aidlc approve {spec.slug}` from their own '
+                             'terminal); `aidlc approve --delegated` when the request handed the decisions over'))
+    elif digest is not None and event['spec'] != digest:
+        findings.append(fail(f'{spec.label(spec.spec_name)} changed after it was approved (approved {short(event["spec"])}'
+                             f', now {short(digest)}): what is built must be what was approved, so it needs a new '
+                             'approval'))
+    return findings
 
 
 def _security(spec):
@@ -1223,13 +1614,13 @@ def _security(spec):
 
 
 def gate_planned(spec):
-    reqs, findings = spec.requirements
+    reqs = spec.requirements[0]
     tasks, problems = spec.tasks
-    findings = findings + problems
+    findings = earlier(gate_accepted(spec)) + problems
     if tasks is None:
-        return findings + (spec.missing(spec.plan_name) if not problems else [])
+        return unique(findings + (spec.missing(spec.plan_name) if not problems else []))
     ids = [r['id'] for r in reqs if r['verify'] != 'none'] if reqs is not None else None
-    return findings + plan_findings(tasks, ids, spec.label(spec.plan_name))
+    return unique(findings + plan_findings(tasks, ids, spec.label(spec.plan_name)))
 
 
 def gate_building(spec):
@@ -1245,7 +1636,7 @@ def gate_building(spec):
 
 
 def gate_verified(spec):
-    findings = [f for f in gate_planned(spec) if f[0] != 'OK']
+    findings = earlier(gate_planned(spec))
     tasks = spec.tasks[0] or []
     events, problems = spec.ledger
     findings += problems
@@ -1261,7 +1652,7 @@ def gate_verified(spec):
         if req['verify'] == 'test' and not spec.repo.tests_referencing(req['id']):
             findings.append(fail(f'{spec.label(spec.spec_name)}:{req["line"]}: {req["id"]} (Verify: test) is not '
                                  'referenced by any test file'))
-    return findings + _verify_findings(spec)
+    return unique(findings + _verify_findings(spec) + _revert_findings(spec))
 
 
 def _open_criteria(spec, task):
@@ -1270,11 +1661,20 @@ def _open_criteria(spec, task):
 
 
 def _verify_findings(spec):
-    """The latest verify is green and is the current code."""
+    """The latest verify ran the pinned command, is green and is the current code."""
+    config = spec.config
+    if config is None:
+        return [fail(NO_CONFIG.format(name=CONFIG_NAME))]
+    findings = list(config['findings'])
+    if failed(findings):
+        return findings
     event = spec.last('verify')
     if event is None:
-        return [fail(f'{spec.label("ledger.md")}: no verify event (run aidlc verify SPEC --cmd <tests>)')]
-    where, findings = f'{spec.label("ledger.md")}:{event["line"]}', []
+        return findings + [fail(f'{spec.label("ledger.md")}: no verify event (run aidlc verify SPEC)')]
+    where = spec.at(event)
+    if event.get('pinned') not in ('base', 'onboarding') or not same_command(event.get('cmd', ''), config['cmd']):
+        findings.append(fail(f'{where}: the latest verify did not run the pinned command ({config["cmd"]!r}, '
+                             f'{config["label"]}): run aidlc verify again'))
     if event['exit'] != 0:
         findings.append(fail(f'{where}: the latest verify exited {event["exit"]}'))
     if event.get('before') and event['before'] != event['fingerprint']:
@@ -1283,10 +1683,54 @@ def _verify_findings(spec):
         findings.append(fail(f'{where}: code changed since the latest verify (fingerprint {short(event["fingerprint"])} '
                              f'≠ current {short(spec.repo.fingerprint)}): run aidlc verify again'))
     if event['junit'] in ('unreadable', 'missing'):
-        findings.append(fail(f'{where}: the latest verify has {event["junit"]} JUnit results: fix --junit and re-run'))
+        findings.append(fail(f'{where}: the latest verify has {event["junit"]} JUnit results: make the pinned command '
+                             f'write {config["junit"] or "its reports"} and re-run'))
+    elif config['junit'] and not isinstance(event['junit'], dict):
+        findings.append(fail(f'{where}: the latest verify recorded no JUnit results ({config["junit"]} is configured): '
+                             'run aidlc verify again'))
     elif event['req_fail']:
         findings.append(fail(f'{where}: requirement tests failed: {", ".join(event["req_fail"])}'))
+    elif isinstance(event['junit'], dict) and event['junit'].get('failed'):
+        findings.append(fail(f'{where}: the JUnit results hold {event["junit"]["failed"]} failed test(s) although the '
+                             'pinned command exited 0 (a runner that ignores failures is not a green suite)'))
     return findings + _junit_coverage(spec, event, where)
+
+
+def _tested(spec):
+    return [r['id'] for r in spec.requirements[0] or [] if r['verify'] == 'test']
+
+
+def _revert_verdict(code, junit, still_green, tested):
+    """(level, message) of a revert-check run: the suite must fail without the production change, and with JUnit at
+    least one story of this spec must have a test that stopped passing."""
+    if code == 124:
+        return fail('the revert check timed out: a suite that does not finish proves nothing')
+    if code == 0:
+        return fail('the suite still passes without the production change: no test depends on it')
+    if isinstance(junit, dict) and tested and set(tested) <= set(still_green):
+        return fail(f'every story test of this spec still passes without the production change '
+                    f'({", ".join(still_green)}): the suite went red for another reason')
+    return 'OK', f'the suite goes red without the production change (exit {code})'
+
+
+def _revert_findings(spec):
+    """The latest revert check is for the current code and went red (or was skipped with a reason)."""
+    config = spec.config
+    if not config or failed(config['findings']) or not config.get('revert_check'):
+        return []
+    event = spec.last('revert-check')
+    if event is None:
+        return [fail(f'{spec.label("ledger.md")}: no revert check (aidlc verify runs it before the green run)')]
+    where = spec.at(event)
+    if not fp_matches(event['fingerprint'], spec.repo.fingerprint):
+        return [fail(f'{where}: code changed since the revert check: run aidlc verify again')]
+    if event['skipped']:
+        return [warn(f'{where}: revert check skipped: {event["reason"]}')]
+    level, message = _revert_verdict(event['exit'], event['junit'], event['still_green'], _tested(spec))
+    if level == 'FAIL':
+        return [fail(f'{where}: {message}')]
+    return [warn(f'{where}: {", ".join(event["still_green"])}: the tests that name these stories pass without the '
+                 'production change (existing behaviour, or tests that prove nothing)')] if event['still_green'] else []
 
 
 def _junit_coverage(spec, event, where):
@@ -1294,8 +1738,11 @@ def _junit_coverage(spec, event, where):
     if not tested:
         return []
     if not isinstance(event['junit'], dict):
-        return [warn(f'{where}: traceability is static (test files reference the IDs; no JUnit results were '
-                     'recorded: aidlc verify --junit <glob>)')]
+        config = spec.config or {}
+        if config.get('junit_waiver'):  # a person waived JUnit in the config: the weaker, static check stands
+            return [warn(f'{where}: traceability is static (test files name the story IDs; no test is known to have '
+                         f'run for them). JUnit is waived in {config["label"]}: {config["junit_waiver"]}')]
+        return []  # a missing report is already a failure of the verify itself
     return [fail(f'{where}: {rid} has no passing test in the JUnit results of the latest verify (skipped or absent)')
             for rid in tested if rid not in event['req_pass'] and rid not in event['req_fail']]
 
@@ -1303,7 +1750,12 @@ def _junit_coverage(spec, event, where):
 def _evidence(spec, rev=None):
     """One evidence chain: the latest verify is green and current, the review stamp is that same code, and, with
     rev, the commit holds that code."""
-    findings = _verify_findings(spec)
+    return _verify_findings(spec) + _stamp_findings(spec, rev)
+
+
+def _stamp_findings(spec, rev=None):
+    """The review stamp is the verified code and, with rev, that commit holds it."""
+    findings = []
     event, review = spec.last('verify'), spec.review[0]
     verified = event['fingerprint'] if event else ''
     stamp = review['fingerprint'] if review else ''
@@ -1328,22 +1780,25 @@ def _clean_code(spec):
 
 
 def gate_reviewed(spec):
+    before = earlier(gate_verified(spec))
     review, findings = spec.review
     label = spec.label('review.md')
     if review is None:
-        return findings or spec.missing('review.md')
+        return unique(before + (findings or spec.missing('review.md')))
+    findings = before + findings
     qa = spec.meta.get('qa', '')
     waiver = NOT_APPLICABLE.match(qa)
     if waiver and not waiver.group(1).strip():
         findings.append(fail(f'{spec.label("README.md")}: qa: not-applicable needs "— <reason>"'))
     findings += review_findings(review, label, qa_waived=bool(waiver))
+    findings += returns_findings(spec, review, qa_waived=bool(waiver))
     current = spec.repo.fingerprint
     if not review['fingerprint']:
         findings.append(fail(f'{label}: no fingerprint: (run aidlc stamp SPEC review)'))
     elif not fp_matches(review['fingerprint'], current):
         findings.append(fail(f'{label}: code changed since the review was stamped (fingerprint '
                              f'{short(review["fingerprint"])} ≠ current {short(current)}): review the change, re-stamp'))
-    return findings + _evidence(spec) + _clean_code(spec)
+    return unique(findings + _stamp_findings(spec) + _clean_code(spec))
 
 
 def _stage_at_least(spec, stage):
@@ -1354,18 +1809,13 @@ def _stage_at_least(spec, stage):
 
 
 def gate_shipped(spec):
-    findings = _stage_at_least(spec, 'reviewed')
+    findings = _stage_at_least(spec, 'reviewed') + earlier(gate_reviewed(spec))
     ship, problems = spec.ship
     findings += problems
     if ship is None:
-        return findings + (spec.missing('ship.md') if not problems else [])
+        return unique(findings + (spec.missing('ship.md') if not problems else []))
     label = spec.label('ship.md')
-    findings += ship_findings(ship, label) + _ci_findings(spec, ship, label) + _changelog(spec, ship, label)
-    review = spec.review[0]
-    if review is None or not fp_matches(review['fingerprint'], spec.repo.fingerprint):
-        findings.append(fail(f'code changed since the review (fingerprint {short(spec.repo.fingerprint)} ≠ '
-                             f'{spec.label("review.md")} {short(review and review["fingerprint"])})'))
-    return findings + _evidence(spec) + _clean_code(spec)
+    return unique(findings + ship_findings(ship, label) + _ci_findings(spec, ship, label) + _changelog(spec, ship, label))
 
 
 def gh_checks(root, branch):
@@ -1398,16 +1848,27 @@ def gh_checks(root, branch):
 
 
 def _ci_findings(spec, ship, label):
+    """CI is green according to the provider. A sentence in ship.md is taken at its word only when the repository
+    config waives CI, which is a person's decision on the default branch."""
+    if spec.repo.fast:
+        return [warn('CI not checked (fast status)')]
     branch = spec.meta.get('branch') or spec.repo.branch()
-    checks = None if spec.repo.fast else gh_checks(spec.repo.root, branch)
+    checks = gh_checks(spec.repo.root, branch)
     if checks is not None:
         bad = [f'{name} ({state})' for name, state in checks if state not in ('pass', 'skipping')]
         return [fail(f'CI is not green (pr.py checks {branch}): {", ".join(bad[:8])}')] if bad else []
+    config = spec.config or {}
+    if not config.get('ci_waiver'):
+        return [fail(f'no CI result for {branch}: `pr.py checks` returned nothing (gh missing or not signed in, no PR '
+                     f'yet, or no CI on this repository). The shipped gate needs a result from CI, not a line in '
+                     f'{label}; a repository without CI says so in {CONFIG_NAME}: "ci": "none — <reason>"')]
+    waived = warn(f'CI is waived in {config["label"]} ({config["ci_waiver"]}): the "CI:" line of {label} is taken at '
+                  'its word')
     if ship['ci'] is None:
-        return [fail(f'{label}: no "CI:" line in ## Checks (and no PR checks from gh or Bitbucket)')]
+        return [waived, fail(f'{label}: no "CI:" line in ## Checks')]
     if not says_green(ship['ci']):
-        return [fail(f'{label}:{ship["ci_line"]}: CI is not green: {ship["ci"]}')]
-    return []
+        return [waived, fail(f'{label}:{ship["ci_line"]}: CI is not green: {ship["ci"]}')]
+    return [waived]
 
 
 def _changelog(spec, ship, label):
@@ -1599,13 +2060,14 @@ def quoted(text):
     return json.dumps(' '.join(str(text).split()), ensure_ascii=False)
 
 
-def run_command(cmd, cwd, timeout):
-    """(exit code, last ~2KB of combined output); 124 on timeout. Nothing is streamed."""
+def run_command(cmd, cwd, timeout, env=None):
+    """(exit code, last ~2KB of combined output); 124 on timeout. Nothing is streamed. `env` adds variables."""
     timed_out = False
     with tempfile.TemporaryFile() as out:
         try:
             proc = subprocess.Popen(cmd, shell=True, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=out,
-                                    stderr=subprocess.STDOUT, start_new_session=os.name == 'posix')
+                                    stderr=subprocess.STDOUT, start_new_session=os.name == 'posix',
+                                    env=dict(os.environ, **env) if env else None)
         except OSError as err:
             return 127, str(err)
         try:
@@ -1613,6 +2075,9 @@ def run_command(cmd, cwd, timeout):
         except subprocess.TimeoutExpired:
             timed_out, code = True, 124
             _kill_tree(proc)
+        except BaseException:  # Ctrl-C, SIGTERM: do not leave the suite running behind us
+            _kill_tree(proc)
+            raise
         size = out.seek(0, 2)
         out.seek(max(0, size - TAIL_BYTES))
         tail = out.read().decode('utf-8', 'replace')
@@ -1813,42 +2278,272 @@ def _tick(plan, task_id):
     return True
 
 
-def cmd_verify(args):
-    spec = spec_arg(args)
-    before = Repo(spec.repo.root).fingerprint
+def run_pinned(spec, config, timeout):
+    """Run the pinned verify command once in the config's folder: (ledger text of the event, findings, payload).
+    Nothing is written; the caller logs the event (`aidlc verify`) or uses it as it is (`aidlc ci`)."""
+    root = spec.repo.root
+    before = Repo(root).fingerprint
     started = time.time()
-    code, tail = run_command(args.cmd, spec.repo.root, args.timeout)
-    repo = Repo(spec.repo.root)
-    findings, junit, event = [], None, f'verify exit={code} fingerprint={repo.fingerprint} cmd={quoted(args.cmd)}'
+    code, tail = run_command(config['cmd'], config['dir'], timeout)
+    repo = Repo(root)
+    findings, junit = [], None
+    event = f'verify exit={code} fingerprint={repo.fingerprint} cmd={quoted(config["cmd"])} pinned={config["source"]}'
     if code != 0:
-        findings.append(fail(f'test command exited {code}\n{tail}'))
+        findings.append(fail(f'the pinned command exited {code}\n{tail}'))
     if before != repo.fingerprint:  # the tests did not run against one version of the code: not green
-        findings.append(fail('the test command changed code files during the run; fix that and re-run'))
+        findings.append(fail('the test command changed code files during the run (reports and build output belong '
+                             'in git-ignored paths); fix that and re-run'))
         event += f' before={before}'
-    if args.junit:
-        junit, problems, marker = _junit_results(args.junit, started, spec, repo)
+    if config['junit']:
+        junit, problems, marker = _junit_results(config['junit'], started, spec, repo, config['dir'])
         findings += problems
         event += marker
+    return event, findings, {'spec': repo.rel(spec.dir), 'pinned_command': config['cmd'], 'pinned': config['source'],
+                             'command_exit': code, 'fingerprint': repo.fingerprint, 'junit': junit,
+                             'output_tail': tail, 'ledger': event}
+
+
+def _git_dir(repo):
+    result = repo.git('rev-parse', '--absolute-git-dir') if repo.is_git else None
+    if result is None or result.returncode != 0 or not result.stdout.strip():
+        return None
+    return pathlib.Path(result.stdout.strip())
+
+
+def production_changes(repo, base):
+    """[(status, path)] of the production source that differs between commit `base` and HEAD: A added, M modified,
+    D deleted (a rename is a D and an A). Production source is code that is not a test (the TDD gate's rule)."""
+    listing = repo._z('diff', '--name-status', '--no-renames', '-z', base, 'HEAD') or []
+    return [(status[:1], path) for status, path in zip(listing[0::2], listing[1::2]) if _tdd.is_prod_code(path)]
+
+
+class RevertRefused(Exception):
+    """The revert check would touch work it cannot get back; nothing was changed."""
+
+
+def _unsafe(repo, changes):
+    """Why the revert check must not rewrite these files, or None: uncommitted work in them (the code fingerprint
+    leaves out docs/ and names such as license_*.py, so `code_dirty` cannot see it), or a symbolic link."""
+    paths = [path for _, path in changes]
+    result = repo.git('status', '--porcelain', '--untracked-files=all', '--', *paths)
+    if result is None or result.returncode != 0:
+        return 'git status failed, so it is not known that these files are clean'
+    dirty = [line[3:] for line in result.stdout.splitlines()]
+    if dirty:
+        return (f'uncommitted changes in {", ".join(dirty[:5])}: the revert check rewrites {"them" if len(dirty) > 1 else "it"}; '
+                'commit or stash them first')
+    for path in paths:
+        probe = repo.root / path
+        while probe != repo.root and probe != probe.parent:
+            if probe.is_symlink():
+                return f'{path} is, or sits behind, a symbolic link: the revert check does not write through links'
+            probe = probe.parent
+    return None
+
+
+def _put_back(repo, changes):
+    """Give the files a revert check rewrote the content HEAD holds. False when git could not restore them."""
+    inside = [(status, path) for status, path in changes
+              if repo.root in (repo.root / path).resolve().parents]  # never follow a path out of the repository
+    for status, path in inside:  # first: on a case-insensitive filesystem a deleted `Foo.py` and an added `foo.py`
+        if status == 'D':        # are one file, and unlinking it after the checkout would delete what was restored
+            try:
+                (repo.root / path).unlink()
+            except OSError:
+                pass
+    at_head = [path for status, path in inside if status != 'D']
+    restored = True
+    if at_head:
+        result = repo.git('checkout', 'HEAD', '--', *at_head)
+        restored = result is not None and result.returncode == 0
+    return restored
+
+
+def heal_revert(root):
+    """Finish the restore of a revert check that was killed mid-run; a note for the user, or None."""
+    repo = Repo(root)
+    folder = _git_dir(repo)
+    marker = folder / REVERT_MARKER if folder else None
+    if marker is None or not marker.is_file():
+        return None
+    try:
+        data = json.loads(marker.read_text())
+        changes = [(str(status), str(path)) for status, path in data['changes']]
+        head = data.get('head')
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        changes, head = [], None
+    now = repo.git('rev-parse', 'HEAD')
+    now = now.stdout.strip() if now is not None and now.returncode == 0 else None
+    if head and now != head:  # the work was moved on since: HEAD is no longer what the check was restoring to
+        try:
+            marker.unlink()
+        except OSError:
+            pass
+        return ('aidlc: an interrupted revert check was found, but HEAD is not the commit it ran on: the files were '
+                'not touched. Run `git status` and compare src with the branch before trusting the tree')
+    if not _put_back(repo, changes):
+        return ('aidlc: an interrupted revert check left production files at their base version and they could not be '
+                'restored from HEAD (the marker is kept): run `git status`, then `git checkout HEAD -- <file>`')
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+    return (f'aidlc: an interrupted revert check had left {len(changes)} production file(s) at their base version; '
+            'restored from HEAD')
+
+
+def revert_check(spec, config, timeout):
+    """Does any test depend on the production change? Put the production source of this branch back to the merge base
+    with the trusted ref, run the pinned command (it must fail), restore HEAD. (ledger text of the event, findings);
+    nothing is written to the ledger. The caller made sure the code is committed, so HEAD is the way back."""
+    repo = Repo(spec.repo.root, base=spec.repo.base)
+    current = repo.fingerprint
+
+    def skipped(reason):
+        return (f'revert-check skipped fingerprint={current} reason={quoted(reason)}',
+                [warn(f'revert check skipped: {reason}')])
+
+    trusted = repo.trusted_ref
+    if not trusted:
+        return skipped('no default branch to compare this branch with')
+    merge = repo.git('merge-base', 'HEAD', trusted)
+    base = merge.stdout.strip() if merge is not None and merge.returncode == 0 else ''
+    if not base:
+        return skipped(f'no merge base with {trusted} (a shallow clone? fetch the history)')
+    changes = production_changes(repo, base)
+    if not changes:
+        return skipped(f'no production source changed since {trusted}')
+    problem = _unsafe(repo, changes)
+    if problem:
+        raise RevertRefused(problem)
+    folder = _git_dir(repo)
+    marker = folder / REVERT_MARKER if folder else None
+    head = repo.git('rev-parse', 'HEAD')
+    head = head.stdout.strip() if head is not None and head.returncode == 0 else None
+    if marker is not None:
+        marker.write_text(json.dumps({'head': head, 'changes': changes}))
+    started, junit, restored = time.time(), None, True
+    previous = {}
+
+    def terminate(signum, frame):
+        raise SystemExit(128 + signum)  # the `finally` below puts the tree back
+
+    try:
+        for name in ('SIGTERM', 'SIGHUP'):
+            if hasattr(signal, name):
+                previous[getattr(signal, name)] = signal.signal(getattr(signal, name), terminate)
+    except ValueError:  # not the main thread: no handler, the next command heals
+        previous = {}
+    try:
+        for status, path in changes:  # added files go first (see _put_back): a case-only rename is a D and an A
+            if status == 'A':
+                try:
+                    (repo.root / path).unlink()
+                except OSError:
+                    pass
+        for status, path in changes:
+            if status == 'A':
+                continue
+            data = repo.show(base, path)
+            if data is None:
+                raise OSError(f'cannot read {path} at {base[:12]}')
+            target = repo.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        # No bytecode: a same-size edit within one second would leave a stale __pycache__ that outlives the restore.
+        code, _ = run_command(config['cmd'], config['dir'], timeout, env={'PYTHONDONTWRITEBYTECODE': '1'})
+        if config['junit']:
+            junit, _, _ = _junit_results(config['junit'], started, spec, repo, config['dir'])
+    finally:
+        restored = _put_back(repo, changes)
+        if marker is not None and restored:
+            try:
+                marker.unlink()
+            except OSError:
+                pass
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+    usable = isinstance(junit, dict) and not junit.get('unreadable') and junit.get('cases')
+    tested = _tested(spec)
+    still = sorted(set(junit['req_pass']) & set(tested)) if usable else []
+    event = f'revert-check exit={code} fingerprint={current} base={base[:12]} files={len(changes)}'
+    if usable:
+        event += f' junit={junit["passed"]} passed, {junit["failed"]} failed'
+    if still:
+        event += f' still-green={",".join(still)}'
+    findings = []
+    if not restored or Repo(repo.root).fingerprint != current:
+        findings.append(fail('the revert check could not restore the tree: run `git status`, then restore the '
+                             'production files with `git checkout HEAD -- <file>` (the next aidlc command also tries)'))
+    level, message = _revert_verdict(code, junit if usable else None, still, tested)
+    findings.append((level, f'revert check ({len(changes)} production file(s) put back to {trusted}): {message}'))
+    if level != 'FAIL' and still:
+        findings.append(warn(f'{", ".join(still)}: the tests that name these stories pass without the production change '
+                             '(existing behaviour, or tests that prove nothing)'))
+    return event, findings
+
+
+def pinned_config(spec, args):
+    """The usable config of a spec, or raise UsageError; (None, result) when the config itself has failures."""
+    config = spec.config
+    if config is None:
+        raise UsageError(NO_CONFIG.format(name=CONFIG_NAME))
+    if failed(config['findings']):
+        return None, finding_result(config['findings'], {'spec': spec.repo.rel(spec.dir), 'command_exit': None})
+    source = f'{config["label"]} on {config["ref"]}' if config['source'] == 'base' else config['label']
+    given = getattr(args, 'cmd', None)
+    if given is not None and not same_command(given, config['cmd']):
+        raise UsageError(f'the verify command is pinned by {source}: {config["cmd"]!r}. Run `aidlc verify '
+                         f'{args.spec}` without --cmd; another command is not gate evidence (change the pin in its '
+                         'own change, read by a person)')
+    given = getattr(args, 'junit', None)
+    if given is not None and given != config['junit']:
+        raise UsageError(f'the JUnit reports are pinned by {source}: {config["junit"] or "waived"}. Run `aidlc verify '
+                         f'{args.spec}` without --junit')
+    return config, None
+
+
+def cmd_verify(args):
+    spec = spec_arg(args)
+    config, refused = pinned_config(spec, args)
+    if refused:
+        return refused
+    notes = [f for f in config['findings'] if f[0] == 'WARN']
+    if config['revert_check']:  # red first, so that reports and build output end on the run of the real code
+        blank = {'spec': spec.repo.rel(spec.dir), 'command_exit': None}
+        if spec.repo.code_dirty:
+            return finding_result(notes + [fail(
+                'commit the code first: the revert check puts production files back to their base version and '
+                'restores them from HEAD, so nothing uncommitted may be in its way')], blank)
+        try:
+            event, findings = revert_check(spec, config, args.timeout)
+        except RevertRefused as refused:
+            return finding_result(notes + [fail(str(refused))], blank)
+        with spec_lock(spec.dir):
+            append_ledger(spec, event)
+        notes += findings
+        if failed(findings):
+            return finding_result(notes, dict(blank, ledger=event))
+    event, findings, payload = run_pinned(spec, config, args.timeout)
     with spec_lock(spec.dir):
         append_ledger(spec, event)
-    payload = {'spec': spec.repo.rel(spec.dir), 'command_exit': code, 'fingerprint': repo.fingerprint,
-               'junit': junit, 'output_tail': tail, 'ledger': event}
-    return finding_result(findings + [('OK', f'verify logged: exit={code}')], payload)
+    return finding_result(notes + findings + [('OK', f'verify logged: exit={payload["command_exit"]}')], payload)
 
 
-def _junit_results(pattern, started, spec, repo):
+def _junit_results(pattern, started, spec, repo, folder=None):
     """(summary or None, findings, ledger suffix). Reports older than the run (1 s clock slack) are ignored."""
-    paths = sorted(p for p in globlib.glob(os.path.join(str(repo.root), pattern), recursive=True) if os.path.isfile(p))
+    paths = sorted(p for p in globlib.glob(os.path.join(str(folder or repo.root), pattern), recursive=True)
+                   if os.path.isfile(p))
     fresh = [p for p in paths if os.path.getmtime(p) >= started - 1]
     findings = [warn(f'ignored {len(paths) - len(fresh)} JUnit file(s) older than this run')] if len(fresh) < len(paths) else []
     if not fresh:
-        return None, findings + [fail(f'--junit {pattern} matches no report written by this run')], ' junit=missing'
+        return None, findings + [fail(f'verify.junit {pattern} matches no report written by this run')], ' junit=missing'
     junit, problems = parse_junit(fresh, [r['id'] for r in spec.requirements[0] or []], repo)
     findings += problems
     if junit['unreadable']:
         return junit, findings, ' junit=unreadable'
     if not junit['cases']:
-        return junit, findings + [fail(f'--junit {pattern}: the reports hold no test case')], ' junit=missing'
+        return junit, findings + [fail(f'verify.junit {pattern}: the reports hold no test case')], ' junit=missing'
     marker = f' junit={junit["passed"]} passed, {junit["failed"]} failed'
     marker += ''.join(f' {k.replace("_", "-")}={",".join(junit[k])}' for k in ('req_pass', 'req_fail') if junit[k])
     if junit['req_fail']:
@@ -1870,6 +2565,47 @@ def cmd_ruling(args):
     with spec_lock(spec.dir):
         event = append_ledger(spec, f'ruling {task}{clean[0]} — why: {clean[1]} — if wrong: {clean[2]}')
     return 0, {'spec': spec.repo.rel(spec.dir), 'ledger': event}, [f'OK {event}']
+
+
+def cmd_approve(args):
+    """Record that a person approved this spec text (or that the request delegated the decision)."""
+    spec = spec_arg(args)
+    digest = spec_digest(spec)
+    if digest is None:
+        raise UsageError(f'{spec.label(spec.spec_name)} does not exist: nothing to approve')
+    by = args.by
+    if not by:
+        user = spec.repo.git('config', 'user.name')
+        by = user.stdout.strip() if user is not None and user.returncode == 0 else ''
+    by = ' '.join(str(by or '').split())
+    if not by:
+        raise UsageError('pass --by "<name>" (git user.name is not set)')
+    how = 'delegated' if args.delegated else 'approved'
+    stamp = f'{by} (delegated in request)' if args.delegated else f'{by} ({today()})'
+    with spec_lock(spec.dir):
+        set_frontmatter(spec.dir / 'README.md', {'accepted_by': stamp})
+        event = append_ledger(spec, f'approve spec={digest} by={quoted(by)} how={how}')
+    return 0, {'spec': spec.repo.rel(spec.dir), 'approved': digest, 'by': by, 'how': how, 'ledger': event}, [
+        f'OK {event}', f'accepted_by: {stamp}. The approval is of {spec.spec_name} as it is now ({short(digest)}): '
+                       'an edit needs a new approval.']
+
+
+def cmd_attest(args):
+    """Store what a reviewer returned (a file, or standard input). The plugin's hook does this when a reviewer agent
+    returns; a person uses it for a review that happened elsewhere."""
+    spec = spec_arg(args)
+    if args.file:
+        text, error = read_text(args.file, str(args.file))
+        if text is None:
+            raise UsageError(error or f'{args.file}: not readable')
+    else:
+        text = sys.stdin.read()
+    if not text.strip():
+        raise UsageError('nothing to store: the return is empty')
+    path, written = record_return(spec.dir, args.agent, args.axis, text)
+    rel = spec.repo.rel(path)
+    return 0, {'spec': spec.repo.rel(spec.dir), 'path': rel, 'written': written}, [
+        f'OK stored {rel}' if written else f'OK already stored as {rel}']
 
 
 def cmd_stamp(args):
@@ -1906,7 +2642,11 @@ def _result(req, tests, event, current):
         return 'not run'
     if not fp_matches(event['fingerprint'], current):
         return 'stale'
-    return 'fail' if event['exit'] != 0 or req['id'] in event['req_fail'] else 'pass'
+    if event['exit'] != 0 or req['id'] in event['req_fail']:
+        return 'fail'
+    if isinstance(event.get('junit'), dict) and req['id'] not in event['req_pass']:
+        return 'no passing test'  # the report is the evidence: an ID in a comment ran nothing
+    return 'pass'
 
 
 def trace_table(rows):
@@ -1962,6 +2702,192 @@ def lint_open_decisions(text, label, no_security):
     return out
 
 
+class Unbound:
+    """What `aidlc ci` runs the pinned suite for when no spec is bound to the branch (a fix, a chore)."""
+
+    def __init__(self, repo):
+        self.repo, self.dir, self.requirements = repo, repo.root, ([], [])
+
+
+CI_GATE = {'accepted': 'accepted', 'planned': 'planned', 'building': 'planned', 'verified': 'verified',
+           'reviewed': 'reviewed', 'shipped': 'reviewed'}  # `shipped` itself waits for this check's result
+
+
+def _fresh(text):
+    """The text of a ledger event as the event the gates read, marked as produced by this run."""
+    kind, _, rest = text.partition(' ')
+    event, problem = _event(kind, rest)
+    if event is None:
+        raise ValueError(problem[1])
+    event.update(kind=kind, ts=utc_now(), line=None, fresh=True)
+    return event
+
+
+def _ci_base(args):
+    if args.base:
+        return args.base
+    for name in ('GITHUB_BASE_REF', 'BITBUCKET_PR_DESTINATION_BRANCH'):
+        if os.environ.get(name):
+            return 'origin/' + os.environ[name]
+    return None
+
+
+def _claims(spec, config):
+    """What CI cannot check and a person should read: who is said to have approved and reviewed, and every waiver."""
+    lines = [f'accepted_by: {spec.meta.get("accepted_by") or "(not set)"}']
+    review = spec.review[0]
+    if review:
+        lines.append(f'reviewers: {review["reviewers"] or "(not named)"}; QA verdict: {review["qa"] or "(none)"}')
+    for event in spec.ledger[0]:
+        if event['kind'] == 'ruling' and 'RISK-ACCEPTANCE NEEDED' in (event.get('decision') or ''):
+            lines.append(f'ruling: {event["decision"]}')
+    return lines + _waivers(config)
+
+
+def _waivers(config):
+    lines = []
+    if config['source'] == 'onboarding':
+        lines.append(f'ONBOARDING: the verify command comes from this change ({config["label"]} is not on '
+                     f'{config["ref"] or "the default branch"} yet): read that file before approving')
+    if config.get('junit_waiver'):
+        lines.append(f'JUnit is waived ({config["junit_waiver"]}): stories are traced by a text search, not by a test '
+                     'that ran')
+    if not config.get('revert_check'):
+        lines.append('the revert check is off: nothing shows that the tests depend on the change')
+    if config.get('ci_waiver'):
+        lines.append(f'CI is waived ({config["ci_waiver"]})')
+    if config.get('returns_waiver'):
+        lines.append(f'reviewer returns are waived ({config["returns_waiver"]}): review.md is the session\'s own account')
+    return lines
+
+
+def cmd_ci(args):
+    """Recompute the evidence on the checked-out head with the config of the base ref. Reads no verify or revert line
+    from a ledger and writes nothing to a spec folder: the local files are a cache of what this run finds."""
+    root = repo_arg(args)
+    base = _ci_base(args)
+    repo = Repo(root, base=base)
+    trusted = repo.trusted_ref
+    if trusted is None:
+        what = f'--base {base} is not a commit in this checkout' if base else 'no base ref found'
+        raise UsageError(f'{what}: fetch the base branch with its history (actions/checkout fetch-depth: 0, or '
+                         '`git fetch origin <branch>`) and pass --base origin/<branch>')
+    branch = args.branch or os.environ.get('GITHUB_HEAD_REF') or os.environ.get('BITBUCKET_BRANCH') or repo.branch()
+    head = repo.git('rev-parse', 'HEAD')
+    head = head.stdout.strip()[:12] if head is not None and head.returncode == 0 else '?'
+    specs = [spec for spec in (Spec(folder, repo) for folder in repo.spec_dirs())
+             if branch and spec.meta.get('branch') == branch and spec.stage in ACTIVE]
+    findings, rows = [], []
+    if repo.code_dirty:
+        findings.append(fail('the checkout has uncommitted code: this check judges a commit'))
+    for spec in specs or [Unbound(repo)]:
+        bound = isinstance(spec, Spec)
+        name = repo.rel(spec.dir) if bound else f'(no spec bound to {branch or "this checkout"})'
+        config = spec.config if bound else load_config(repo, [root])
+        row = {'name': name, 'stage': spec.stage if bound else '-', 'config': None, 'claims': []}
+        rows.append(row)
+        if config is None:
+            findings.append(fail(NO_CONFIG.format(name=CONFIG_NAME)))
+            continue
+        findings += config['findings']
+        if failed(config['findings']):
+            continue
+        row.update(config=f'`{config["cmd"]}` ({config["label"]}, {config["source"]})',
+                   claims=_claims(spec, config) if bound else _waivers(config))
+        if bound and config['revert_check'] and not repo.code_dirty:
+            try:
+                text, result = revert_check(spec, config, args.timeout)
+            except RevertRefused as refused:
+                findings.append(fail(str(refused)))
+                continue
+            spec.fresh['revert-check'] = _fresh(text)
+            findings += result
+            if text.startswith('revert-check skipped') and 'no merge base' in text:
+                findings.append(fail('no merge base with the base ref (a shallow checkout): the revert check cannot '
+                                     'run, so this job cannot vouch for the tests; fetch the history '
+                                     '(actions/checkout fetch-depth: 0) and re-run'))
+        text, result, _ = run_pinned(spec, config, args.timeout)
+        findings += result
+        if not bound:
+            findings.append(('OK', f'no spec is bound to {branch or "this checkout"}: only the pinned suite was run'))
+            continue
+        spec.fresh['verify'] = _fresh(text)
+        if args.require != 'none' and STAGES.index(spec.stage) < STAGES.index(args.require):
+            findings.append(fail(f'{name}: the spec is at {spec.stage}; this check needs it at {args.require} '
+                                 '(finish the stages, commit the spec folder and push)'))
+        findings += _check(spec, CI_GATE[spec.stage]) if spec.stage in CI_GATE else []
+    findings = unique(findings)
+    summary = _ci_summary(head, branch, trusted, rows, findings)
+    target = args.summary or os.environ.get('GITHUB_STEP_SUMMARY')
+    if target:
+        try:
+            with open(target, 'a', encoding='utf-8') as handle:
+                handle.write('\n'.join(summary) + '\n')
+        except OSError:
+            pass
+    return finding_result(findings, {'base': trusted, 'branch': branch, 'head': head,
+                                     'specs': [row['name'] for row in rows], 'summary': summary})
+
+
+def _ci_summary(head, branch, trusted, rows, findings):
+    bound = any(row['stage'] != '-' for row in rows)
+    ran = ('The suite and the revert check were run by this job; nothing was taken from a ledger.' if bound else
+           'No spec is bound to this branch. Only the pinned suite was run by this job (no revert check, no stage '
+           'required); nothing was taken from a ledger.')
+    lines = [f'## Lifecycle gate: {"FAIL" if failed(findings) else "PASS"}', '',
+             f'Head `{head}` ({branch or "detached"}) against `{trusted}`. {ran}', '']
+    for row in rows:
+        lines.append(f'- **{row["name"]}**, stage `{row["stage"]}`, verify command {row["config"] or "(none)"}')
+    claims = [(row['name'], claim) for row in rows for claim in row['claims']]
+    if claims:
+        lines += ['', '### Not checked by this job (read it)', ''] + [f'- {name}: {claim}' for name, claim in claims]
+    shown = [(level, message) for level, message in findings if level != 'OK']
+    if shown:
+        lines += ['', '### Findings', ''] + [f'- **{level}** {message.splitlines()[0]}' for level, message in shown]
+    return lines
+
+
+CONFIG_SKELETON = {'schema': SCHEMA, 'verify': {'cmd': '', 'junit': '', 'revert_check': True}}
+
+
+def cmd_config(args):
+    """init: write the repository config (never overwrites). show: the config the gates use here, and where from."""
+    root = repo_arg(args)
+    folder = (root / args.dir).resolve() if args.dir else root
+    path = folder / CONFIG_NAME
+    if args.action == 'init':
+        if path.exists():
+            raise UsageError(f'{path} already exists: edit it (in its own change, read by a person)')
+        if not args.cmd or not args.junit:
+            raise UsageError('config init needs --cmd "<full test suite>" and --junit "<report glob>" '
+                             '(or --junit "none — <reason>")')
+        data = json.loads(json.dumps(CONFIG_SKELETON))
+        data['verify'].update(cmd=args.cmd, junit=args.junit, revert_check=not args.no_revert_check)
+        text = json.dumps(data, indent=2, ensure_ascii=False) + '\n'
+        _, findings = parse_config(text, CONFIG_NAME)
+        if failed(findings):
+            raise UsageError('; '.join(m for level, m in findings if level == 'FAIL'))
+        folder.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+        rel = Repo(root).rel(path)
+        return 0, {'path': rel, 'config': data}, [
+            f'OK wrote {rel}', 'Keep the JUnit reports and build output git-ignored, protect this file '
+            '(CODEOWNERS), and merge it to the default branch: until then the gates run in onboarding mode.']
+    repo = Repo(root)
+    config = load_config(repo, [folder] if folder == root else [folder, root])
+    if config is None:
+        return finding_result([fail(NO_CONFIG.format(name=CONFIG_NAME))], {'config': None})
+    shown = {k: (str(v) if isinstance(v, pathlib.Path) else v) for k, v in config.items() if k != 'findings'}
+    lines = [f'{config["label"]}: {config["source"]}' + (f' (read from {config["ref"]})' if config['source'] == 'base'
+                                                         else ' (only on this branch)'),
+             f'  verify.cmd: {config.get("cmd")}', f'  verify.junit: {config.get("junit") or "none — " + str(config.get("junit_waiver"))}',
+             f'  verify.revert_check: {config.get("revert_check")}',
+             f'  ci: {"none — " + config["ci_waiver"] if config.get("ci_waiver") else "required"}',
+             f'  review.returns: {"none — " + config["returns_waiver"] if config.get("returns_waiver") else "required"}']
+    code, payload, found = finding_result(config['findings'], {'config': shown})
+    return code, payload, lines + found
+
+
 def cmd_trace(args):
     spec = spec_arg(args)
     reqs, findings = spec.requirements
@@ -1990,6 +2916,7 @@ def _write_section(path, title, body):
 
 
 README_SKELETON = """---
+schema: {schema}
 status: proposed
 key: {key}
 branch:
@@ -2055,7 +2982,7 @@ def cmd_init(args):
         if Spec(other, repo).meta.get('key') == args.key:
             raise UsageError(f'key {args.key} is already used by {repo.rel(other)}')
     target.mkdir(parents=True, exist_ok=True)
-    values = {'key': args.key, 'slug': target.name, 'today': today()}
+    values = {'key': args.key, 'slug': target.name, 'today': today(), 'schema': SCHEMA}
     written = []
     for name, skeleton in (('README.md', README_SKELETON), ('spec.md', SPEC_SKELETON),
                            ('tickets.md', TICKETS_SKELETON), ('ledger.md', LEDGER_SKELETON)):
@@ -2111,14 +3038,36 @@ def build_parser():
     task_done.add_argument('--cmd')
     task_done.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT)
     verify = add('verify', cmd_verify, 'spec')
-    verify.add_argument('--cmd', required=True)
-    verify.add_argument('--junit')
+    verify.add_argument('--cmd', help='accepted only when it is the pinned command')
+    verify.add_argument('--junit', help='accepted only when it is the pinned glob')
     verify.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT)
+    ci = add('ci', cmd_ci)
+    ci.add_argument('--base', help='the ref the config is read from and the head is compared with (default: '
+                                   'origin/$GITHUB_BASE_REF, origin/$BITBUCKET_PR_DESTINATION_BRANCH, else the default branch)')
+    ci.add_argument('--branch', help='the branch the specs are bound to (default: $GITHUB_HEAD_REF, $BITBUCKET_BRANCH, '
+                                     'else the checked-out branch)')
+    ci.add_argument('--require', choices=['reviewed', 'verified', 'none'], default='reviewed',
+                    help='the stage a bound spec must have reached (default: reviewed)')
+    ci.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT)
+    ci.add_argument('--summary', help='append a Markdown summary to this file (default: $GITHUB_STEP_SUMMARY)')
+    config = add('config', cmd_config)
+    config.add_argument('action', choices=['init', 'show'])
+    config.add_argument('--cmd')
+    config.add_argument('--junit')
+    config.add_argument('--no-revert-check', action='store_true')
+    config.add_argument('--dir', help='a service folder with its own docs/specs/ (default: the repository root)')
     ruling = add('ruling', cmd_ruling, 'spec')
     for name in ('--decision', '--why', '--if-wrong'):
         ruling.add_argument(name, required=True)
     ruling.add_argument('--task')
     add('stamp', cmd_stamp, 'spec').add_argument('what', choices=['review'])
+    attest = add('attest', cmd_attest, 'spec')
+    attest.add_argument('--agent', required=True, help='who returned it, e.g. aegisops-harness:code-reviewer')
+    attest.add_argument('--axis', required=True, choices=['spec', 'standards', 'both', 'qa'])
+    attest.add_argument('--file', help='the return as a file (default: standard input)')
+    approve = add('approve', cmd_approve, 'spec')
+    approve.add_argument('--by', help='the approver (default: git user.name)')
+    approve.add_argument('--delegated', action='store_true', help='the request handed the decisions over: nobody read the spec')
     add('trace', cmd_trace, 'spec').add_argument('--write', action='store_true')
     add('init', cmd_init, 'spec').add_argument('--key', required=True)
     lint = add('lint', cmd_lint, 'file')
@@ -2138,6 +3087,12 @@ def main(argv=None):
         args = build_parser().parse_args(argv)
     except SystemExit as exit_:  # argparse already printed the usage error (or --help)
         return exit_.code if isinstance(exit_.code, int) else 2
+    try:  # a revert check that was killed left production files at their base version: put them back first
+        note = heal_revert(repo_root(pathlib.Path(getattr(args, 'repo', None) or pathlib.Path.cwd())))
+        if note:
+            print(note, file=sys.stderr)
+    except Exception:
+        pass
     try:
         code, payload, lines = args.func(args)
     except UsageError as err:

@@ -1,0 +1,31 @@
+name: AegisOps-Harness lifecycle gate
+description: >
+  Recompute the lifecycle evidence on the pull request head: run the verify command pinned on the base branch, prove
+  the suite goes red without the production change, and check every spec bound to the branch with that fresh result.
+  Make it a required status check; local gates and hooks are guard rails, this is the enforcement.
+inputs:
+  base:
+    description: Ref the config is read from and the head is compared with (default origin/<pull request base>).
+    required: false
+    default: ""
+  require:
+    description: Stage a spec bound to the branch must have reached (reviewed, verified or none).
+    required: false
+    default: reviewed
+  timeout:
+    description: Seconds each run of the verify command may take.
+    required: false
+    default: "1800"
+runs:
+  using: composite
+  steps:
+    - name: aidlc ci
+      shell: bash
+      env:
+        AIDLC_BASE: ${{ inputs.base }}
+        AIDLC_REQUIRE: ${{ inputs.require }}
+        AIDLC_TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        args=(--require "$AIDLC_REQUIRE" --timeout "$AIDLC_TIMEOUT" --summary "$GITHUB_STEP_SUMMARY")
+        if [ -n "$AIDLC_BASE" ]; then args+=(--base "$AIDLC_BASE"); fi
+        python3 "$GITHUB_ACTION_PATH/../../../scripts/aidlc.py" ci "${args[@]}"

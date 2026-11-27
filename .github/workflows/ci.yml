@@ -20,14 +20,39 @@ jobs:
         python: ["3.9", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - name: Tools (ruby parses YAML frontmatter and contracts when PyYAML is absent)
+      - uses: actions/setup-node@v4  # the eval fixtures and their hidden checks are Node; without it those tests skip
+        with:
+          node-version: "22"
+      - name: Tools (ruby parses YAML frontmatter and contracts when PyYAML is absent; gitleaks for the secret-gate tests)
         run: |
           apt-get update -qq && apt-get install -y -qq ruby > /dev/null
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          python3 --version
+          python3 --version && node --version && gitleaks version
       - name: Unit tests
         run: python3 -m unittest discover -s tests
       - name: Plugin structure
         run: python3 scripts/check-setup.py
       - name: Description lint
         run: python3 evals/descriptions/run.py
+
+  # The plugin's own lifecycle gate on its own pull requests (docs/specs/). The action is the one target repositories
+  # use; here it is taken from the head, because this repository is where it is developed.
+  lifecycle-gate:
+    name: lifecycle gate (aidlc ci)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}  # the head, not the merge commit: the review is stamped on it
+          fetch-depth: 0                                   # the base branch and the merge base
+          persist-credentials: false                       # the pull request's own suite runs in this job
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: ./.github/actions/aidlc-gate

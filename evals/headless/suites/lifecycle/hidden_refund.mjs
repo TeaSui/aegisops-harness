@@ -1,4 +1,6 @@
-const w = await import(new URL('file://' + process.argv[2]).href);
+// Hidden outcome checks for the refund cases. Argument: the fixture repository (or src/wallet.js itself).
+const target = process.argv[2];
+const w = await import(new URL('file://' + (target.endsWith('.js') ? target : target + '/src/wallet.js')).href);
 const out = {};
 const fnName = Object.keys(w).find(k => /refund/i.test(k) && typeof w[k] === 'function' && !/get|list|find/i.test(k));
 const refund = w[fnName];
