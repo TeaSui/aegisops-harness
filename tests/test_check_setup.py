@@ -166,8 +166,24 @@ class PluginIntegrityTest(unittest.TestCase):
     def test_clean_copy_passes(self):
         self.assertEqual(self.check()['errors'], [])
 
+    def test_a_shipped_file_that_nothing_names_fails(self):
+        # CONTRIBUTING: rules/ and references/ are never auto-loaded, so a file nothing names is dead weight in every
+        # install. A skill's sibling file counts when its own folder names it.
+        (self.root / 'rules' / 'orphan.md').write_text('# Orphan\n\nNothing points here.\n')
+        (self.root / 'skills' / 'plan' / 'lonely.md').write_text('# Lonely\n')
+        errors = ' '.join(self.check()['errors'])
+        self.assertIn('rules/orphan.md is named by no other file', errors)
+        self.assertIn('skills/plan/lonely.md is named by no other file', errors)
+
+    def test_a_package_over_its_budget_fails(self):
+        (self.root / 'references' / 'aidlc.md').write_text(
+            (self.root / 'references' / 'aidlc.md').read_text() + '\n' + 'x' * (900 * 1024))
+        errors = ' '.join(self.check()['errors'])
+        self.assertIn('package budget', errors)
+        self.assertIn('KB', errors)
+
     def test_dangling_skill_reference_fails(self):
-        rule = self.root / 'rules' / 'agents.md'
+        rule = self.root / 'rules' / 'patterns.md'
         rule.write_text(rule.read_text() + '\nThen run /aegisops-harness:no-such-skill.\n')
         (self.root / 'hooks' / 'autopilot.py').write_text(
             (self.root / 'hooks' / 'autopilot.py').read_text() + '\n# see aegisops-harness:missing-command\n')
@@ -183,14 +199,14 @@ class PluginIntegrityTest(unittest.TestCase):
 
     def test_bare_agent_name_fails(self):
         # Claude Code registers plugin agents as aegisops-harness:<name>; a bare subagent_type is "not found".
-        rule = self.root / 'rules' / 'agents.md'
+        rule = self.root / 'rules' / 'patterns.md'
         rule.write_text(rule.read_text() + '\nDispatch `backend-engineer-subagent` for the API.\n')
         errors = ' '.join(self.check()['errors'])
-        self.assertIn('rules/agents.md', errors)
+        self.assertIn('rules/patterns.md', errors)
         self.assertIn('must be named aegisops-harness:backend-engineer-subagent', errors)
 
     def test_namespaced_agent_name_and_agent_file_paths_pass(self):
-        rule = self.root / 'rules' / 'agents.md'
+        rule = self.root / 'rules' / 'patterns.md'
         rule.write_text(rule.read_text() + '\nDispatch `aegisops-harness:qa-subagent`; template '
                         'skills/review/code-reviewer.md.\n')
         self.assertEqual(self.check()['errors'], [])
@@ -237,7 +253,7 @@ class PluginIntegrityTest(unittest.TestCase):
         self.assertIn('hooks/broken.py', ' '.join(self.check()['errors']))
 
     def test_each_root_is_checked_on_its_own(self):
-        rule = self.root / 'rules' / 'agents.md'
+        rule = self.root / 'rules' / 'patterns.md'
         rule.write_text(rule.read_text() + '\nThen run /aegisops-harness:no-such-skill.\n')
         probe = (
             'import importlib.util, json, sys, io, contextlib\n'

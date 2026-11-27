@@ -61,6 +61,47 @@ def project_warnings(project):
     return top, warnings
 
 
+# What an install pays for: every file here is copied to every user, and the bootstrap is injected into every session.
+# Raise a number in the change that needs it, with the reason in the changelog.
+BUDGET = {'files': 120, 'kb': 700, 'bootstrap_bytes': 6000}
+TEXT_SUFFIXES = {'.md', '.py', '.sh', '.json', '.mjs', '.cjs', '.js', '.html', ''}
+
+
+def package_files(root):
+    return [p for p in sorted(root.rglob('*')) if p.is_file() and '__pycache__' not in p.parts
+            and p.name != '.DS_Store' and not p.relative_to(root).as_posix().startswith(EXCLUDED)]
+
+
+def package_findings(root):
+    """Errors for what the package costs an install: the budget, and a rule, reference or skill file that nothing
+    names (those folders are never auto-loaded, so an unnamed file is dead weight in every install)."""
+    files = package_files(root)
+    errors, kb = [], sum(p.stat().st_size for p in files) / 1024
+    if len(files) > BUDGET['files'] or kb > BUDGET['kb']:
+        errors.append('package budget exceeded: %d files, %.0f KB (budget %d files, %d KB): move what is not loaded '
+                      'at run time out of the plugin folder, or raise BUDGET in scripts/check-setup.py with the reason'
+                      % (len(files), kb, BUDGET['files'], BUDGET['kb']))
+    corpus = {}
+    for path in files:
+        if path.suffix in TEXT_SUFFIXES:
+            corpus[path] = path.read_text(errors='replace')
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        top = rel.split('/')[0]
+        if not (top in ('rules', 'references') or (top == 'skills' and path.name != 'SKILL.md')) \
+                or path.suffix not in TEXT_SUFFIXES:
+            continue
+        stem = re.escape(rel[:-len(path.suffix)] if path.suffix else rel)
+        named = re.compile(stem + r'(?![\w-])|/' + re.escape(path.name) + r'(?![\w-])')
+        folder = path.parent if top == 'skills' else None  # a skill names its own siblings by bare file name
+        if not any(other != path and (named.search(text) or (folder and other.parent == folder
+                                                             and path.name in text))
+                   for other, text in corpus.items()):
+            errors.append('%s is named by no other file in the plugin: wire it from a skill, command, agent or hook, '
+                          'or delete it' % rel)
+    return errors
+
+
 def repo_root(root):
     """The repository that holds this plugin folder (it carries the marketplace manifest), or None for an installed
     copy, where the README, changelog and evals do not exist."""
@@ -258,6 +299,8 @@ def main():
         for rel in ignored:
             errors.append('%s is ignored by git (check `git check-ignore -v %s`), so it never ships; add a `!` '
                           'exception to the repository .gitignore' % (rel, rel))
+
+    errors.extend(package_findings(root))
 
     # Hooks compile, and every skill/command name the autopilot can point the session to exists in the plugin.
     for path in sorted((root / 'hooks').glob('*.py')):
