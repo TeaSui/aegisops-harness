@@ -33,3 +33,4 @@ Append-only, written by `aidlc` only.
 - 2026-11-26T17:06:39Z stamp review fingerprint=af0a3fb884038d8e4ee1c06c9d00dba10cdab0dedf24ae9ad88d645061d478cf
 - 2026-11-26T17:07:26Z advance verified→reviewed
 - 2026-11-26T17:12:40Z advance reviewed→shipped
+- 2026-11-27T13:10:11Z advance shipped→implemented
